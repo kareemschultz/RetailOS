@@ -93,3 +93,11 @@
 - **Root cause:** The CLI prints the resolved URL (with query params) on fetch errors.
 - **Fix:** Redact `license_key`/`email`/tokens when capturing CLI output; keep secrets only as `${ENV}` placeholders in committed config.
 - **Rule:** Never paste raw CLI error URLs from authenticated registries into logs, issues, or commits.
+
+### 12. `get-blocks-metadata` undercounts — use `get-block-meta-content` per category
+- **Date:** 2026-06-21
+- **Context:** Counting the shadcn studio block catalog.
+- **Mistake:** Reported **~146 variants / 61 types** for studio, derived from `get-blocks-metadata` (the `/iui` `iuiPath` list).
+- **Root cause:** `get-blocks-metadata`'s `iuiPath` is a curated *inspiration* subset, not the full per-category variant list — it lists ~2–15 per category when the real count is far higher (e.g. application-shell shows 9 there but has 18).
+- **Fix:** Enumerate each category with `get-block-meta-content` (the `/cui` endpoint). Live-verified exactly: application-shell **18**, hero-section **41**, datatable **7** → **735 blocks across 61 categories** total (≈ the advertised 750+). A parallel agent's 735 count was correct; my ~146 was the undercount.
+- **Rule:** For full counts, enumerate per category via `get-block-meta-content`; treat `get-blocks-metadata` as a category index only. Always reconcile a surprising count against a second, deeper source before publishing.

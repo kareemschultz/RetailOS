@@ -25,10 +25,11 @@
 | Source | Namespace (configured) | Reachable? | Authenticated? | Tier(s) | Method used |
 |---|---|---|---|---|---|
 | shadcn/ui core | `@shadcn` | ✅ Yes | n/a (public) | Free | shadcn MCP — **414 items enumerated** |
-| shadcn studio | `@ss-blocks` (fixed; URL unverified) | ⚠️ Metadata only | ❌ No license | Free + **Pro** | shadcn-studio MCP (metadata open, full catalog); **install blocked** (no `EMAIL`/`LICENSE_KEY`); registry URL 404s — use studio MCP |
-| Magic UI | `@magicui` (fixed; ✅ recognized) | ✅ Config valid | ❌ No token | Free + **Pro** | Official docs (catalog); CLI now recognizes registry — **only `MAGICUI_PRO_REGISTRY_TOKEN` missing** |
+| shadcn studio | `@shadcn-studio` / `@ss-components` / `@ss-blocks` / `@ss-themes` | ✅ Yes | ✅ `EMAIL`+`LICENSE_KEY` set | Free + **Pro** | studio MCP `get-block-meta-content` per category — **735 blocks / 61 categories enumerated** (config `…/r/{style}/{name}.json` + params, live-verified) |
+| Magic UI | `@magicui` (free) / `@magicui-pro` | ✅ Yes | ✅ token set | Free + **Pro** | shadcn CLI search — **245 free + 103 Pro items** |
+| ReUI | `@reui` | ✅ Yes | n/a (MIT) | Free | `@reui/data-grid` resolves (pinned to ReUI `base-nova` style); no searchable index |
 
-> The shadcn MCP server reads the **root** `components.json` (registries `{}`), not the workspace `packages/ui/components.json` — so even correctly-named Pro registries are invisible to the MCP from the repo root. Use the shadcn **CLI with `-c packages/ui`** for registry installs, and the **shadcn-studio MCP** for studio workflows.
+> Registries are mirrored into **both** the root `components.json` (the shadcn MCP reads root) and `packages/ui/components.json` (CLI installs use `-c packages/ui`). Origin UI is **not** configured — legacy/maintenance-only per its repo and bot-blocked here (see `shadcn-studio.md` / README).
 
 ---
 
@@ -44,8 +45,9 @@
 | Themes | 5 |
 | Style / hook / lib | 2 / 1 / 1 |
 
-### shadcn studio — families (variants), Pro install
-Dashboard & Application **17 families** (~52 variants) · DataTable **7 variants** · eCommerce **13 families** · Marketing UI **~29 families** (Hero 15, Features 7, …) · Bento Grid **1 (10 variants)** · Theme presets (public + private).
+### shadcn studio — **735 blocks across 61 categories** (enumerated per-category via `get-block-meta-content`; full catalog in `shadcn-studio.md`)
+Dashboard & Application **19 categories / 289 blocks** (e.g. application-shell 18, widget-component 20, datatable 7) · Marketing UI **29 categories / 362 blocks** (e.g. hero-section 41) · eCommerce **13 categories / 84 blocks** · plus theme presets.
+> ⚠️ Correction (see `lessons-learned.md` #12): an earlier pass reported **~146** from `get-blocks-metadata` (the `/iui` iuiPath), which **undercounts**. `get-block-meta-content` per category is authoritative — verified exactly for application-shell (18), hero-section (41), datatable (7). The ~15 delta to the advertised "750+" is free blocks outside the enumerated category paths.
 
 ### Magic UI — Free + Pro
 Free components **~70** (Special Effects 9, Text Animations 18, Core 3, Buttons 6, Backgrounds 11, Device Mocks 3, Other ~25) · Pro **templates 9** · Pro **sections 50+**.
@@ -62,7 +64,7 @@ While auditing, the README/`components.json` written in commit `eda2e83` were ch
    - ✅ **Verified:** after the fix, `shadcn search @magicui -c packages/ui` is recognized and reports only *"Registry @magicui requires … MAGICUI_PRO_REGISTRY_TOKEN"* — i.e. config is correct; **only the token is missing.**
 2. **The `--registry <url>` flag does not exist.** README's Magic UI command (`npx shadcn add --registry https://r.magicui.design <name>`) is invalid. Official install is **namespaced** (`npx shadcn add @magicui/<name>`) or a **full URL**. **Fix:** README updated.
 3. **"TanStack Start = MCP commands only, no CLI registry" is false.** shadcn CLI officially supports Vite/TanStack (confirmed: `shadcn info -c apps/web` reports framework `TanStack Start`, Tailwind v4); the studio MCP itself emits `npx shadcn add …`. **Fix:** README reworded.
-4. **`@ss-blocks` registry URL is unverified / likely wrong.** With the standard `{name}.json` template the CLI 404s on `https://shadcnstudio.com/registry/registry.json`. shadcn studio is integrated via its **own MCP** (which emits `npx shadcn add <category>/<section>/<component>`), not this registry entry. The `@ss-blocks` entry is kept valid-shaped but its exact URL **must be confirmed from the shadcn studio dashboard**; until then, use the studio MCP workflows (`/cui`, `/iui`, `/rui`, `/ftc`).
+4. **`@ss-blocks` registry URL — RESOLVED.** The first guesses (`/registry/{name}.json`, then context7's `/r/blocks/{name}.json`) both 404'd; the live API revealed the real shape: `https://shadcnstudio.com/r/{style}/{name}.json` with query **`params`** `email`+`license_key` (the segment after `/r/` is a *style* — `base-lyra` is valid). Now configured for `@shadcn-studio`/`@ss-components`/`@ss-blocks` (+ `@ss-themes` at `/r/themes/{name}.json`). Studio still has **no searchable index** (`search` 404s) → discover via the studio MCP, install by confirmed slug.
 
 Also softened the unverifiable **"shadcn/studio Pro (631+ blocks)"** marketing count to a documented, enumerated reference (this inventory).
 
@@ -70,10 +72,9 @@ Also softened the unverifiable **"shadcn/studio Pro (631+ blocks)"** marketing c
 
 | Gap | Remediation |
 |---|---|
-| Magic UI install blocked | Set `MAGICUI_PRO_REGISTRY_TOKEN` in `.env` from Infisical `/credentials/magicui/MAGICUI_PRO_TOKEN`. Registry config is now valid & recognized — this token is the **only** remaining blocker. |
-| shadcn studio install blocked | Set `EMAIL` and `LICENSE_KEY` in root `.env` from Infisical `/credentials/shadcnstudio/`; meanwhile use the studio MCP workflows (`/cui`, `/iui`, `/rui`, `/ftc`). |
-| Registry key naming + URL template | **Fixed & verified** in `packages/ui/components.json`: keys `@magicui`/`@ss-blocks` and URLs carry `{name}.json`. **Still TODO:** confirm the exact `@ss-blocks` registry URL from the shadcn studio dashboard — the standard `{name}.json` pattern 404s, so studio installs should go through its MCP until verified. |
-| MCP cannot see workspace registries | shadcn MCP reads root `components.json`; run registry CLI installs with `-c packages/ui`, or add the registries to the root config too. |
+| ~~Magic UI / studio install blocked~~ | **RESOLVED.** `MAGICUI_PRO_REGISTRY_TOKEN`, `EMAIL`, `LICENSE_KEY` are set in root `.env` (from Infisical); all registries live-verified (245 + 103 Magic UI; 735 studio blocks; `@reui/data-grid`). |
+| ~~Registry config / MCP root visibility~~ | **RESOLVED.** Registries mirrored into root + `packages/ui` `components.json`, keys `@`-prefixed, URLs corrected to the live-verified templates (Magic UI `…/r/{name}.json` & `pro…/registry/{name}`; studio `…/r/{style}/{name}.json` + params; ReUI `…/r/base-nova/{name}.json`). |
+| shadcn studio searchable index | None published (`search @ss-blocks` 404s) — discover/confirm slugs via the studio MCP (`/cui`, `get_add_command_for_items`) before CLI install. |
 | **Charter §5 not present** | `docs/architecture/retailos-master-charter.md` **does not exist** in the repo. Verdicts here use the §5 rules embedded in the Phase-0 task brief (speed/density on POS; motion on storefront/marketing/onboarding; re-theme foreign tokens). **Re-validate all verdicts once §5 is authored.** |
 | Native (Expo) surface uncovered | These registries are web-only. Track HeroUI Native / NativeWind separately for `apps/native`. |
 
