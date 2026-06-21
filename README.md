@@ -143,8 +143,8 @@ after confirming a working registry namespace + URL from official docs.
 > **Magic UI Pro is Next.js + Framer Motion** — individual components port to Vite/TanStack fine, but Pro
 > *page templates* need adapting. Per design-system rules, keep Magic UI off the POS checkout and
 > high-frequency data-entry paths; use it on storefront / marketing / onboarding / auth surfaces.
-
-**Important:** Magic UI Pro uses `@radix-ui/react-icons` in some components. If a component imports `StarFilledIcon` from that package and it's not installed, replace it with lucide's `Star` styled with `fill="currentColor"`. Do not install `@radix-ui/react-icons` unless it's already a dependency.
+> **Gotcha:** some Magic UI Pro components import `@radix-ui/react-icons` (e.g. `StarFilledIcon`) — replace with
+> lucide's `Star` (`fill="currentColor"`) rather than installing `@radix-ui/react-icons` unless it's already a dependency.
 
 ## Deployment
 
