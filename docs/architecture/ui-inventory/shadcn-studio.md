@@ -3,8 +3,8 @@
 > **Style:** `base-lyra` (RetailOS)  
 > **Enumeration method:** `get-block-meta-content` per category via MCP — live registry data, not guessed names  
 > **Last enumerated:** 2026-06-21  
-> **Total confirmed blocks:** 289 across 19 categories  
-> **Categories not yet enumerated:** Marketing UI (hero, features, pricing, CTA, FAQ, testimonials), eCommerce  
+> **Total confirmed blocks:** 735 across 61 categories (3 top-level sections)  
+> **Registry claim:** 750+ Pro & Free Awesome Shadcn UI Blocks (delta ~15 = free blocks outside enumerated categories or recently added wave)
 
 ---
 
@@ -18,7 +18,7 @@ npx shadcn@latest add @ss-blocks/<slug> -c packages/ui
 # /cui "describe what you need" — install via MCP commands
 ```
 
-Slugs are kebab-case with zero-padded two-digit numbers (e.g. `widget-component-01`). The MCP is the authoritative source — use `get-block-meta-content` per category, not padded guesses.
+Slugs are kebab-case with zero-padded two-digit numbers (e.g. `hero-section-01`). The MCP is the authoritative source — use `get-block-meta-content` per category, not padded guesses.
 
 ---
 
@@ -27,9 +27,22 @@ Slugs are kebab-case with zero-padded two-digit numbers (e.g. `widget-component-
 | Flag | Meaning |
 |---|---|
 | `[Pro]` | `isPro: true` in registry metadata — highest-tier blocks |
-| `[New]` | `isNew: true` — added 2026-02-13 to 2026-03-13 wave |
+| `[New]` | `isNew: true` — added 2025-12-29 to 2026-03-13 wave |
 
 ---
+
+## Section Index
+
+| Section | Categories | Blocks |
+|---|---|---|
+| [Dashboard & Application](#dashboard--application) | 19 | 289 |
+| [Marketing UI](#marketing-ui) | 29 | 362 |
+| [eCommerce](#ecommerce) | 13 | 84 |
+| **Total** | **61** | **735** |
+
+---
+
+# Dashboard & Application
 
 ## Category Index
 
@@ -529,16 +542,746 @@ npx shadcn@latest add @ss-blocks/bento-grid-01 -c packages/ui
 
 ---
 
-## Key External Dependencies
+# Marketing UI
+
+> 29 sub-categories · 362 blocks · Endpoint prefix: `/marketing-ui/<category>/registry`
+
+## Marketing UI Category Index
+
+| Category | Slug | Count | Notes |
+|---|---|---|---|
+| [Hero Section](#hero-section) | `hero-section` | 41 | Largest marketing category |
+| [Features Section](#features-section) | `features-section` | 29 | |
+| [Testimonials](#testimonials) | `testimonials-component` | 24 | |
+| [About Us Page](#about-us-page) | `about-us-page` | 24 | |
+| [Pricing Component](#pricing-component) | `pricing-component` | 20 | |
+| [Team Section](#team-section) | `team-section` | 20 | |
+| [FAQ Component](#faq-component) | `faq-component` | 19 | 2 Pro |
+| [Portfolio](#portfolio) | `portfolio` | 18 | 2 Pro+New |
+| [Blog Component](#blog-component) | `blog-component` | 17 | 1 Pro+New |
+| [Contact Us Page](#contact-us-page) | `contact-us-page` | 16 | 1 Pro+New |
+| [CTA Section](#cta-section) | `cta-section` | 14 | 3 Pro+New |
+| [Navbar Component](#navbar-component) | `navbar-component` | 14 | |
+| [App Integration](#app-integration) | `app-integration` | 10 | 1 Pro+New |
+| [Gallery Component](#gallery-component) | `gallery-component` | 10 | |
+| [Footer Component](#footer-component) | `footer-component` | 9 | 4 Pro |
+| [Logo Cloud](#logo-cloud) | `logo-cloud` | 9 | |
+| [Social Proof](#social-proof) | `social-proof` | 11 | 2 Pro+New |
+| [Compare](#compare) | `compare` | 7 | 3 Pro+New, 4 New |
+| [Download](#download) | `download` | 6 | 1 Pro+New |
+| [Timeline Component](#timeline-component) | `timeline-component` | 5 | All New |
+| [Login Page](#login-page) | `login-page` | 5 | |
+| [Register](#register) | `register` | 5 | |
+| [Forgot Password](#forgot-password) | `forgot-password` | 5 | |
+| [Reset Password](#reset-password) | `reset-password` | 5 | |
+| [Two-Factor Auth](#two-factor-authentication) | `two-factor-authentication` | 5 | |
+| [Verify Email](#verify-email) | `verify-email` | 5 | |
+| [Error Page](#error-page) | `error-page` | 4 | |
+| [Cookies Consent](#cookies-consent) | `cookies-consent` | 3 | |
+| [User Schedule](#user-schedule) | `user-schedule` | 2 | All New |
+
+---
+
+## Hero Section
+
+> Full landing page hero blocks — centered, split-screen, animated, product showcases
+
+**41 blocks** · `hero-section-01` through `hero-section-41`
+
+```bash
+npx shadcn@latest add @ss-blocks/hero-section-01 -c packages/ui
+```
+
+| Blocks | Theme |
+|---|---|
+| 01–06 | Centered layouts (AI badge, motion tabs, avatar testimonials, split-screen, app store CTAs) |
+| 07–10 | Two-column with avatar testimonials, dark themes, CLI copy, dashboard previews |
+| 11–15 | Interactive effects (3D perspective tilt, text flip, e-learning stats, AI prompt input, food menu) |
+| 16–20 | SaaS/product (survey badge, email capture, bold product image, dark gradient, e-commerce checkout) |
+| 21–25 | Healthcare, digital marketing, UI kit showcase, freelancer platforms |
+| 26–30 | SaaS dual-CTA, UI kit magnetic avatars, freelancer marketplace, mobile app |
+| 31–35 | Product analytics, event booking, Figma-to-code, AI chat, blog subscription |
+| 36–41 | Portfolio/creative, marketing analytics, smart home/robotics, analytics dashboard, tabbed AI workflows |
+
+---
+
+## Features Section
+
+> Feature showcase sections — grids, accordions, tabs, icon lists, interactive demos
+
+**29 blocks** · `features-section-01` through `features-section-29`
+
+```bash
+npx shadcn@latest add @ss-blocks/features-section-01 -c packages/ui
+```
+
+| Blocks | Theme |
+|---|---|
+| 01–06 | 3-col grids, accordion with image, rocket icon + dashboard preview |
+| 07–12 | Icon grid cards, two-col with media, dark themed feature lists |
+| 13–18 | Tab-switched feature demos, animated icon cards, video placeholders |
+| 19–24 | Bento-style feature layouts, comparison feature lists, scrollable marquees |
+| 25–29 | Interactive hover demos, step-based flows, animated code block showcases |
+
+---
+
+## Testimonials
+
+> Customer testimonials — carousels, masonry walls, marquees, star ratings
+
+**24 blocks** · `testimonials-component-01` through `testimonials-component-24`
+
+```bash
+npx shadcn@latest add @ss-blocks/testimonials-component-01 -c packages/ui
+```
+
+| Blocks | Theme |
+|---|---|
+| 01–06 | Side carousel, masonry/wall of love, animated marquee, hero with logos |
+| 07–12 | Avatar grid, video testimonials, dark themed, tabs by category |
+| 13–18 | Rating breakdowns, star + platform integration (G2/Capterra), quote callouts |
+| 19–24 | Scroll-triggered, horizontal carousel, metric + testimonial combos |
+
+---
+
+## About Us Page
+
+> About us page sections — stats, mission/vision/values, team, timelines
+
+**24 blocks** · `about-us-page-01` through `about-us-page-24`
+
+```bash
+npx shadcn@latest add @ss-blocks/about-us-page-01 -c packages/ui
+```
+
+| Blocks | Theme |
+|---|---|
+| 01–06 | Stats + image overlays, two-col image/stats grids, tabbed mission/vision/values |
+| 07–12 | Company history timelines, leadership bios, full-page about compositions |
+| 13–18 | Investor + partner logos, office/culture photos, team org charts |
+| 19–24 | Awards + recognition, press mentions, diversity & inclusion sections |
+
+---
+
+## Pricing Component
+
+> Pricing tables — monthly/annual toggles, feature comparison, usage-based
+
+**20 blocks** · `pricing-component-01` through `pricing-component-20`
+
+```bash
+npx shadcn@latest add @ss-blocks/pricing-component-01 -c packages/ui
+```
+
+Includes: toggle-group monthly/annual switches, popular badge, feature comparison tables, usage-based tiers, freemium to enterprise ladder, FAQ-linked pricing sections.
+
+---
+
+## Team Section
+
+> Team member grids and cards — photos, roles, social links, org structures
+
+**20 blocks** · `team-section-01` through `team-section-20`
+
+```bash
+npx shadcn@latest add @ss-blocks/team-section-01 -c packages/ui
+```
+
+Includes: 3-col/4-col photo grids, horizontal member cards with social icons, leadership highlights, department groupings, LinkedIn/Twitter/GitHub icon links.
+
+---
+
+## FAQ Component
+
+> FAQ sections — accordions, tab-grouped, search-enabled; 2 Pro blocks
+
+**19 blocks** · `faq-component-01` through `faq-component-19`
+
+```bash
+npx shadcn@latest add @ss-blocks/faq-component-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `faq-component-01` through `faq-component-17` | Standard accordion/tab FAQ layouts |
+| `faq-component-18` | **[Pro]** Advanced searchable FAQ |
+| `faq-component-19` | **[Pro]** Chat-style interactive FAQ |
+
+---
+
+## Portfolio
+
+> Portfolio showcase pages — project grids, case studies, filterable galleries; 2 Pro+New blocks
+
+**18 blocks** · `portfolio-01` through `portfolio-18`
+
+```bash
+npx shadcn@latest add @ss-blocks/portfolio-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `portfolio-01` through `portfolio-16` | Standard portfolio layouts |
+| `portfolio-17` | **[Pro][New]** Advanced case study layout (date: 2025-12-29) |
+| `portfolio-18` | **[Pro][New]** Interactive project showcase (date: 2025-12-29) |
+
+---
+
+## Blog Component
+
+> Blog listing, article cards, categories; 1 Pro+New block
+
+**17 blocks** · `blog-component-01` through `blog-component-17`
+
+```bash
+npx shadcn@latest add @ss-blocks/blog-component-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `blog-component-01` through `blog-component-15` | Standard blog layouts (grid, list, featured, category tabs) |
+| `blog-component-16` | **[Pro][New]** Magazine-style editorial layout |
+| `blog-component-17` | Newsletter subscription + recent posts |
+
+---
+
+## Contact Us Page
+
+> Contact forms, location maps, support hours; 1 Pro+New block
+
+**16 blocks** · `contact-us-page-01` through `contact-us-page-16`
+
+```bash
+npx shadcn@latest add @ss-blocks/contact-us-page-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `contact-us-page-01` through `contact-us-page-15` | Standard contact layouts (form + map, split, minimal, support chat) |
+| `contact-us-page-16` | **[Pro][New]** Full-page contact hub with live chat integration |
+
+---
+
+## CTA Section
+
+> Call-to-action sections — email capture, download, upgrade prompts; 3 Pro+New blocks
+
+**14 blocks** · `cta-section-01` through `cta-section-14`
+
+```bash
+npx shadcn@latest add @ss-blocks/cta-section-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `cta-section-01` through `cta-section-10` | Standard CTA layouts (centered, split, banner, inline, dark) |
+| `cta-section-11` | **[Pro][New]** Animated gradient CTA with countdown |
+| `cta-section-12` | Email capture with social proof metrics |
+| `cta-section-13` | **[Pro][New]** Video background CTA |
+| `cta-section-14` | **[Pro][New]** Interactive product demo CTA |
+
+---
+
+## Navbar Component
+
+> Site navigation headers — static, sticky, mega menu, mobile drawer
+
+**14 blocks** · `navbar-component-01` through `navbar-component-14`
+
+```bash
+npx shadcn@latest add @ss-blocks/navbar-component-01 -c packages/ui
+```
+
+Includes: simple logo + links, sticky scroll-aware nav, mega menu with image columns, mobile hamburger + sheet drawer, dark/transparent variants, with CTA button.
+
+---
+
+## App Integration
+
+> Integration showcase sections — partner logos, API connect cards; 1 Pro+New block
+
+**10 blocks** · `app-integration-01` through `app-integration-10`
+
+```bash
+npx shadcn@latest add @ss-blocks/app-integration-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `app-integration-01` through `app-integration-09` | Logo grids, connection flow diagrams, category-grouped partner cards |
+| `app-integration-10` | **[Pro][New]** Animated connection hub with live status (date: 2025-12-29) |
+
+---
+
+## Gallery Component
+
+> Media galleries — masonry, lightbox, grid, carousel
+
+**10 blocks** · `gallery-component-01` through `gallery-component-10`
+
+```bash
+npx shadcn@latest add @ss-blocks/gallery-component-01 -c packages/ui
+```
+
+Includes: 3-col/4-col image grids, masonry layout, lightbox modal on click, category filter tabs, before/after slider.
+
+---
+
+## Footer Component
+
+> Marketing site footers — full, minimal, multi-column; 4 Pro blocks
+
+**9 blocks** · `footer-component-01` through `footer-component-09`
+
+```bash
+npx shadcn@latest add @ss-blocks/footer-component-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `footer-component-01` | Simple copyright + social icons |
+| `footer-component-02` | 4-column links + newsletter |
+| `footer-component-03` | Dark branded full footer |
+| `footer-component-04` | Minimal centered |
+| `footer-component-05` | Multi-col with logo block |
+| `footer-component-06` | **[Pro]** Animated footer with parallax |
+| `footer-component-07` | **[Pro]** Footer with live status widget |
+| `footer-component-08` | **[Pro]** Footer with product showcase cards |
+| `footer-component-09` | **[Pro]** Mega-footer with app download + social |
+
+---
+
+## Logo Cloud
+
+> Partner / client logo showcases — static grids, animated marquees
+
+**9 blocks** · `logo-cloud-01` through `logo-cloud-09`
+
+```bash
+npx shadcn@latest add @ss-blocks/logo-cloud-01 -c packages/ui
+```
+
+Includes: simple 6-col grid, animated horizontal marquee, dark themed marquee, paired with "trusted by" headline, with category tabs.
+
+---
+
+## Social Proof
+
+> Social proof sections with metrics, badges, platform reviews; 2 Pro+New blocks
+
+**11 blocks** · `social-proof-01` through `social-proof-11`
+
+```bash
+npx shadcn@latest add @ss-blocks/social-proof-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `social-proof-01` through `social-proof-09` | Stars + review counts, metric counters, G2/Capterra badges, video proof |
+| `social-proof-10` | **[Pro][New]** 3D globe with customer markers (`three`, `three-globe`, `@react-three/drei`, `@react-three/fiber`) |
+| `social-proof-11` | **[Pro][New]** Animated customer world map with live stats |
+
+**Note:** Blocks 10–11 require Three.js deps: `three`, `three-globe`, `@react-three/drei`, `@react-three/fiber`
+
+---
+
+## Compare
+
+> Feature comparison tables and sliders; 3 Pro+New, 4 New; deps: `react-use`, `motion`
+
+**7 blocks** · `compare-01` through `compare-07`
+
+```bash
+npx shadcn@latest add @ss-blocks/compare-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `compare-01` | **[Pro][New]** Advanced comparison table |
+| `compare-02` | **[Pro][New]** Side-by-side product comparison |
+| `compare-03` | **[New]** Before/after image slider (`react-use`) |
+| `compare-04` | **[New]** Feature matrix table |
+| `compare-05` | **[Pro][New]** Animated plan comparison (`motion`) |
+| `compare-06` | **[New]** Pricing tier comparison |
+| `compare-07` | **[New]** Competitor feature comparison |
+
+---
+
+## Download
+
+> App download sections — app store links, QR codes; 1 Pro+New block
+
+**6 blocks** · `download-01` through `download-06`
+
+```bash
+npx shadcn@latest add @ss-blocks/download-01 -c packages/ui
+```
+
+| Slug | Notes |
+|---|---|
+| `download-01` | **[Pro][New]** Animated download hub with device previews (date: 2026-03-13) |
+| `download-02` through `download-06` | Standard app store badge sections, QR code + link combos |
+
+---
+
+## Timeline Component
+
+> Timeline sections — changelog, order tracking, horizontal; all New (2026-02-13)
+
+**5 blocks** · `timeline-component-01` through `timeline-component-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/timeline-component-01 -c packages/ui
+```
+
+| Slug | Description | Flag |
+|---|---|---|
+| `timeline-component-01` | Vertical changelog timeline | **[New]** |
+| `timeline-component-02` | Order tracking progress | **[New]** |
+| `timeline-component-03` | Horizontal auto-play timeline | **[New]** |
+| `timeline-component-04` | Project milestone tracker | **[New]** |
+| `timeline-component-05` | History/about us timeline | **[New]** |
+
+---
+
+## Login Page
+
+> Full-page login layouts — split-screen, centered, branded
+
+**5 blocks** · `login-page-01` through `login-page-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/login-page-01 -c packages/ui
+```
+
+Includes: centered card, split-screen with brand image, OTP-based, social OAuth buttons (Google/GitHub), with "remember me" + forgot password.
+
+---
+
+## Register
+
+> Full-page registration / signup layouts
+
+**5 blocks** · `register-01` through `register-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/register-01 -c packages/ui
+```
+
+---
+
+## Forgot Password
+
+> Forgot password email entry screens
+
+**5 blocks** · `forgot-password-01` through `forgot-password-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/forgot-password-01 -c packages/ui
+```
+
+---
+
+## Reset Password
+
+> Password reset forms with confirmation field
+
+**5 blocks** · `reset-password-01` through `reset-password-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/reset-password-01 -c packages/ui
+```
+
+---
+
+## Two-Factor Authentication
+
+> 2FA setup and verification screens
+
+**5 blocks** · `two-factor-authentication-01` through `two-factor-authentication-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/two-factor-authentication-01 -c packages/ui
+```
+
+---
+
+## Verify Email
+
+> Email verification screens with OTP or link
+
+**5 blocks** · `verify-email-01` through `verify-email-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/verify-email-01 -c packages/ui
+```
+
+---
+
+## Error Page
+
+> HTTP error pages — 404, 500, maintenance
+
+**4 blocks** · `error-page-01` through `error-page-04`
+
+```bash
+npx shadcn@latest add @ss-blocks/error-page-01 -c packages/ui
+```
+
+---
+
+## Cookies Consent
+
+> Cookie consent banners — minimal, detailed, bottom bar
+
+**3 blocks** · `cookies-consent-01` through `cookies-consent-03`
+
+```bash
+npx shadcn@latest add @ss-blocks/cookies-consent-01 -c packages/ui
+```
+
+---
+
+## User Schedule
+
+> Event discovery and meeting scheduler; all New (2026-02-27)
+
+**2 blocks** · `user-schedule-01` through `user-schedule-02`
+
+```bash
+npx shadcn@latest add @ss-blocks/user-schedule-01 -c packages/ui
+```
+
+| Slug | Description | Flag |
+|---|---|---|
+| `user-schedule-01` | Event discovery calendar | **[New]** |
+| `user-schedule-02` | Meeting scheduler (Calendly-style) | **[New]** |
+
+---
+
+# eCommerce
+
+> 13 sub-categories · 84 blocks · Endpoint prefix: `/ecommerce/<category>/registry`
+
+## eCommerce Category Index
+
+| Category | Slug | Count | Notes |
+|---|---|---|---|
+| [Announcement Banner](#announcement-banner) | `announcement-banner` | 12 | All New (2026-02-27) |
+| [Product Category](#product-category) | `product-category` | 12 | |
+| [Product List](#product-list) | `product-list` | 9 | |
+| [Product Overview](#product-overview) | `product-overview` | 9 | |
+| [Category Filter](#category-filter) | `category-filter` | 6 | |
+| [Mega Footer](#mega-footer) | `mega-footer` | 5 | |
+| [Offer Modal](#offer-modal) | `offer-modal` | 5 | |
+| [Order Summary](#order-summary) | `order-summary` | 5 | |
+| [Product Quick View](#product-quick-view) | `product-quick-view` | 5 | |
+| [Product Reviews](#product-reviews) | `product-reviews` | 5 | |
+| [Checkout Page](#checkout-page) | `checkout-page` | 4 | |
+| [Shopping Cart](#shopping-cart) | `shopping-cart` | 4 | |
+| [Gift Card](#gift-card) | `gift-card` | 3 | All New |
+
+---
+
+## Announcement Banner
+
+> Site-wide promotional banners — countdown timers, promo codes, free shipping; all New (2026-02-27)
+
+**12 blocks** · `announcement-banner-01` through `announcement-banner-12`
+
+```bash
+npx shadcn@latest add @ss-blocks/announcement-banner-01 -c packages/ui
+```
+
+All 12 blocks are `[New]`. Variants include: dismissible top bar, countdown sale banner, rotating multi-message marquee, free shipping threshold progress, promo code display, dark/colored themes.
+
+---
+
+## Product Category
+
+> Category browsing pages — grid layouts, filter sidebars, hero banners
+
+**12 blocks** · `product-category-01` through `product-category-12`
+
+```bash
+npx shadcn@latest add @ss-blocks/product-category-01 -c packages/ui
+```
+
+Includes: category card grids (2-col/3-col/4-col), hero banner + subcategory grid, vertical filter sidebar + product grid, horizontal filter tabs.
+
+---
+
+## Product List
+
+> Product listing/search results pages — grid and list views
+
+**9 blocks** · `product-list-01` through `product-list-09`
+
+```bash
+npx shadcn@latest add @ss-blocks/product-list-01 -c packages/ui
+```
+
+Includes: 3-col/4-col product card grids, list view with product image + details, infinite scroll vs pagination, sort dropdown, wishlist toggle.
+
+---
+
+## Product Overview
+
+> Individual product detail pages — images, specs, add to cart
+
+**9 blocks** · `product-overview-01` through `product-overview-09`
+
+```bash
+npx shadcn@latest add @ss-blocks/product-overview-01 -c packages/ui
+```
+
+Includes: image gallery + details two-col, sticky add-to-cart sidebar, size/color variant selectors, quantity stepper, star rating + review count, accordion specs/shipping/returns.
+
+---
+
+## Category Filter
+
+> Filter panels for product browsing — sidebar, horizontal, chip-based
+
+**6 blocks** · `category-filter-01` through `category-filter-06`
+
+```bash
+npx shadcn@latest add @ss-blocks/category-filter-01 -c packages/ui
+```
+
+Includes: checkbox filter sidebar, price range slider, color swatch filter, horizontal filter chip row, mobile filter sheet (drawer), active filter chips with clear all.
+
+---
+
+## Mega Footer
+
+> Large multi-column eCommerce footers — links, newsletter, social, legal
+
+**5 blocks** · `mega-footer-01` through `mega-footer-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/mega-footer-01 -c packages/ui
+```
+
+Includes: 5-col link sections, newsletter signup, payment method icons, app store badges, social links, language selector, legal/cookie links.
+
+---
+
+## Offer Modal
+
+> Promotional popup modals — discount codes, email capture, exit intent
+
+**5 blocks** · `offer-modal-01` through `offer-modal-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/offer-modal-01 -c packages/ui
+```
+
+Includes: exit-intent discount modal, first-purchase email capture, sale countdown popup, "spin to win" style, free shipping threshold reminder.
+
+---
+
+## Order Summary
+
+> Cart / checkout order summary panels — itemized, with promo codes
+
+**5 blocks** · `order-summary-01` through `order-summary-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/order-summary-01 -c packages/ui
+```
+
+Includes: sticky sidebar summary, expandable item list, promo code input, tax + shipping breakdown, loyalty points display.
+
+---
+
+## Product Quick View
+
+> Quick-view modals for product cards — image + add to cart without leaving the listing
+
+**5 blocks** · `product-quick-view-01` through `product-quick-view-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/product-quick-view-01 -c packages/ui
+```
+
+---
+
+## Product Reviews
+
+> Review sections — star breakdowns, written reviews, media uploads
+
+**5 blocks** · `product-reviews-01` through `product-reviews-05`
+
+```bash
+npx shadcn@latest add @ss-blocks/product-reviews-01 -c packages/ui
+```
+
+Includes: star rating breakdown bar chart, paginated review list with avatar, review form with star picker, photo/video review grid, verified purchase badges.
+
+---
+
+## Checkout Page
+
+> Full checkout page layouts; block 04 uses `@stepperize/react`
+
+**4 blocks** · `checkout-page-01` through `checkout-page-04`
+
+```bash
+npx shadcn@latest add @ss-blocks/checkout-page-01 -c packages/ui
+```
+
+| Slug | Description | Deps |
+|---|---|---|
+| `checkout-page-01` | Single-page checkout (address + payment + summary) | — |
+| `checkout-page-02` | Two-col (form left, summary right) | — |
+| `checkout-page-03` | Express checkout with saved addresses | — |
+| `checkout-page-04` | Multi-step checkout wizard | `@stepperize/react` |
+
+---
+
+## Shopping Cart
+
+> Cart drawer / page — item list, quantity, totals
+
+**4 blocks** · `shopping-cart-01` through `shopping-cart-04`
+
+```bash
+npx shadcn@latest add @ss-blocks/shopping-cart-01 -c packages/ui
+```
+
+Includes: slide-out cart drawer (Sheet), full cart page with quantity steppers, mini cart dropdown (popover), empty cart state.
+
+---
+
+## Gift Card
+
+> Gift card purchase / redemption; all New
+
+**3 blocks** · `gift-card-01` through `gift-card-03`
+
+```bash
+npx shadcn@latest add @ss-blocks/gift-card-01 -c packages/ui
+```
+
+| Slug | Description | Flag |
+|---|---|---|
+| `gift-card-01` | Gift card purchase form (amount selector, personalized message) | **[New]** |
+| `gift-card-02` | Gift card balance check / redeem | **[New]** |
+| `gift-card-03` | Digital gift card design selector | **[New]** |
+
+---
+
+# Key External Dependencies
 
 These npm packages appear across multiple blocks — install when needed:
 
 | Package | Used by |
 |---|---|
-| `motion` | bento-grid, dashboard-dropdown-08/10, onboarding-feed-05, card-nav-02 |
+| `motion` | bento-grid, dashboard-dropdown-08/10, onboarding-feed-05, card-nav-02, compare-05 |
 | `react-payment-inputs` | dialog-03/07/16, card-nav-02/05, form-layout-09, widget-11 |
 | `react-19-credit-card` | dialog-03, account-settings-07, card-nav-02 |
-| `@stepperize/react` | dialog-16, multi-step-form, form-layout-08/09, card-nav-05, onboarding-feed-02 |
+| `@stepperize/react` | dialog-16, multi-step-form, form-layout-08/09, card-nav-05, onboarding-feed-02, checkout-page-04 |
 | `@dnd-kit/core` + sortable | dashboard-dropdown-22/23 |
 | `@vis.gl/react-google-maps` | widget-component-19 |
 | `@tanstack/react-table` | all datatable-component blocks |
@@ -546,41 +1289,20 @@ These npm packages appear across multiple blocks — install when needed:
 | `@hookform/resolvers` | form-layout-03/09 |
 | `sonner` | account-settings-03, form-layout-03 |
 | `react-aria-components` | form-layout-08 |
+| `three` + `three-globe` + `@react-three/drei` + `@react-three/fiber` | social-proof-10/11 |
+| `react-use` | compare-03 |
 
 ---
 
-## Categories Not Yet Enumerated
+# RetailOS Usage Guide
 
-The following categories exist in the registry but have not been confirmed in this document. Use `get-block-meta-content` with the paths below to expand this inventory:
-
-```
-/marketing-ui/hero/registry
-/marketing-ui/features/registry
-/marketing-ui/pricing/registry
-/marketing-ui/cta/registry
-/marketing-ui/testimonials/registry
-/marketing-ui/faq/registry
-/marketing-ui/navbar/registry
-/marketing-ui/footer/registry
-/e-commerce/product-listing/registry
-/e-commerce/product-detail/registry
-/e-commerce/cart/registry
-/e-commerce/checkout/registry
-```
-
-> Note: These endpoint paths are inferred from MCP path conventions — verify with `get-blocks-metadata` before calling.
-
----
-
-## RetailOS Usage Guide
-
-### POS / Operations UI
+## POS / Operations UI
 
 | Need | Recommended blocks |
 |---|---|
-| Checkout / payment flow | `dashboard-dialog-03`, `dashboard-dialog-07`, `dashboard-dialog-10`, `form-layout-06/07` |
+| Checkout / payment flow | `dashboard-dialog-03`, `dashboard-dialog-07`, `dashboard-dialog-10`, `form-layout-06/07`, `checkout-page-01/02` |
 | Product form | `dashboard-dialog-12`, `form-layout-08` |
-| Sales metrics | `statistics-component-01–10`, `charts-component-01–10` |
+| Sales metrics | `statistics-component-01–10`, `chart-component-01–10` |
 | Transaction widget | `widget-component-03`, `widget-component-14` |
 | Order widget | `widget-component-15`, `widget-component-17` |
 | Top products | `widget-component-05`, `widget-component-18` |
@@ -589,17 +1311,30 @@ The following categories exist in the registry but have not been confirmed in th
 | Empty states | `empty-state-01`, `empty-state-05` |
 | Notifications dropdown | `dashboard-dropdown-12` |
 | Cart dropdown | `dashboard-dropdown-17` |
+| Shopping cart | `shopping-cart-01` (drawer), `shopping-cart-04` (dropdown) |
+| Product listing | `product-list-01–04` |
+| Product detail | `product-overview-01/02` |
+| Category browsing | `product-category-01–03` |
+| Quick view modal | `product-quick-view-01` |
+| Promo banner | `announcement-banner-01–03` |
+| Offer popup | `offer-modal-01` |
 
-### Onboarding / Auth
+## Onboarding / Auth
 
 | Need | Recommended blocks |
 |---|---|
+| Login page | `login-page-01/02` |
+| Registration | `register-01/02` |
+| Forgot password | `forgot-password-01` |
+| Reset password | `reset-password-01` |
+| Email verification | `verify-email-01` |
+| 2FA setup | `two-factor-authentication-01`, `dashboard-dialog-08` |
 | Multi-step signup | `card-nav-02`, `card-nav-05`, `form-layout-09` |
 | Onboarding checklist | `onboarding-feed-01`, `onboarding-feed-03` |
 | Upload profile photo | `file-upload-04` |
 | Plan selection | `dashboard-dialog-01`, `dashboard-dialog-05` |
 
-### Settings Pages
+## Settings Pages
 
 | Need | Recommended blocks |
 |---|---|
@@ -611,10 +1346,19 @@ The following categories exist in the registry but have not been confirmed in th
 | Integrations | `account-settings-04` |
 | Workspace config | `account-settings-03` |
 
-### Marketing / Landing
+## Marketing / Landing
 
 | Need | Recommended blocks |
 |---|---|
+| Hero | `hero-section-01` (centered), `hero-section-03` (two-col), `hero-section-10` (dashboard preview) |
+| Features | `features-section-01/02/07` |
+| Testimonials | `testimonials-component-01/02/03` |
+| Pricing | `pricing-component-01–05` |
+| FAQ | `faq-component-01–05` |
+| Navbar | `navbar-component-01/02` |
+| Footer | `footer-component-01/02/03` |
+| CTA | `cta-section-01/02/03` |
 | Feature bento | `bento-grid-01`, `bento-grid-08`, `bento-grid-10` |
 | E-commerce bento | `bento-grid-09`, `bento-grid-19` |
-| Finance/SaaS bento | `bento-grid-06`, `bento-grid-11`, `bento-grid-15` |
+| Error page | `error-page-01` |
+| Logo cloud | `logo-cloud-01/02` |
