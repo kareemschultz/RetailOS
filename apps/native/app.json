@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "scheme": "RetailOS",
+    "userInterfaceStyle": "automatic",
+    "orientation": "default",
+    "web": {
+      "bundler": "metro"
+    },
+    "name": "RetailOS",
+    "slug": "RetailOS",
+    "plugins": ["expo-font"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

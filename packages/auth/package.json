@@ -1,0 +1,25 @@
+{
+  "name": "@RetailOS/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@RetailOS/db": "workspace:*",
+    "@RetailOS/env": "workspace:*",
+    "@better-auth/expo": "catalog:",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@RetailOS/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
