@@ -95,4 +95,38 @@ shadcn studio also ships installable **theme presets** via the studio MCP `insta
 
 ## Verdict summary
 
-shadcn studio is the **highest-value Pro source for RetailOS** because it is shadcn-native (re-themes cleanly, composes on owned primitives, no animation runtime). Priority pulls: **DataTable 01/03/04/05/06/07**, **Application/Dashboard Shell**, **Statistics**, **Multi-step Form**, **eCommerce product/cart/checkout**, and **auth (2FA/verify-email)**. Blocked only by the missing `EMAIL`/`LICENSE_KEY` and the `@`-prefix config bug.
+shadcn studio is the **highest-value Pro source for RetailOS** because it is shadcn-native (re-themes cleanly, composes on owned primitives, no animation runtime). Priority pulls: **DataTable 01/03/04/05/06/07**, **Application/Dashboard Shell**, **Statistics**, **Multi-step Form**, **eCommerce product/cart/checkout**, and **auth (2FA/verify-email)**. `EMAIL`/`LICENSE_KEY` are now set and the registry config is corrected & live-verified (`@ss-blocks`/`@ss-components`/`@ss-themes`/`@shadcn-studio` → `shadcnstudio.com/r/{style}/{name}.json` + `params`).
+
+---
+
+## Appendix — Block slug reference (live MCP `get-blocks-metadata`, 2026-06-21)
+
+> **Scope honesty (§40):** these are the **`/iui` inspiration-block** variants exposed by the MCP — **61 types / ~146 variants**. This is **not** the full advertised shadcn studio Pro catalog (~750+ incl. the per-component library, all templates, and themes), which the registry does not expose as a searchable index. Enumerate the rest via the studio MCP / dashboard; report the remaining gap rather than implying full coverage.
+>
+> **Slugs are a naming convention, not a verified registry index.** The CLI registry has no `registry.json` (search 404s), and a live `view @ss-blocks/dashboard-shell-04` returned *"item not found"* — the MCP's own paths use unpadded names (`application-shell-2`). So treat `<type>-NN` below as a guide; confirm the exact installable slug with `/cui` or `mcp__shadcn-studio-mcp__get_add_command_for_items` before relying on it.
+
+| Category | Types | Variants |
+|---|---|---|
+| Dashboard & Application | 17 | 52 |
+| Marketing UI | 29 | 67 |
+| eCommerce | 13 | 14 |
+| Bento Grid | 1 | 10 |
+| DataTable | 1 | 2 |
+| **Total** | **61** | **~146** |
+
+**Dashboard & Application** — application-shell (9), dashboard-shell (9), dashboard-header (6), charts-component (5), statistics-component (3), multi-step-form (3), dashboard-sidebar/dialog/dropdown (2 each), account-settings/form-layout/widgets-component (2 each), card-nav/dashboard-footer/file-upload/empty-state/onboarding-feed (1 each).
+**Marketing UI** — hero-section (15), features-section (7), about-us-page (6), testimonials-component (4), social-proof (3), pricing-component/faq-component/blog-component/contact-us-page/navbar-component/error-page/portfolio (2 each), team-section (2), and singletons: cta-section, logo-cloud, gallery-component, footer-component, login-page, register, forgot-password, reset-password, verify-email, two-factor-authentication, timeline-component, compare, cookies-consent, app-integration, user-schedule, download.
+**eCommerce** — product-overview (2), product-reviews (2), and singletons: product-quick-view, product-category, product-list, shopping-cart, checkout-page, order-summary, category-filter, offer-modal, announcement-banner, mega-footer, gift-card.
+**Bento Grid** — bento-grid (10). **DataTable** — datatable-component (2 here; the authenticated `@ss-components/data-table` exposes more variants — see DataTable section above).
+
+### Discovery / install workflow (no searchable index)
+
+```bash
+# Discover + get the exact install command (authoritative)
+/cui  Show me dashboard shell variants        # browse visuals
+#   or: mcp__shadcn-studio-mcp__get_add_command_for_items
+# Install (confirmed slug) into the shared package
+npx shadcn@latest add @ss-blocks/<confirmed-slug> -c packages/ui
+# Refine after install
+/rui  Re-theme the sidebar to RetailOS brand tokens
+```
