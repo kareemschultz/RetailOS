@@ -76,6 +76,56 @@ import { Button } from "@RetailOS/ui/components/button";
 
 If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
 
+---
+
+## Premium UI Libraries
+
+### shadcn/studio Pro (631+ blocks)
+
+Pro license held by KareTech Solutions. Credentials are in Infisical at `/credentials/shadcnstudio/`.
+
+**Setup (first time):**
+
+1. Copy `.env.example` to `.env` and fill in `EMAIL` and `LICENSE_KEY` from Infisical.
+2. The MCP server is registered globally in `~/.claude.json` — no per-project install needed.
+
+**Usage in Claude Code** (TanStack Start = MCP commands only, no CLI registry):
+
+| Command | What it does |
+|---------|-------------|
+| `/cui <description>` | Customize / reuse an existing block with your content |
+| `/iui <description>` | Generate new inspired UI from scratch (Pro only) |
+| `/rui <description>` | Refine / edit an already-installed block |
+| `/ftc <description>` | Convert a Figma frame to code (requires Figma MCP) |
+
+**Workflow rules:**
+- Collect ALL blocks before installing any — never interrupt mid-workflow.
+- One block per chat window (exception: full landing pages via `/cui`).
+- Use `/rui` only for post-install refinements, never initial builds.
+
+---
+
+### Magic UI Pro
+
+Pro license held by KareTech Solutions. Token is in Infisical at `/credentials/magicui/MAGICUI_PRO_TOKEN`.
+
+**Setup (first time):**
+
+1. Add `MAGICUI_PRO_REGISTRY_TOKEN=<token>` to your `.env` (already in `.env.example`).
+2. The registry is pre-configured in `packages/ui/components.json`.
+
+**Install a Magic UI Pro component:**
+
+```bash
+# From packages/ui (shared components)
+MAGICUI_PRO_REGISTRY_TOKEN=<token> npx shadcn@latest add --registry https://r.magicui.design <component-name> -c packages/ui
+
+# Example
+MAGICUI_PRO_REGISTRY_TOKEN=<token> npx shadcn@latest add --registry https://r.magicui.design animated-beam -c packages/ui
+```
+
+**Important:** Magic UI Pro uses `@radix-ui/react-icons` in some components. If a component imports `StarFilledIcon` from that package and it's not installed, replace it with lucide's `Star` styled with `fill="currentColor"`. Do not install `@radix-ui/react-icons` unless it's already a dependency.
+
 ## Deployment
 
 ### Docker Compose
