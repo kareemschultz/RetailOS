@@ -10,6 +10,8 @@ build
 
 # Generated files
 apps/web/src/routeTree.gen.ts
+apps/fumadocs/src/routeTree.gen.ts
+apps/fumadocs/.source/
 
 # Environment variables — never commit real values
 .env
