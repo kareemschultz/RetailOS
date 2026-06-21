@@ -78,22 +78,49 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 
 ---
 
-## Premium UI Libraries
+## UI Component Registries
 
-### shadcn/studio Pro
+All registries are configured in **both** the root `components.json` (the shadcn **MCP** reads the root)
+and `packages/ui/components.json` (CLI installs use `-c packages/ui`, which targets the shared package).
+shadcn references registry items as `@namespace/name` — **there is no `--registry` flag**. The shadcn CLI
+fully supports this Vite/TanStack monorepo (`shadcn info -c apps/web` reports framework `TanStack Start`).
 
-Pro license held by KareTech Solutions. Credentials are in Infisical at `/credentials/shadcnstudio/`.
-Full enumerated catalog (blocks, datatables, ecommerce, marketing, themes) lives in
-[`docs/architecture/ui-inventory/shadcn-studio.md`](docs/architecture/ui-inventory/shadcn-studio.md).
+Full enumerated catalogs live in [`docs/architecture/ui-inventory/`](docs/architecture/ui-inventory/).
 
-**Setup (first time):**
+| Registry | Namespace(s) | Tier | Auth | Verified |
+|---|---|---|---|---|
+| shadcn/ui core | `@shadcn` | Free | none | built-in |
+| Magic UI | `@magicui` | Free | none | ✅ 245 items |
+| Magic UI Pro | `@magicui-pro` | Pro | Bearer header `${MAGICUI_PRO_REGISTRY_TOKEN}` | ✅ 103 items |
+| shadcn studio | `@shadcn-studio` (free), `@ss-components`, `@ss-blocks`, `@ss-themes` | Free + Pro | query `params` `${EMAIL}` + `${LICENSE_KEY}` | ✅ config per official docs |
+| ReUI | `@reui` | Free (MIT) | none | ✅ resolves (pinned to ReUI `base-nova` style) |
 
-1. Copy `.env.example` to `.env` and fill in `EMAIL` and `LICENSE_KEY` from Infisical.
-2. The MCP server is registered globally in `~/.claude.json` — no per-project install needed.
+### Credentials (first-time setup)
 
-**Usage in Claude Code.** The fastest path is the studio MCP workflows below; they drive the
-install for you (under the hood the studio MCP emits a standard `npx shadcn@latest add <category>/<section>/<component>`
-CLI command, which works fine in this Vite/TanStack monorepo — the shadcn CLI officially supports Vite):
+Copy `.env.example` to `.env` and fill from Infisical (never commit values; `.env` is gitignored):
+
+- `MAGICUI_PRO_REGISTRY_TOKEN` — Infisical `/credentials/magicui/MAGICUI_PRO_TOKEN`
+- `EMAIL` + `LICENSE_KEY` — Infisical `/credentials/shadcnstudio/` (`SHADCN_STUDIO_EMAIL` / `SHADCN_STUDIO_LICENSE_KEY`)
+
+### Installing components
+
+```bash
+# Free Magic UI (no token)
+npx shadcn@latest add @magicui/marquee -c packages/ui
+# Magic UI Pro (token in env)
+npx shadcn@latest add @magicui-pro/header-1 -c packages/ui
+# ReUI (data-dense: Data Grid, Filters, Kanban, virtualized tables)
+npx shadcn@latest add @reui/data-grid -c packages/ui
+# shadcn studio Pro (EMAIL + LICENSE_KEY in env)
+npx shadcn@latest add @ss-blocks/<block-name> -c packages/ui
+```
+
+### shadcn studio — use the MCP to discover/install
+
+The studio registries are configured correctly, but shadcn studio does **not** publish a searchable
+registry index (`registry.json` 404s), so `shadcn search @ss-blocks` won't list items. Discover and install
+studio blocks through the **studio MCP** (registered globally in `~/.claude.json`), which emits the correct
+`npx shadcn add` commands:
 
 | Command | What it does |
 |---------|-------------|
@@ -102,38 +129,20 @@ CLI command, which works fine in this Vite/TanStack monorepo — the shadcn CLI 
 | `/rui <description>` | Refine / edit an already-installed block |
 | `/ftc <description>` | Convert a Figma frame to code (requires Figma MCP) |
 
-**Workflow rules:**
-- Collect ALL blocks before installing any — never interrupt mid-workflow.
-- One block per chat window (exception: full landing pages via `/cui`).
-- Use `/rui` only for post-install refinements, never initial builds.
+Workflow rules: collect ALL blocks before installing; one block per chat (except full pages via `/cui`);
+use `/rui` only for post-install refinements.
 
----
+### Origin UI — not configured (legacy)
 
-### Magic UI Pro
+Origin UI was evaluated but **not added**: its official repo states it is now a *"pre-acquisition collection…
+with limited support and maintenance"* (active development moved to the `Particles`/coss-ui line), and
+`originui.com` is bot-protected from this environment so its registry endpoint could not be live-verified.
+**ReUI is the configured free source for data-dense operational UI.** Revisit Origin UI / Particles only
+after confirming a working registry namespace + URL from official docs.
 
-Pro license held by KareTech Solutions. Token is in Infisical at `/credentials/magicui/MAGICUI_PRO_TOKEN`.
-Full enumerated catalog (free components + Pro templates/sections) lives in
-[`docs/architecture/ui-inventory/magic-ui.md`](docs/architecture/ui-inventory/magic-ui.md).
-
-**Setup (first time):**
-
-1. Add `MAGICUI_PRO_REGISTRY_TOKEN=<token>` to your `.env` (already in `.env.example`).
-2. The registry is configured in `packages/ui/components.json` as `@magicui` (shadcn requires registry
-   names to start with `@`). The CLI reads the token from the `Authorization` header's `${MAGICUI_PRO_REGISTRY_TOKEN}`.
-
-**Install a Magic UI component** — shadcn references registry items as `@namespace/name` (there is **no**
-`--registry` flag):
-
-```bash
-# Free component (public registry, no token needed)
-npx shadcn@latest add @magicui/marquee -c packages/ui
-
-# Pro component (token must be in your environment / .env)
-MAGICUI_PRO_REGISTRY_TOKEN=<token> npx shadcn@latest add @magicui/animated-beam -c packages/ui
-```
-
-> `-c packages/ui` targets the shared UI package. The shadcn MCP only reads the **root** `components.json`,
-> so run registry installs through the CLI with `-c packages/ui` (or mirror the registries into the root config).
+> **Magic UI Pro is Next.js + Framer Motion** — individual components port to Vite/TanStack fine, but Pro
+> *page templates* need adapting. Per design-system rules, keep Magic UI off the POS checkout and
+> high-frequency data-entry paths; use it on storefront / marketing / onboarding / auth surfaces.
 
 **Important:** Magic UI Pro uses `@radix-ui/react-icons` in some components. If a component imports `StarFilledIcon` from that package and it's not installed, replace it with lucide's `Star` styled with `fill="currentColor"`. Do not install `@radix-ui/react-icons` unless it's already a dependency.
 

@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "src/styles/globals.css",
+    "css": "packages/ui/src/styles/globals.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
@@ -14,9 +14,9 @@
   "aliases": {
     "components": "@RetailOS/ui/components",
     "utils": "@RetailOS/ui/lib/utils",
-    "hooks": "@RetailOS/ui/hooks",
+    "ui": "@RetailOS/ui/components",
     "lib": "@RetailOS/ui/lib",
-    "ui": "@RetailOS/ui/components"
+    "hooks": "@RetailOS/ui/hooks"
   },
   "menuColor": "default",
   "menuAccent": "subtle",
