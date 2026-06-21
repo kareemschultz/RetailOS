@@ -13,6 +13,7 @@
 | `magic-ui-pro.md` | Magic UI Pro — **100 blocks / 14 categories** (103 items; fully enumerated from live registry 2026-06-21) |
 | `reui.md` | ReUI (free, MIT) — data-dense components (Data Grid, Filters, Kanban) for operational surfaces |
 | `origin-ui.md` | Origin UI — evaluated, **not configured** (legacy/maintenance-only; not live-verifiable here) |
+| `shadcnblocks.md` | Shadcnblocks.com — evaluated, **not configured** (registry live-verified; overlaps studio Pro; paid) |
 | `gaps-and-custom.md` | RetailOS-specific components no registry covers — to build custom in `packages/ui` |
 | `retailos-surface-map.md` | Recommended items per RetailOS surface (POS, warehouse, admin, accounting, exec, ecommerce, auth, MSP, marketing) |
 
@@ -32,6 +33,7 @@
 | shadcn studio | `@shadcn-studio` / `@ss-components` / `@ss-blocks` / `@ss-themes` | ✅ Yes | ✅ `EMAIL`+`LICENSE_KEY` set | Free + **Pro** | studio MCP `get-block-meta-content` per category — **735 blocks / 61 categories enumerated** (config `…/r/{style}/{name}.json` + params, live-verified) |
 | Magic UI | `@magicui` (free) / `@magicui-pro` | ✅ Yes | ✅ token set | Free + **Pro** | shadcn CLI search — **245 free + 103 Pro items** |
 | ReUI | `@reui` | ✅ Yes | n/a (MIT) | Free | `@reui/data-grid` resolves (pinned to ReUI `base-nova` style); no searchable index |
+| Shadcnblocks | `@shadcnblocks` (**not configured**) | ✅ (live-verified) | Bearer `${SHADCNBLOCKS_API_KEY}` (paid; free tier no-auth) | Free + **Paid** | `hero1` resolves via direct URL; **skipped** — overlaps studio Pro, needs separate license. Config preserved in `shadcnblocks.md` |
 
 > Registries are mirrored into **both** the root `components.json` (the shadcn MCP reads root) and `packages/ui/components.json` (CLI installs use `-c packages/ui`). Origin UI is **not** configured — legacy/maintenance-only per its repo and bot-blocked here (see `shadcn-studio.md` / README).
 
