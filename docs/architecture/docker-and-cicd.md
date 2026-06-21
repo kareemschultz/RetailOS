@@ -79,6 +79,7 @@ automatically.
 - **Web `HEALTHCHECK`** — deferred until a dedicated `/health` route exists (Phase 1); `/` currently 500s
   without a DB, which would make a healthcheck flaky. Add a bun-based healthcheck against `/health` then.
 - **Base-image refresh cadence** — re-pin base images quarterly for security patches.
+- **Bun `--compile` single-binary images** (post-MVP) — compile the server to a standalone binary to shave a further ~40–60 MB off the runtime image.
 
 ## Known limitations / intentionally deferred
 
