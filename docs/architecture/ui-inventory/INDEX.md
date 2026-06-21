@@ -8,9 +8,12 @@
 | File | Source |
 |---|---|
 | `shadcn-core.md` | `@shadcn` — owned foundation (Free) |
-| `shadcn-studio.md` | shadcn studio Free + Pro — **735 blocks / 61 categories** (dashboard, marketing, ecommerce; fully enumerated 2026-06-21) |
-| `magic-ui.md` | Magic UI Free components overview (~70 items) |
-| `magic-ui-pro.md` | Magic UI Pro — **100 blocks / 14 categories** (fully enumerated from live registry 2026-06-21) |
+| `shadcn-studio.md` | shadcn studio Free + Pro — **735 blocks / 61 categories** (all categories live-verified 2026-06-21) |
+| `magic-ui.md` | Magic UI Free — **77 distinct components** (245 registry items incl. demos), fully enumerated 2026-06-21 |
+| `magic-ui-pro.md` | Magic UI Pro — **100 blocks / 14 categories** (103 items; fully enumerated from live registry 2026-06-21) |
+| `reui.md` | ReUI (free, MIT) — data-dense components (Data Grid, Filters, Kanban) for operational surfaces |
+| `origin-ui.md` | Origin UI — evaluated, **not configured** (legacy/maintenance-only; not live-verifiable here) |
+| `gaps-and-custom.md` | RetailOS-specific components no registry covers — to build custom in `packages/ui` |
 | `retailos-surface-map.md` | Recommended items per RetailOS surface (POS, warehouse, admin, accounting, exec, ecommerce, auth, MSP, marketing) |
 
 ## Methodology
@@ -48,10 +51,11 @@
 
 ### shadcn studio — **735 blocks across 61 categories** (enumerated per-category via `get-block-meta-content`; full catalog in `shadcn-studio.md`)
 Dashboard & Application **19 categories / 289 blocks** (e.g. application-shell 18, widget-component 20, datatable 7) · Marketing UI **29 categories / 362 blocks** (e.g. hero-section 41) · eCommerce **13 categories / 84 blocks** · plus theme presets.
-> ⚠️ Correction (see `lessons-learned.md` #12): an earlier pass reported **~146** from `get-blocks-metadata` (the `/iui` iuiPath), which **undercounts**. `get-block-meta-content` per category is authoritative — verified exactly for application-shell (18), hero-section (41), datatable (7). The ~15 delta to the advertised "750+" is free blocks outside the enumerated category paths.
+> ✅ **All 61 categories independently live-verified** (`get-block-meta-content` per category, 2026-06-21) — every per-category count matches `shadcn-studio.md`, zero discrepancies, no errored endpoints. (Correction, `lessons-learned.md` #12: an earlier pass reported **~146** from `get-blocks-metadata`'s `/iui` iuiPath, which undercounts; per-category content is authoritative.) The ~15 delta to the advertised "750+" is free blocks outside the enumerated category paths.
 
 ### Magic UI — Free + Pro
-Free components **~70** (Special Effects 9, Text Animations 18, Core 3, Buttons 6, Backgrounds 11, Device Mocks 3, Other ~25) · Pro **100 blocks** across 14 categories (Hero 26, CTA 13, Footer 11, Animated Feature Card 10, Pricing 9, Stats 5, Header 5, FAQ 4, Social Proof 10, Feature 4, Carousel 2, Feature Scroll 1) + 2 themes + 1 style = 103 items total. Full slug-level inventory in `magic-ui-pro.md`.
+**Free** (`@magicui`): **77 distinct components** across 245 registry items (the other ~166 are demos/examples + `index`/`utils`) — Special Effects 17, Text Animations 17, Core Animations 14, Buttons 6, Backgrounds 10, Device Mocks 4, Other ~9. Full catalog in `magic-ui.md`. Nearly all Framer-Motion animated → marketing/storefront/onboarding only.
+**Pro** (`@magicui-pro`): **100 blocks** across 14 categories (Hero 26, CTA 13, Footer 11, Animated Feature Card 10, Pricing 9, Social Proof 10, Stats 5, Header 5, FAQ 4, Feature 4, Carousel 2, Feature Scroll 1) + 2 themes + 1 style = 103 items. Full slug-level inventory in `magic-ui-pro.md`.
 
 ---
 
