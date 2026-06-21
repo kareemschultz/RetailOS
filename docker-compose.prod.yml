@@ -1,0 +1,65 @@
+# RetailOS — KareTech VPS deploy override (reuses central shared services to save resources).
+#
+# Hybrid model:
+#   - OTHER deployments / contributor laptops → use the base `docker-compose.yml`
+#     (self-contained postgres + redis + minio).
+#   - KareTech VPS (this server) → use THIS file. It runs NO postgres/redis; it reuses the
+#     central `postgres-central` (dedicated `retailos` DB) and `redis-shared` (logical DB 3,
+#     key-prefix `retailos:`) over the shared external `pangolin` network. Object storage has
+#     no central equivalent, so MinIO runs here.
+#
+# Secrets are pulled at runtime from self-hosted Infisical (path /credentials/retailos, env prod)
+# via the standard machine-identity token — same pattern as the other apps' infisical-entrypoint.
+# DATABASE_URL / REDIS_URL / S3_* live in Infisical, never in this file.
+#
+# Usage (on the VPS):  docker compose -f docker-compose.prod.yml up -d --build
+# NOTE: the RetailOS server image/Dockerfile lands in the CI/CD phase (charter §28/§11); until then
+# this is the wiring template — `app` builds the web client; add the `server` service when it exists.
+
+name: retailos
+
+networks:
+  pangolin:
+    external: true       # shared mesh that also hosts postgres-central + redis-shared
+  retailos-internal:
+    driver: bridge
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_SERVER_URL: ${VITE_SERVER_URL:-http://localhost:3000}
+    init: true
+    environment:
+      # Machine-identity Infisical pull (token injected at deploy time; see /opt/docker/infisical-token.sh)
+      INFISICAL_DOMAIN: https://infisical.karetechsolutions.com
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID}
+      INFISICAL_ENV: prod
+      INFISICAL_PATH: /credentials/retailos
+      INFISICAL_TOKEN: ${INFISICAL_TOKEN}
+      # → resolves DATABASE_URL (postgres-central), REDIS_URL (redis-shared/3), S3_* (minio below)
+    networks: [pangolin, retailos-internal]
+    restart: unless-stopped
+
+  # Object storage — no central equivalent on the VPS, so RetailOS runs its own (charter §4/§9).
+  minio:
+    image: minio/minio
+    container_name: retailos-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - retailos_minio_data:/data
+    networks: [retailos-internal]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  retailos_minio_data:

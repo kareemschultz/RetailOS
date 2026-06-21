@@ -1,8 +1,8 @@
+import type { AppRouterClient } from "@RetailOS/api/routers/index";
+import { env } from "@RetailOS/env/native";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import type { AppRouterClient } from "@RetailOS/api/routers/index";
-import { env } from "@RetailOS/env/native";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { Platform } from "react-native";
 
@@ -18,7 +18,7 @@ export const queryClient = new QueryClient({
 
 export const link = new RPCLink({
   url: `${env.EXPO_PUBLIC_SERVER_URL}/rpc`,
-  fetch: function (url, options) {
+  fetch(url, options) {
     return fetch(url, {
       ...options,
       // Better Auth Expo forwards the session cookie manually on native.

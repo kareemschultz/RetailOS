@@ -15,7 +15,11 @@ import {
 import { MessageCircleIcon } from "lucide-react";
 import { Suspense } from "react";
 
-import { AISearch, AISearchPanel, AISearchTrigger } from "@/components/ai/search";
+import {
+  AISearch,
+  AISearchPanel,
+  AISearchTrigger,
+} from "@/components/ai/search";
 import { useMDXComponents } from "@/components/mdx";
 import { cn } from "@/lib/cn";
 import { baseOptions } from "@/lib/layout.shared";
@@ -79,7 +83,9 @@ const clientLoader = browserCollections.docs.createClientLoader({
 });
 
 function Page() {
-  const { path, pageTree, markdownUrl } = useFumadocsLoader(Route.useLoaderData());
+  const { path, pageTree, markdownUrl } = useFumadocsLoader(
+    Route.useLoaderData(),
+  );
 
   return (
     <DocsLayout {...baseOptions()} tree={pageTree}>
@@ -99,7 +105,9 @@ function Page() {
         </AISearchTrigger>
       </AISearch>
 
-      <Suspense>{clientLoader.useContent(path, { markdownUrl, path })}</Suspense>
+      <Suspense>
+        {clientLoader.useContent(path, { markdownUrl, path })}
+      </Suspense>
     </DocsLayout>
   );
 }

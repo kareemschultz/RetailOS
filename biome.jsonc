@@ -1,4 +1,28 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["ultracite/biome/core", "ultracite/biome/react"],
+  "files": {
+    // Vendored agent skills and generated files are not RetailOS source — don't lint them.
+    "includes": [
+      "!**/.agents/skills",
+      "!**/routeTree.gen.ts",
+      "!**/*.gen.ts",
+      "!**/.source",
+      "!**/apps/fumadocs"
+    ]
+  },
+  "linter": {
+    "rules": {
+      // These ultracite defaults conflict with framework/monorepo conventions we deliberately use:
+      "performance": {
+        // Package entry points (packages/*/src/index.ts) are intentional barrels; Drizzle uses `import * as schema`.
+        "noBarrelFile": "off",
+        "noNamespaceImport": "off"
+      },
+      "style": {
+        // TanStack Start / Expo Router file-based routing requires names like `$.tsx`, `__root.tsx`, `(drawer)`, `api.chat.ts`.
+        "useFilenamingConvention": "off"
+      }
+    }
+  }
 }

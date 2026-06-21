@@ -1,7 +1,7 @@
-import { expo } from "@better-auth/expo";
 import { createDb } from "@RetailOS/db";
 import * as schema from "@RetailOS/db/schema/auth";
 import { env } from "@RetailOS/env/server";
+import { expo } from "@better-auth/expo";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
@@ -12,9 +12,14 @@ export function createAuth() {
     database: drizzleAdapter(db, {
       provider: "pg",
 
-      schema: schema,
+      schema,
     }),
-    trustedOrigins: [env.CORS_ORIGIN, "RetailOS://", "exp://", "http://localhost:8081"],
+    trustedOrigins: [
+      env.CORS_ORIGIN,
+      "RetailOS://",
+      "exp://",
+      "http://localhost:8081",
+    ],
     emailAndPassword: {
       enabled: true,
     },

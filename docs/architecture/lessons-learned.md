@@ -101,3 +101,20 @@
 - **Root cause:** `get-blocks-metadata`'s `iuiPath` is a curated *inspiration* subset, not the full per-category variant list — it lists ~2–15 per category when the real count is far higher (e.g. application-shell shows 9 there but has 18).
 - **Fix:** Enumerate each category with `get-block-meta-content` (the `/cui` endpoint). Live-verified exactly: application-shell **18**, hero-section **41**, datatable **7** → **735 blocks across 61 categories** total (≈ the advertised 750+). A parallel agent's 735 count was correct; my ~146 was the undercount.
 - **Rule:** For full counts, enumerate per category via `get-block-meta-content`; treat `get-blocks-metadata` as a category index only. Always reconcile a surprising count against a second, deeper source before publishing.
+
+### Phase-0 foundation config (Deliverable D) — 2026-06-21
+- **Context:** Wiring the §43/§46 quality gates (test, lint, CI) into the Better-T-Stack scaffold.
+- **Mistakes/surprises & fixes:**
+  - The scaffolded husky pre-commit was bare `bun test`, which **errors on "0 test files"** and blocked every commit. Fix: pre-commit runs `bunx lint-staged` + `bun run check-types`; tests run via Vitest with `passWithNoTests: true` (+ a real `cn()` smoke test) so `bun run test` is green.
+  - `apps/fumadocs/biome.json` was a second **root** Biome config → "nested root configuration" error broke `ultracite check` repo-wide. Fix: add `"root": false` (Biome 2.x nested-config requirement).
+  - Ultracite/Biome is stricter than the frameworks: `useFilenamingConvention` rejects TanStack/Expo file-based routes (`$.tsx`, `__root.tsx`, `(drawer)`); `noBarrelFile` rejects package entry points; `noNamespaceImport` rejects Drizzle `import * as schema`. Fix: override those three rules off in root `biome.jsonc`; exclude vendored `.agents/skills` and the Fumadocs docs-site from the product lint. Fixed the genuine remainder (a11y label primitive, `any`, nested ternaries, missing await).
+- **Rule:** A failing quality gate that blocks all commits is a P0 — fix the gate config, don't `--no-verify` past it. Validate the lint config with `biome check .` (Biome validates its own schema); confirm `check`/`check-types`/`test` are all green before claiming Phase-0 lock-in.
+
+### Central shared infra reuse (KareTech VPS) — 2026-06-21
+- **Context:** Saving VPS resources by reusing the existing central Postgres/Redis instead of per-app containers.
+- **Findings/fixes:**
+  - `postgres-central` (postgres:18-alpine) + `redis-shared` live on the shared external **`pangolin`** docker network; apps reach them by container name (`postgres-central:5432`, `redis-shared:6379`). Host 5432 is already taken — a per-app postgres on 5432 conflicts.
+  - Provisioned `retailos` DB + a **least-privilege** role (`rolsuper=f, rolcreatedb=f`) via `docker exec postgres-central psql -U postgres` (local-socket trust — no central password needed).
+  - Infisical CLI needs **`--domain=https://infisical.karetechsolutions.com`** (self-hosted) — without it, it hits `app.infisical.com` and fails with `403 invalid signature`. Also create the `/credentials/<app>` **folder** before `secrets set` (else 404). Stored creds at `/credentials/retailos` (prod).
+  - **Hybrid model:** committed `docker-compose.yml` stays self-contained (own pg/redis/minio) for other deployments/contributor laptops; `docker-compose.prod.yml` (VPS) reuses central via `pangolin` + pulls secrets from Infisical; MinIO runs locally (no central object store). Redis namespaced to logical DB 3 + `retailos:` key prefix.
+- **Rule:** Endpoints are env-driven (charter §9) — reuse shared infra per-environment, never hardcode; keep the portable compose self-contained and isolate VPS specifics in a prod override.

@@ -10,19 +10,28 @@ import {
   useToast,
 } from "heroui-native";
 import { useRef } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Text, type TextInput, View } from "react-native";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { queryClient } from "@/utils/orpc";
 
 const signInSchema = z.object({
-  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
-  password: z.string().min(1, "Password is required").min(8, "Use at least 8 characters"),
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email is required")
+    .email("Enter a valid email address"),
+  password: z
+    .string()
+    .min(1, "Password is required")
+    .min(8, "Use at least 8 characters"),
 });
 
 function getErrorMessage(error: unknown): string | null {
-  if (!error) return null;
+  if (!error) {
+    return null;
+  }
 
   if (typeof error === "string") {
     return error;
@@ -81,14 +90,14 @@ function SignIn() {
             });
             queryClient.refetchQueries();
           },
-        },
+        }
       );
     },
   });
 
   return (
-    <Surface variant="secondary" className="p-4 rounded-lg">
-      <Text className="text-foreground font-medium mb-4">Sign In</Text>
+    <Surface className="rounded-lg p-4" variant="secondary">
+      <Text className="mb-4 font-medium text-foreground">Sign In</Text>
 
       <form.Subscribe
         selector={(state) => ({
@@ -101,7 +110,7 @@ function SignIn() {
 
           return (
             <>
-              <FieldError isInvalid={!!formError} className="mb-3">
+              <FieldError className="mb-3" isInvalid={!!formError}>
                 {formError}
               </FieldError>
 
@@ -111,19 +120,19 @@ function SignIn() {
                     <TextField>
                       <Label>Email</Label>
                       <Input
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChangeText={field.handleChange}
-                        placeholder="email@example.com"
-                        keyboardType="email-address"
                         autoCapitalize="none"
                         autoComplete="email"
-                        textContentType="emailAddress"
-                        returnKeyType="next"
                         blurOnSubmit={false}
+                        keyboardType="email-address"
+                        onBlur={field.handleBlur}
+                        onChangeText={field.handleChange}
                         onSubmitEditing={() => {
                           passwordInputRef.current?.focus();
                         }}
+                        placeholder="email@example.com"
+                        returnKeyType="next"
+                        textContentType="emailAddress"
+                        value={field.state.value}
                       />
                     </TextField>
                   )}
@@ -134,24 +143,28 @@ function SignIn() {
                     <TextField>
                       <Label>Password</Label>
                       <Input
-                        ref={passwordInputRef}
-                        value={field.state.value}
+                        autoComplete="password"
                         onBlur={field.handleBlur}
                         onChangeText={field.handleChange}
-                        placeholder="••••••••"
-                        secureTextEntry
-                        autoComplete="password"
-                        textContentType="password"
-                        returnKeyType="go"
                         onSubmitEditing={form.handleSubmit}
+                        placeholder="••••••••"
+                        ref={passwordInputRef}
+                        returnKeyType="go"
+                        secureTextEntry
+                        textContentType="password"
+                        value={field.state.value}
                       />
                     </TextField>
                   )}
                 </form.Field>
 
-                <Button onPress={form.handleSubmit} isDisabled={isSubmitting} className="mt-1">
+                <Button
+                  className="mt-1"
+                  isDisabled={isSubmitting}
+                  onPress={form.handleSubmit}
+                >
                   {isSubmitting ? (
-                    <Spinner size="sm" color="default" />
+                    <Spinner color="default" size="sm" />
                   ) : (
                     <Button.Label>Sign In</Button.Label>
                   )}
