@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/log-progress.sh show 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Loading RetailOS progress state"
+          }
+        ]
+      }
+    ]
+  }
+}

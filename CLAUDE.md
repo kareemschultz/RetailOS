@@ -8,6 +8,7 @@
 - @docs/architecture/retailos-master-charter.md — the governing charter (source of truth).
 - @docs/architecture/lessons-learned.md — append-only verified mistakes; never repeat them. Append after any task with a correction/surprise/contradiction.
 - @docs/architecture/phase-roadmap.md — phase status and what's in scope now.
+- `docs/architecture/PROGRESS.md` — live cross-agent task board + changelog (a `SessionStart` hook surfaces a lean view automatically). **Claim a lane before writing**; `git pull --rebase` before committing (multiple agents share the branch).
 - @.claude/CLAUDE.md — code standards (Ultracite/Biome) and shadcn/studio MCP workflow rules.
 
 ## Architecture references (read the relevant ones for your task)
@@ -42,3 +43,5 @@
 - Live-verify registry/endpoint facts; do not trust marketing counts (state only enumerated counts).
 - Consolidate docs; don't create overlapping checklist files.
 - Keep commits small and grouped by deliverable; summarize impacted files.
+- **Progress protocol:** update `PROGRESS.md` (task board + changelog, or `scripts/log-progress.sh log "…"`) and any affected docs in the **same commit** as a major/long change — so docs, state, and code never drift. Keep this CLAUDE.md lean: link to docs, don't inline them.
+- Use subagents / parallel workflows for independent work (doc drafting, enumeration, audits); partition via the PROGRESS.md Work-lanes table to avoid collisions.
