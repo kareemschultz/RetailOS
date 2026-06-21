@@ -24,10 +24,10 @@
 
 | Lane | Owner | Status |
 |---|---|---|
-| Deliverable B — architecture-review doc set | agent (task #6) | in progress |
+| Deliverable B — architecture-review doc set | done | done |
 | Automation & coordination (hook, CLAUDE protocol, PROGRESS, helper script) | agent-infra | in progress |
-| Deliverable D — foundation config (scripts/husky/vitest/playwright/CI/docker) | _unclaimed_ | todo |
-| Deliverable C — Vertical Slice #1 design | _unclaimed_ | todo |
+| Deliverable D — foundation config (scripts/husky/vitest/playwright/CI/docker) | done | done |
+| Deliverable C — Vertical Slice #1 design | done | done |
 | Deliverable E — verify + merge | _unclaimed_ (do last) | todo |
 
 ## Task Board
@@ -83,6 +83,8 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - Scaffold reality: Better Auth = email/password + Expo plugin only; DB = auth schema only, no migrations; 2 demo oRPC procedures; docker-compose = postgres + web only. All charter foundation domain work (tenant/RBAC/audit/RLS/Redis/object storage/Better Auth plugins) is NOT yet built (deferred past Phase-0 lock-in).
 
 ## Changelog (newest first)
+
+- **2026-06-21** — PHASE 0 COMPLETE: phase-0-checklist.md added (§46 scoreboard); all governance + architecture-review docs present; gates green (check/check-types/test); merging branch → master. Remaining = CI first-run green + docker image build verify (run on push) + Phase-1 features.
 
 - **2026-06-21** — Phase-0 D complete + GREEN: check ✅ / check-types ✅ / test ✅ (3 tests). Fixed biome nested-root (fumadocs root:false), overrode framework-incompatible rules, excluded vendored skills + docs-site, fixed 5 real lint errors. Pinned postgres:18-alpine. tech-stack.md added (versions/compat verified; flagged lucide-react split + biome 2.4.16/2.5.0 dedup as follow-ups).
 
