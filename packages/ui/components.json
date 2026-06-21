@@ -21,14 +21,14 @@
   "menuColor": "default",
   "menuAccent": "subtle",
   "registries": {
-    "magicui": {
-      "url": "https://r.magicui.design",
+    "@magicui": {
+      "url": "https://r.magicui.design/{name}.json",
       "headers": {
         "Authorization": "Bearer ${MAGICUI_PRO_REGISTRY_TOKEN}"
       }
     },
-    "ss-blocks": {
-      "url": "https://shadcnstudio.com/registry"
+    "@ss-blocks": {
+      "url": "https://shadcnstudio.com/registry/{name}.json"
     }
   }
 }

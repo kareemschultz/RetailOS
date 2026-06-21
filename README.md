@@ -80,16 +80,20 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 
 ## Premium UI Libraries
 
-### shadcn/studio Pro (631+ blocks)
+### shadcn/studio Pro
 
 Pro license held by KareTech Solutions. Credentials are in Infisical at `/credentials/shadcnstudio/`.
+Full enumerated catalog (blocks, datatables, ecommerce, marketing, themes) lives in
+[`docs/architecture/ui-inventory/shadcn-studio.md`](docs/architecture/ui-inventory/shadcn-studio.md).
 
 **Setup (first time):**
 
 1. Copy `.env.example` to `.env` and fill in `EMAIL` and `LICENSE_KEY` from Infisical.
 2. The MCP server is registered globally in `~/.claude.json` — no per-project install needed.
 
-**Usage in Claude Code** (TanStack Start = MCP commands only, no CLI registry):
+**Usage in Claude Code.** The fastest path is the studio MCP workflows below; they drive the
+install for you (under the hood the studio MCP emits a standard `npx shadcn@latest add <category>/<section>/<component>`
+CLI command, which works fine in this Vite/TanStack monorepo — the shadcn CLI officially supports Vite):
 
 | Command | What it does |
 |---------|-------------|
@@ -108,21 +112,28 @@ Pro license held by KareTech Solutions. Credentials are in Infisical at `/creden
 ### Magic UI Pro
 
 Pro license held by KareTech Solutions. Token is in Infisical at `/credentials/magicui/MAGICUI_PRO_TOKEN`.
+Full enumerated catalog (free components + Pro templates/sections) lives in
+[`docs/architecture/ui-inventory/magic-ui.md`](docs/architecture/ui-inventory/magic-ui.md).
 
 **Setup (first time):**
 
 1. Add `MAGICUI_PRO_REGISTRY_TOKEN=<token>` to your `.env` (already in `.env.example`).
-2. The registry is pre-configured in `packages/ui/components.json`.
+2. The registry is configured in `packages/ui/components.json` as `@magicui` (shadcn requires registry
+   names to start with `@`). The CLI reads the token from the `Authorization` header's `${MAGICUI_PRO_REGISTRY_TOKEN}`.
 
-**Install a Magic UI Pro component:**
+**Install a Magic UI component** — shadcn references registry items as `@namespace/name` (there is **no**
+`--registry` flag):
 
 ```bash
-# From packages/ui (shared components)
-MAGICUI_PRO_REGISTRY_TOKEN=<token> npx shadcn@latest add --registry https://r.magicui.design <component-name> -c packages/ui
+# Free component (public registry, no token needed)
+npx shadcn@latest add @magicui/marquee -c packages/ui
 
-# Example
-MAGICUI_PRO_REGISTRY_TOKEN=<token> npx shadcn@latest add --registry https://r.magicui.design animated-beam -c packages/ui
+# Pro component (token must be in your environment / .env)
+MAGICUI_PRO_REGISTRY_TOKEN=<token> npx shadcn@latest add @magicui/animated-beam -c packages/ui
 ```
+
+> `-c packages/ui` targets the shared UI package. The shadcn MCP only reads the **root** `components.json`,
+> so run registry installs through the CLI with `-c packages/ui` (or mirror the registries into the root config).
 
 **Important:** Magic UI Pro uses `@radix-ui/react-icons` in some components. If a component imports `StarFilledIcon` from that package and it's not installed, replace it with lucide's `Star` styled with `fill="currentColor"`. Do not install `@radix-ui/react-icons` unless it's already a dependency.
 
