@@ -16,8 +16,8 @@
 ## Methodology
 
 - **Tools only** (no website scraping of registries): shadcn MCP (`list_items_in_registries`, `search_items_in_registries`, `get-block-meta-content`), the **shadcn-studio MCP** (`get-blocks-metadata`, `get_add_command_for_items`), and **official vendor documentation** (`ui.shadcn.com`, `magicui.design/docs`, `pro.magicui.design`) for catalogs that registries could not return due to the access gaps below.
-- No installs. No dependency changes to app/UI code. The only files created are these five inventory docs.
-- Counts for shadcn studio and Magic UI are **component families** (each has multiple variants); see each file.
+- No installs. No dependency changes to app/UI code. The only files created are these inventory docs (six under `ui-inventory/` + `lessons-learned.md`).
+- Counts are **live-enumerated** per source: `@magicui-pro` and `@magicui` via shadcn CLI `search` (have a searchable index); shadcn studio via `get-block-meta-content` per category (no index). Verified exact for sampled categories — see `lessons-learned.md` #12.
 
 ---
 
