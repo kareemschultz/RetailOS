@@ -1,5 +1,24 @@
 **/node_modules
 .git
+.github
+
+# Agent / tooling state — never needed in an image build context
+.claude
+.agents
+**/.cache
+
+# Docs & design assets (not needed to build/run the app)
+docs
+
+# Test artifacts & coverage (dev-only)
+**/coverage
+**/test-results
+**/playwright-report
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+e2e
 
 **/dist
 **/build

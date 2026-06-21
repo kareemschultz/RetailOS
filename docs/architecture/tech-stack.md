@@ -91,14 +91,14 @@ Each line is a constraint **verified** against the cited source (peer-dep output
 
 ## 3. Recommended actions
 
-**Must-resolve (correctness / reproducibility):**
-- **Pin the PostgreSQL image.** `docker-compose.yml` uses `image: postgres` (resolves to `:latest`). Pin a major, e.g. `postgres:17-alpine`, in dev and prod compose — an unpinned base image breaks deterministic builds and DR/restore guarantees (charter §28). *(❗)*
-- **Resolve the `lucide-react` major split.** `apps/web` pins `^1.8.0` while `packages/ui` pins `^0.546.0` — two different major lines of the same icon library, which can ship divergent icon sets/APIs across the shared UI boundary. Align both to one version (move it to the catalog). *(❗)*
+**Must-resolve (correctness / reproducibility):** — ✅ **DONE 2026-06-21**
+- ✅ **Pinned the PostgreSQL image** — `docker-compose.yml` uses `postgres:18-alpine` (prod reuses central `postgres:18-alpine`).
+- ✅ **Resolved the `lucide-react` major split** — all three packages (`apps/web`, `apps/fumadocs`, `packages/ui`) now reference catalog `lucide-react: ^1.21.0`; lockfile deduped to a single `1.21.0`. Gates re-run green after the bump (incl. a forced fresh `packages/ui` type-check against the new major).
 
-**Should-do (stay current, low risk — all within existing `^`/`~` ranges, no breaking peer):**
-- Bump **Better Auth** `1.6.11 → 1.6.20` **and** `@better-auth/expo` together (keep them equal). All peers still satisfied.
-- Refresh catalog floors so `bun.lock` matches latest patch: Bun → `1.3.14`, Hono catalog floor (lock already `4.12.26`), oRPC catalog floor (lock already `1.14.6`).
-- Collapse the **two Biome versions** (`2.4.16` root pin vs `2.5.0` via ultracite) to a single pin to avoid format drift.
+**Should-do (stay current, low risk):** — ✅ **DONE 2026-06-21**
+- ✅ Bumped **Better Auth** `1.6.11 → 1.6.20` **and** `@better-auth/expo` to `1.6.20` (kept equal). All peers satisfied; gates green.
+- ✅ Collapsed the **two Biome versions** — root pin moved `2.4.16 → 2.5.0`; lockfile resolves a single `@biomejs/biome@2.5.0`.
+- ⏳ (Optional, deferred) Refresh catalog floors to latest patch: Bun → `1.3.14`, etc. — cosmetic; not blocking.
 
 **Decide before it bites later (no action required now):**
 - **shadcn CLI v3 → v4:** repo is on `3.8.5`; npm `latest` is `4.x`. v3 works with Tailwind v4 + Base UI, so no urgency, but plan a deliberate evaluation (the registry config in `components.json` is the migration-sensitive part — see lessons-learned 1–12 before touching it).

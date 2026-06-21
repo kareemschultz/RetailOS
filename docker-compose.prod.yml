@@ -42,6 +42,18 @@ services:
       # → resolves DATABASE_URL (postgres-central), REDIS_URL (redis-shared/3), S3_* (minio below)
     networks: [pangolin, retailos-internal]
     restart: unless-stopped
+    # Bound resources so one app can't starve the shared VPS (noisy-neighbour, charter §8).
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+    # Cap log growth on the shared host (charter §26).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Object storage — no central equivalent on the VPS, so RetailOS runs its own (charter §4/§9).
   minio:
@@ -60,6 +72,16 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   retailos_minio_data:
