@@ -778,4 +778,239 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     );
     expect(valuationEvents.length).toBeGreaterThanOrEqual(2);
   });
+
+  // H1 regression — ONE parameterized harness over every guarded FK-bearing
+  // input. Add a row to `cases` when a new FK input lands; it auto-asserts the
+  // cross-tenant reference is rejected.
+  it("rejects cross-tenant FK references on every guarded FK input (H1)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+
+    // Build a minimal company→location→product→sku(lot-tracked)→lot graph in a
+    // tenant, plus an in-tenant stock count, entirely through the routers.
+    const buildGraph = async (
+      ctxWrap: { context: Context },
+      prefix: string
+    ) => {
+      const company = await call(
+        appRouter.company.create,
+        { name: `${prefix}Co` },
+        ctxWrap
+      );
+      const location = await call(
+        appRouter.location.create,
+        { companyId: company.id, name: `${prefix}Loc`, type: "store" },
+        ctxWrap
+      );
+      const product = await call(
+        appRouter.product.create,
+        {
+          sku: `${prefix}-P`,
+          name: `${prefix} Prod`,
+          priceMinor: 100,
+          currency: "USD",
+        },
+        ctxWrap
+      );
+      const sku = await call(
+        appRouter.catalog.skuCreate,
+        { productId: product.id, code: `${prefix}-SKU`, trackingMode: "lot" },
+        ctxWrap
+      );
+      const lot = await call(
+        appRouter.inventory.lotCreate,
+        { skuId: sku.id, lotNumber: `${prefix}-L1` },
+        ctxWrap
+      );
+      const count = await call(
+        appRouter.inventory.countStart,
+        { locationId: location.id, scope: "cycle" },
+        ctxWrap
+      );
+      return {
+        locationId: location.id,
+        productId: product.id,
+        skuId: sku.id,
+        lotId: lot.id,
+        stockCountId: count.id,
+      };
+    };
+
+    const a = await buildGraph(admin, "FKGA");
+    const b = await buildGraph(adminB, "FKGB");
+
+    // Each case: tenant A references a tenant-B-owned id → must be rejected.
+    const cases: { fk: string; attempt: () => Promise<unknown> }[] = [
+      {
+        fk: "countStart.locationId",
+        attempt: () =>
+          call(
+            appRouter.inventory.countStart,
+            { locationId: b.locationId, scope: "cycle" },
+            admin
+          ),
+      },
+      {
+        fk: "adjust.locationId",
+        attempt: () =>
+          call(
+            appRouter.inventory.adjust,
+            {
+              locationId: b.locationId,
+              productId: a.productId,
+              skuId: a.skuId,
+              qtyDelta: -1,
+              reasonCode: "test",
+            },
+            admin
+          ),
+      },
+      {
+        fk: "adjust.lotId",
+        attempt: () =>
+          call(
+            appRouter.inventory.adjust,
+            {
+              locationId: a.locationId,
+              productId: a.productId,
+              skuId: a.skuId,
+              lotId: b.lotId,
+              qtyDelta: -1,
+              reasonCode: "test",
+            },
+            admin
+          ),
+      },
+      {
+        fk: "countLineUpsert.skuId",
+        attempt: () =>
+          call(
+            appRouter.inventory.countLineUpsert,
+            { stockCountId: a.stockCountId, skuId: b.skuId, countedQty: 1 },
+            admin
+          ),
+      },
+      {
+        fk: "countLineUpsert.lotId",
+        attempt: () =>
+          call(
+            appRouter.inventory.countLineUpsert,
+            {
+              stockCountId: a.stockCountId,
+              skuId: a.skuId,
+              lotId: b.lotId,
+              countedQty: 1,
+            },
+            admin
+          ),
+      },
+      {
+        fk: "reorderEvaluate.locationId",
+        attempt: () =>
+          call(
+            appRouter.inventory.reorderEvaluate,
+            { locationId: b.locationId, skuId: a.skuId },
+            admin
+          ),
+      },
+      {
+        fk: "reorderEvaluate.skuId",
+        attempt: () =>
+          call(
+            appRouter.inventory.reorderEvaluate,
+            { locationId: a.locationId, skuId: b.skuId },
+            admin
+          ),
+      },
+    ];
+
+    for (const c of cases) {
+      await expect(c.attempt()).rejects.toThrow();
+    }
+
+    // Positive control: an in-tenant reference still succeeds.
+    const ok = await call(
+      appRouter.inventory.countStart,
+      { locationId: a.locationId, scope: "cycle" },
+      admin
+    );
+    expect(ok.id).toBeTruthy();
+  });
+
+  // H2 regression — D5 allow-oversell-with-flagging: the ledger is NOT
+  // hard-blocked, but an oversell emits inventory.stock_discrepancy for review.
+  it("emits inventory.stock_discrepancy only on oversell, correlated to the sale (H2)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "H2OCo" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "H2OLoc", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { sku: "H2O-P", name: "H2O Prod", priceMinor: 500, currency: "USD" },
+      admin
+    );
+    // Opening balance of 5 into the (location, product) cell — product-keyed, so
+    // it lines up with the sale deduction (no skuId).
+    await withTenant(db, ORG, (tx) =>
+      services.appendStockMovement(
+        tx,
+        { tenantId: ORG },
+        {
+          locationId: location.id,
+          productId: product.id,
+          movementType: "receipt",
+          qtyDelta: 5,
+        }
+      )
+    );
+
+    const discrepancies = () =>
+      withTenant(db, ORG, (tx) =>
+        tx
+          .select()
+          .from(schema.outboxEvent)
+          .where(eq(schema.outboxEvent.type, "inventory.stock_discrepancy"))
+      );
+    const before = await discrepancies();
+
+    // 1) Normal sale within stock (3 of 5) → NO discrepancy.
+    await call(
+      appRouter.pos.createSale,
+      {
+        locationId: location.id,
+        idempotencyKey: "h2-ok",
+        lines: [{ productId: product.id, qty: 3 }],
+      },
+      admin
+    );
+    expect((await discrepancies()).length).toBe(before.length);
+
+    // 2) Oversell (2 left, sell 10) → discrepancy emitted, tenant-scoped + sale-correlated.
+    const oversell = await call(
+      appRouter.pos.createSale,
+      {
+        locationId: location.id,
+        idempotencyKey: "h2-oversell",
+        lines: [{ productId: product.id, qty: 10 }],
+      },
+      admin
+    );
+    const after = await discrepancies();
+    expect(after.length).toBe(before.length + 1);
+    const event = after.at(-1) as {
+      tenantId: string;
+      payload: { saleId?: string; source?: string; resultingOnHand?: number };
+    };
+    expect(event.tenantId).toBe(ORG);
+    expect(event.payload.saleId).toBe(oversell.saleId);
+    expect(event.payload.source).toBe("oversell");
+    expect(event.payload.resultingOnHand).toBeLessThan(0);
+  });
 });

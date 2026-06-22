@@ -2342,6 +2342,10 @@ export const inventoryRouter = {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "inventory.adjust");
+        await assertLocationVisible(tx, input.locationId);
+        if (input.lotId) {
+          await assertLotVisible(tx, input.lotId);
+        }
         const item = (
           await tx
             .select({ id: schema.sku.id })
@@ -2418,6 +2422,7 @@ export const inventoryRouter = {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "inventory.count");
+        await assertLocationVisible(tx, input.locationId);
         const row = firstOrThrow(
           (
             await tx
@@ -2478,6 +2483,10 @@ export const inventoryRouter = {
             message: "Stock count not found in this tenant",
           });
         }
+        await assertSkuVisible(tx, input.skuId);
+        if (input.lotId) {
+          await assertLotVisible(tx, input.lotId);
+        }
         const row = firstOrThrow(
           (
             await tx
@@ -2509,6 +2518,12 @@ export const inventoryRouter = {
               .returning()
           ).at(0)
         );
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.count.line.upsert",
+          entityType: "stock_count_line",
+          entityId: row.id,
+          after: row,
+        });
         return row;
       });
     }),
@@ -2547,6 +2562,8 @@ export const inventoryRouter = {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "inventory.reorder");
+        await assertLocationVisible(tx, input.locationId);
+        await assertSkuVisible(tx, input.skuId);
         const result = await services.evaluateReorder(tx, input);
         if (result?.isBelowMin) {
           await services.emitEvent(tx, ctx, {
@@ -2657,12 +2674,10 @@ export const posRouter = {
                 qty: lv.qty,
                 unitPriceMinor: lv.unitPriceMinor,
               });
-              // Stock deduction goes through the ledger (the only mutator).
-              // NOTE: oversell policy (reject if balance would go negative vs.
-              // allow with backorder vs. optimistic) is a per-tenant BUSINESS
-              // decision (charter §14) — deliberately NOT enforced here; the
-              // ledger records the movement faithfully. See deferred-decisions log.
-              await services.appendStockMovement(tx, ctx, {
+              // Stock deduction goes through the ledger (the only mutator). The
+              // ledger stays POLICY-NEUTRAL: we do NOT hard-block oversell here
+              // (charter §14; decided D5 default = allow-oversell-with-flagging).
+              const movement = await services.appendStockMovement(tx, ctx, {
                 locationId: input.locationId,
                 productId: lv.productId,
                 movementType: "sale",
@@ -2671,6 +2686,27 @@ export const posRouter = {
                 refId: sale.id,
                 idempotencyKey: input.idempotencyKey,
               });
+              // D5 flag (event only, applied ABOVE the neutral ledger): when the
+              // sale drives on-hand negative, emit a stock-discrepancy event for
+              // manager review / cycle count. Hard-block remains a per
+              // tenant/category/product config (not wired in this hotfix).
+              if (movement.balanceAfter < 0) {
+                await services.emitEvent(tx, ctx, {
+                  type: services.DomainEventType.InventoryStockDiscrepancy,
+                  payload: {
+                    locationId: input.locationId,
+                    productId: lv.productId,
+                    saleId: sale.id,
+                    qtySold: lv.qty,
+                    resultingOnHand: movement.balanceAfter,
+                    deltaBase: movement.balanceAfter,
+                    source: "oversell",
+                    reason: "oversell",
+                    sourceMovementId: movement.id,
+                    idempotencyKey: input.idempotencyKey,
+                  },
+                });
+              }
             }
 
             const invoiceSeq =
