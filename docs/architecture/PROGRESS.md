@@ -16,11 +16,11 @@
 - **Branches/PRs:** **PR #1 (`vs1-phase1`) + PR #3 (`phase-2-inventory`, = re-merge of the auto-closed PR #2) are MERGED to master** (`cd5258e`, `b404c63`); master CI green (4/4 jobs incl. real-Postgres RLS). **Active branch: `phase-2-implementation`** (off master). All work = PRs; never push to master directly.
 - **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + coverage gate + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
 - **Standing build order (Phase 2 onward):** schema → migrations → RLS → **ROBUST seed** → services → routers → validation → RBAC → audit/outbox → tests → API contract docs. **No production UI** until APIs stable+approved; later UI strictly from `ui-inventory/` + MCP registries (never hand-rolled React). POS UI is a **Phase 4** decision (Tauri/offline/SQLite) — not decided now.
-- **Current step:** **Phase 2 PLAN APPROVED.** Implementing in approved commit order. ✅ **Commit 0 landed** — `tenant-isolation-coverage.test.ts` (mechanical RLS-coverage gate; demonstrated red→green). Docs added: `phase-2-implementation-plan.md`, `event-map-phase2.md`, `inventory-screen-map.md`, ADR-0007. **Next: Commit 1 (catalog schema + migration + RLS) — STOPPED for owner review after Commit 0.**
+- **Current step:** **Phase 2 implementation in progress.** ✅ **Commit 0 landed** (mechanical RLS coverage gate). ✅ **Commit 1 ready/landed in this branch** — catalog schema + migration + RLS for category/brand/variant/SKU/barcode/UoM/product extensions. **Next: Commit 2 (tracking schema: lot/serial + stock ledger nullable seams).**
 
 ### ⛔ BLOCKERS / gates
 
-**Phase 2 implementation is APPROVED and underway in commit order.** All product-policy decisions D1–D7 are LOCKED (below); only D-money rounding stays open (Phase 5, not a Phase-2 blocker — AVCO carries exact-integer remainders, FIFO is division-free; see the plan's *Value-integrity invariants*). **Stopped after Commit 0 for review per owner instruction; no schema/resolver/services/routers/UI yet.**
+**Phase 2 implementation is APPROVED and underway in commit order.** All product-policy decisions D1–D7 are LOCKED (below); only D-money rounding stays open (Phase 5, not a Phase-2 blocker — AVCO carries exact-integer remainders, FIFO is division-free; see the plan's *Value-integrity invariants*). Catalog schema is the only Phase-2 implementation surface added so far; **no costing resolver/services/routers/UI yet.**
 
 **✅ Owner decisions LOCKED (2026-06-22) — all in `module-specs/inventory.md`:**
 1. **D1 costing** — AVCO default; FIFO per tenant/category/product (pharmacy/expiry/lot/regulated); no LIFO; not hardcoded — per-tenant/category/product strategy (both `avg_cost` + `valuation_layer` exist). + Costing Strategy Examples section.
@@ -34,7 +34,7 @@
 **⏳ Still OPEN (only one):**
 - **D-money rounding mode** — left OPEN per directive; do NOT assume banker's or half-up; pending Guyana/GRA VAT + target-country rounding verification. First needed Phase 5 (tax/FX division), not Phase 2.
 
-**What I did:** finished + locked all D1–D7 in the §42 spec; added Costing Strategy Examples; kept rounding open; drafted the approved Phase-2 implementation plan, event map, inventory screen map, and Commit-0 RLS coverage gate. **STOPPED after Commit 0 for review — no Phase-2 schema/migration/costing/inventory code written.**
+**What I did:** finished + locked all D1–D7 in the §42 spec; added Costing Strategy Examples; kept rounding open; drafted the approved Phase-2 implementation plan, event map, inventory screen map, Commit-0 RLS coverage gate, and Commit-1 catalog schema/migration/RLS. **No costing resolver/services/routers/UI yet.**
 
 ### §45 phase reassessment (end of Phase 1 / VS#1)
 - Architecture held: fail-closed RLS + 3-role model + tenant-scoped `withTenant` is the load-bearing spine; every later module inherits it. No ADR changes needed. Codex found real HIGHs at the service/router layers (idempotency race, FK-bypasses-RLS, money int4) — all fixed + regression-tested; 0 CRITICAL across the whole slice.
@@ -52,7 +52,7 @@
 - **PR #3** — `phase-2-inventory` → master — **MERGED** (Phase-2 §41/§42 docs + ADR-0007 after PR #2 auto-closed).
 
 ### 🚧 Active review branch
-- **`phase-2-implementation`** — Commit 0 coverage gate + docs-only planning artifacts. Stop after Commit 0 for owner review; schema/resolver/services/routers/UI are not implemented yet.
+- **`phase-2-implementation`** — Commit 0 coverage gate + docs-only planning artifacts; Commit 1 catalog schema/migration/RLS. Continue in approved order; next is Commit 2 tracking schema. Costing resolver/services/routers/UI are not implemented yet.
 
 ---
 
@@ -124,6 +124,8 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - Scaffold reality: Better Auth = email/password + Expo plugin only; DB = auth schema only, no migrations; 2 demo oRPC procedures; docker-compose = postgres + web only. All charter foundation domain work (tenant/RBAC/audit/RLS/Redis/object storage/Better Auth plugins) is NOT yet built (deferred past Phase-0 lock-in).
 
 ## Changelog (newest first)
+
+- **2026-06-22** — Phase 2 **Commit 1** (branch `phase-2-implementation`): catalog schema group added in approved order — `category`, `brand`, `variant`, `sku`, `barcode`, `unit_of_measure`, `uom_conversion`, plus nullable `product` extensions (`category_id`, `brand_id`, `base_uom_id`, `costing_method`, `tracking_mode`). Migration `0005_adorable_harrier.sql` includes FK/index/unique/check constraints and fail-closed RLS (`ENABLE` + `FORCE` + `tenant_isolation`) for every new tenant-owned table. Audit fix: `uom_conversion` scoped uniqueness uses `UNIQUE NULLS NOT DISTINCT` so tenant/category/product/SKU-level conversion rows cannot duplicate through nullable scope columns. Verified: static RLS coverage gate 5/5, full migration chain applied in a throwaway Postgres 18 container, `check:mojibake`, `check`, `check-types`, `test` green. **Next: Commit 2 tracking schema (lot/serial + stock ledger nullable seams).**
 
 - **2026-06-22** — Phase 2 **Commit 0** (branch `phase-2-implementation`): docs-only planning artifacts added (`event-map-phase2.md`, `inventory-screen-map.md`), approved implementation plan updated with the no-native-`pgEnum` schema convention, root `CLAUDE.md` points future agents at the Phase-2 docs, and `tenant-isolation-coverage.test.ts` added as the mechanical RLS coverage gate. Gate statically enumerates Drizzle schema tables and requires every tenant-owned table to have **ENABLE + FORCE + `tenant_isolation` policy** coverage (or an explicit exclusion); red→green demonstrated with a temporary uncovered table and removed before commit. Gates green: `check`, `check-types`, `test`, `check:mojibake`. **Stop here for review; no Phase-2 schema/resolver/services/routers/UI.**
 

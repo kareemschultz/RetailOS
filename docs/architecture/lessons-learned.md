@@ -210,3 +210,9 @@
 - **Two build gotchas (caught by gates):** biome `useTopLevelRegex` → hoist the inline `/ENABLE ROW LEVEL SECURITY/i` to a module const; strict TS `noUncheckedIndexedAccess` → match-group `m[1]` is `string | undefined`, guard before `.add()`.
 - **Schema rule (Phase 2 onward):** intentionally-extensible value sets (`tracking_mode`, `costing_method`, oversell/expiry policy, barcode parser type, reason codes, UoM roles, movement types) use Drizzle **`text({ enum: [...] })` + CHECK/Zod**, **NEVER native `pgEnum`** (`ALTER TYPE … ADD VALUE` is non-transactional and can't remove/reorder).
 - **Rule:** turn "I checked the N tables" into an automated gate that enumerates from the live schema and blocks the commit; prefer extensible `text` enums over `pgEnum` for evolving domains.
+
+### Nullable scoped uniqueness needs `NULLS NOT DISTINCT` — 2026-06-22
+- **Context:** Phase 2 catalog schema added `uom_conversion` rows scoped at tenant/category/product/SKU level, where nullable columns represent less-specific scopes.
+- **Mistake caught during self-review:** a plain PostgreSQL `UNIQUE(tenant_id, category_id, product_id, sku_id, from_uom_id, to_uom_id, role)` would treat `NULL` scope columns as distinct, allowing duplicate tenant-level/category-level conversion rows.
+- **Fix:** schema uses Drizzle `.nullsNotDistinct()` and migration uses `UNIQUE NULLS NOT DISTINCT`, with `CHECK (num_nonnulls(category_id, product_id, sku_id) <= 1)` for most-specific-wins scope discipline.
+- **Rule:** when `NULL` is part of a logical uniqueness key, explicitly choose `NULLS NOT DISTINCT` (or an equivalent partial unique index strategy). Plain `UNIQUE` is not enough for scoped config tables.

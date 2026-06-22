@@ -6,7 +6,7 @@ Phase sequencing per charter §31. Status tracked here; update as phases progres
 |---|---|---|
 | **0 — Architecture & Foundation** | Charter review, gap analysis, domain model, ERD, governance docs, env strategy, registry/MCP + UI sourcing, design tokens, CI/test infra, Vertical Slice #1 design | **✅ Complete (locked-in)** |
 | 1 — Identity, Tenant, RBAC, Audit | Better Auth plugins, tenant context, RBAC/entitlements, audit, RLS foundation | **✅ Done** (VS#1 shipped the spine — PR #1 merged to master; fail-closed RLS, 3-role model, `withTenant`, audit/outbox/idempotency) |
-| 2 — Products & Inventory Ledger | products/variants/SKU/barcode, stock ledger, multi-UoM, serial/batch/expiry | **◐ In progress** — §41/§42 docs + ADR-0007 merged; D1–D7 locked; plan approved; **Commit 0 (RLS coverage gate) landed**; schema next (branch `phase-2-implementation`) |
+| 2 — Products & Inventory Ledger | products/variants/SKU/barcode, stock ledger, multi-UoM, serial/batch/expiry | **◐ In progress** — §41/§42 docs + ADR-0007 merged; D1–D7 locked; plan approved; **Commit 0 RLS coverage gate + Commit 1 catalog schema/RLS** on branch `phase-2-implementation`; tracking schema next |
 | 3 — Locations, Warehouses, Bonds | companies/locations/warehouses/bonded, transfers, bond release, bins | Not started |
 | 4 — POS & Offline Queue | sale mutation, payments, receipts, shifts, offline queue, idempotency, number blocks, Tauri POS | Not started |
 | 5 — Accounting Foundation | COA, journals, AR/AP, tax, cash clearing, money rules, gift-card/store-credit liabilities | Not started |
