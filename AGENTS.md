@@ -13,7 +13,7 @@
 ## Current state (2026-06-22)
 
 - **Phase 1 / VS#1 done** — PR #1 merged to master (tenant-isolation spine: fail-closed RLS, 3-role model, `withTenant`, audit/outbox/idempotency, money=bigint minor units).
-- **Phase 2 (Inventory) in progress** on branch `phase-2-implementation` — plan approved; D1–D7 locked (ADR-0007 + `module-specs/inventory.md`); schema/RLS/seed/services/inventory routers/catalog create routes are implemented. **Not complete yet:** see `phase-2-gap-analysis.md`; next backend gaps are mixed-catalog router e2e plus catalog list/update/archive and product Phase-2 API fields. Docs: `phase-2-implementation-plan.md`, `event-map-phase2.md`, `inventory-screen-map.md`, `phase-2-api-contracts.md`, `phase-2-gap-analysis.md`.
+- **Phase 2 (Inventory) in progress** on branch `phase-2-implementation` — plan approved; D1–D7 locked (ADR-0007 + `module-specs/inventory.md`); schema/RLS/seed/services/inventory routers/catalog create routes/product Phase-2 create fields/mixed-catalog router e2e are implemented. **Not complete yet:** see `phase-2-gap-analysis.md`; next backend gaps are catalog list/update/archive, product update/list/archive, variant/lot/reorder-rule/discrepancy/revaluation/import seams. Docs: `phase-2-implementation-plan.md`, `event-map-phase2.md`, `inventory-screen-map.md`, `phase-2-api-contracts.md`, `phase-2-gap-analysis.md`.
 - Active reviewer loop: **Codex adversarial review** per commit (CRITICAL/HIGH only). Do NOT trigger other reviewers or a review gate unless asked.
 
 ## Non-negotiable rules (charter §33/§39/§40)

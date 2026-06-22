@@ -1,6 +1,7 @@
 // @vitest-environment node
 // Node env (not happy-dom): @t3-oss/env-core blocks server env vars when a
 // `window` global is present, which happy-dom provides.
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Context } from "../context";
 
@@ -312,5 +313,110 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         admin
       )
     ).rejects.toThrow();
+  });
+
+  it("routes a mixed AVCO+FIFO catalog through valued receipts and valuation reports", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+
+    const company = await call(
+      appRouter.company.create,
+      { name: "Mixed Catalog Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Mixed Store", type: "store" },
+      admin
+    );
+    const fifoCategory = await call(
+      appRouter.catalog.categoryCreate,
+      { costingMethod: "fifo", name: "Mixed Pharmacy" },
+      admin
+    );
+    const each = await call(
+      appRouter.catalog.uomCreate,
+      { code: "MIX-EA", name: "Mixed Each" },
+      admin
+    );
+    const avcoProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        currency: "USD",
+        name: "Mixed Grocery AVCO",
+        priceMinor: 100,
+        sku: "MIX-AVCO",
+      },
+      admin
+    );
+    const fifoProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        categoryId: fifoCategory.id,
+        currency: "USD",
+        name: "Mixed Pharmacy FIFO",
+        priceMinor: 100,
+        sku: "MIX-FIFO",
+      },
+      admin
+    );
+    const avcoSku = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: "MIX-AVCO-EA", productId: avcoProduct.id },
+      admin
+    );
+    const fifoSku = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: "MIX-FIFO-EA", productId: fifoProduct.id },
+      admin
+    );
+
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: avcoProduct.id,
+        qty: 3,
+        skuId: avcoSku.id,
+        unitCostMinor: 101,
+      },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: fifoProduct.id,
+        qty: 4,
+        skuId: fifoSku.id,
+        unitCostMinor: 200,
+      },
+      admin
+    );
+
+    const report = await call(
+      appRouter.reports.valuation,
+      { locationId: location.id },
+      admin
+    );
+    const avco = report.avco.find((row) => row.skuId === avcoSku.id);
+    const fifo = report.fifo.find((row) => row.skuId === fifoSku.id);
+    expect(avco?.qtyOnHand).toBe(3);
+    expect(avco?.totalValueMinor).toBe(303);
+    expect(fifo?.qtyOnHand).toBe(4);
+    expect(fifo?.totalValueMinor).toBe(800);
+
+    const valuationEvents = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(eq(schema.outboxEvent.type, "inventory.valuation_updated"))
+    );
+    expect(valuationEvents.length).toBeGreaterThanOrEqual(2);
   });
 });

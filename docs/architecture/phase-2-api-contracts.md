@@ -21,9 +21,10 @@
 - **Audit:** `location.create`
 
 ### `product.create`
-- **Input:** `{ sku, name, priceMinor, currency, scale? }`
+- **Input:** `{ sku, name, priceMinor, currency, scale?, categoryId?, brandId?, baseUomId?, costingMethod?, trackingMode? }`
 - **Permission:** `products.create`
 - **Writes:** `product`
+- **Guards:** referenced category/brand/base UoM must be visible through tenant RLS.
 - **Audit:** `product.create`
 
 ## Inventory routes
@@ -126,6 +127,7 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 ## Known gaps / next backend work
 
 - Catalog create endpoints exist for `category`, `brand`, `sku`, `barcode`, `unit_of_measure`, and `uom_conversion`; update/list/delete and `variant` endpoints are still pending.
-- Phase-2 router e2e should add a dedicated mixed-catalog flow that creates SKU/lot data and calls the new SKU-aware receipt/count/report routes through oRPC.
+- `product.create` accepts Phase-2 category/brand/base UoM/costing/tracking fields; product list/update/archive are still pending.
+- Phase-2 router e2e covers a mixed AVCO+FIFO valued receipt/report flow; broader lot/count/reorder/list-update e2e remains pending.
 - Event payloads are implemented for the new router seams, but the outbox dispatcher/consumer remains a later phase.
 - UI remains intentionally absent.

@@ -184,6 +184,11 @@ export const productRouter = {
       z.object({
         sku: z.string().min(1),
         name: z.string().min(1),
+        categoryId: z.string().uuid().optional(),
+        brandId: z.string().uuid().optional(),
+        baseUomId: z.string().uuid().optional(),
+        costingMethod: z.enum(["avco", "fifo"]).optional(),
+        trackingMode: z.enum(["none", "lot", "serial"]).default("none"),
         priceMinor: z.number().int().min(0),
         currency: z.string().length(3),
         scale: z.number().int().min(0).default(2),
@@ -193,6 +198,15 @@ export const productRouter = {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "products.create");
+        if (input.categoryId) {
+          await assertCategoryVisible(tx, input.categoryId);
+        }
+        if (input.brandId) {
+          await assertBrandVisible(tx, input.brandId);
+        }
+        if (input.baseUomId) {
+          await assertUomVisible(tx, input.baseUomId);
+        }
         const m = services.money(input.priceMinor, input.currency, input.scale);
         const row = firstOrThrow(
           (
@@ -202,6 +216,11 @@ export const productRouter = {
                 tenantId: ctx.tenantId,
                 sku: input.sku,
                 name: input.name,
+                categoryId: input.categoryId ?? null,
+                brandId: input.brandId ?? null,
+                baseUomId: input.baseUomId ?? null,
+                costingMethod: input.costingMethod ?? null,
+                trackingMode: input.trackingMode,
                 priceMinor: m.minor,
                 currency: m.currency,
                 scale: m.scale,
@@ -501,6 +520,24 @@ async function assertCategoryVisible(
   if (!row) {
     throw new ORPCError("NOT_FOUND", {
       message: "Category not found in this tenant",
+    });
+  }
+}
+
+async function assertBrandVisible(
+  tx: TenantTransaction,
+  brandId: string
+): Promise<void> {
+  const row = (
+    await tx
+      .select({ id: schema.brand.id })
+      .from(schema.brand)
+      .where(eq(schema.brand.id, brandId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Brand not found in this tenant",
     });
   }
 }
