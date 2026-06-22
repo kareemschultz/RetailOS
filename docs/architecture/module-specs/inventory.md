@@ -190,7 +190,10 @@ Give every RetailOS tenant a **single, ledger-true inventory engine** that the w
 
 - **Catalog:** `product`, `variant`, `sku`, `barcode`, `category`, `brand`, `unit_of_measure`, `uom_conversion`, `bundle`/`bom`/`bom_line` (kit/assembly catalog modelling only — build/disassembly movements deferred).
 - **Tracking:** `lot` (batch number, expiry, manufactured date), `serial` (stub per D3); `stock_movement` gains nullable `lot_id`/`serial_id` FKs and `tracking_mode` awareness.
-- **Costing:** `valuation_layer` (only if FIFO chosen, D1) **or** a running `avg_cost` per SKU×location (if weighted-average) — gated on D1.
+- **Costing (D1 DECIDED — BOTH storage paths are required, not either/or):** costing method is **strategy-selected per tenant/category/product** (AVCO default, FIFO opt-in, no LIFO), and a single catalog may be **mixed** (e.g. AVCO general merchandise + FIFO lot-tracked pharmacy SKUs). The schema therefore ships **both** storage paths and implementation must omit **neither**:
+  - `avg_cost` (running weighted-average cost per SKU×location) — backs the **AVCO** default. Updated in place by the AVCO strategy on each receipt/issue.
+  - `valuation_layer` (FIFO cost-layer table per SKU×location, consumed oldest-first) — backs **FIFO**-enabled tenants/categories/products. Layer rows are created on receipt and consumed on issue.
+  - `costing_method` config columns on `tenant` / `category` / `product`(/`sku`) + a **costing-strategy resolver** (most-specific-wins: product → category → tenant default) that picks which path a given movement uses. A movement under an AVCO-resolved SKU updates `avg_cost`; under a FIFO-resolved SKU it writes/consumes `valuation_layer`. **The ledger stays the single source of truth; these are valuation projections beside it.**
 - **Reorder:** `reorder_rule` (sku_id, location_id, min, max) — D7.
 - **Counts/adjustments:** `stock_count`, `stock_count_line`; adjustments are movements of type `adjustment` referencing the count.
 - All tenant-owned; RLS predicate `tenant_id`; append-only tables (`stock_movement`) carry no `updated_at`/`deleted_at` (corrections = new rows). See `domain-model.md` §5 for the full table map.
