@@ -7,7 +7,7 @@
 
 ## Executive status
 
-Phase 2 backend is **substantially implemented but not closed**. The ledger-critical backend paths exist: schema/RLS, rich seed, AVCO/FIFO valuation, UoM/FEFO/oversell/reorder/count services, inventory routers/reports, catalog create routes, API contracts, and DB-gated tests. Remaining work is mostly API breadth, import/revaluation seams, and phase-close audit hardening.
+Phase 2 backend has **no remaining P0 gaps for the approved Products & Inventory Ledger scope**. The ledger-critical backend paths exist: schema/RLS, rich seed, AVCO/FIFO valuation, UoM/FEFO/oversell/reorder/count services, inventory routers/reports, catalog lifecycle routes, import preview, revaluation seam, stock-discrepancy review seam, API contracts, and DB-gated tests. Remaining items are P1 hardening or deliberately deferred to later charter phases.
 
 ## Research status
 
@@ -45,7 +45,7 @@ Still open:
 | Revaluation seam | Done | Explicit audited AVCO and FIFO revaluation route; AVCO zero-qty/zero-value invariant preserved; FIFO layer updates are row-locked. |
 | Import validation seam | Done | `catalog.importPreview` validates product/SKU/UoM/lot/cost rows and returns per-row errors without writing data. Bulk apply/rollback is intentionally a later reviewed operation. |
 | API contract snapshot | Done | `phase-2-api-contracts.md`. |
-| Backend tests | Partial | Service tests are strong; router e2e now covers catalog FK guards and mixed AVCO+FIFO valued receipts through valuation reports. Broader list/update/import/revaluation tests still needed. |
+| Backend tests | Strong for approved scope | Service tests and router e2e cover RLS/FK guards, mixed AVCO+FIFO valuation, catalog lifecycle routes, lot/reorder lifecycle, revaluation, discrepancy review, and import preview. Bulk import apply/work queues/downstream consumers are deferred. |
 
 ## Remaining backend gaps
 
@@ -81,4 +81,4 @@ No P0 backend gaps remain for the approved Phase-2 scope. Bulk import apply/roll
 ## Immediate recommended order
 
 1. Run full gates plus throwaway Postgres migration/service/router tests.
-2. Update API contracts and close Phase 2 with a final audit report.
+2. Close Phase 2 with a final audit report.
