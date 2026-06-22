@@ -11,6 +11,11 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
+    // Deployment tier (charter §9/§36) — surfaced in the request context for
+    // audit/events/residency. Env-driven; never hardcoded.
+    DEPLOYMENT_MODE: z
+      .enum(["saas", "dedicated", "managed", "self-hosted"])
+      .default("saas"),
   },
   runtimeEnv: process.env,
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

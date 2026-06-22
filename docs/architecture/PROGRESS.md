@@ -16,7 +16,7 @@
 - **Mode:** unattended overnight. Branch **`vs1-phase1`** (never master; all work = PRs for review).
 - **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
 - **Order:** VS#1 Commits 2→7, then phase roadmap §31 (Phase 1→2→3…) with §41/§42/§45 gates before any new module.
-- **Current step:** VS#1 **Commit 4** (middleware + standardized request context) — starting.
+- **Current step:** VS#1 **Commit 5** (events + outbox, scoped) — starting.
 
 ### ⛔ BLOCKERS awaiting your decision (none yet)
 *(When I hard-stop, the blocker + analysis + options go here.)*
@@ -26,7 +26,7 @@
 - *Next expected:* Phase 2 inventory costing FIFO/LIFO/avg.
 
 ### ✅ PRs opened
-- **PR #1** — `vs1-phase1` → master — VS#1 tenant-isolation spine. Commits 1–3 landed (schema; fail-closed RLS + 3-role bootstrap; core services). Open for review; DO NOT MERGE.
+- **PR #1** — `vs1-phase1` → master — VS#1 tenant-isolation spine. Commits 1–4 landed (schema; fail-closed RLS + 3-role bootstrap; core services; standardized request context + tenant guard). Open for review; DO NOT MERGE.
 
 ---
 
@@ -98,6 +98,8 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - Scaffold reality: Better Auth = email/password + Expo plugin only; DB = auth schema only, no migrations; 2 demo oRPC procedures; docker-compose = postgres + web only. All charter foundation domain work (tenant/RBAC/audit/RLS/Redis/object storage/Better Auth plugins) is NOT yet built (deferred past Phase-0 lock-in).
 
 ## Changelog (newest first)
+
+- **2026-06-22** — VS#1 **Commit 4** (PR #1): standardized request context + tenant guard. `RequestContext` `{tenantId, organizationId, actorUserId, employeeId?, sessionId?, impersonatorUserId?, requestId, correlationId, source, deploymentMode}` (superset of db ServiceContext) built fail-closed by `buildRequestContext` (UNAUTHORIZED w/o user, FORBIDDEN w/o active org); `tenantProcedure` = protectedProcedure + tenant guard. `tenantId` comes ONLY from session.activeOrganizationId (not client headers). Added `DEPLOYMENT_MODE` env; `check-types` added to api+env (now 6 pkgs gated). Codex review: 0 findings. Gates green; 3 guard unit tests.
 
 - **2026-06-22** — VS#1 **Commit 3** (PR #1): core services in `packages/db/src/services/` — Money (integer minor units, no rounding yet), StockLedger (sole stock mutator; advisory-lock serialized `balance_after`), Idempotency (canonical payload-hash, advisory-lock pre-select), Audit. New `idempotency_key` table + RLS (now 12 tenant tables). Money columns widened int4→bigint(mode:number). Codex review: 3 HIGH fixed (idempotency race, non-canonical hash, money safe-int/int4) + regression tests. 16 db tests pass vs real PG; gates green. (Note: PROGRESS.md UTF-8 was corrupted by a `perl -0pi` run and restored — never run perl in-place on these docs.)
 
