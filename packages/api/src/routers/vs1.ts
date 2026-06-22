@@ -2366,6 +2366,12 @@ export const inventoryRouter = {
               currency: valuation.currency,
               scale: valuation.scale,
               unvaluedQty: valuation.unvaluedQty,
+              // reserved; the qty==0 ⟺ value==0 integrity fields — populated
+              // when ValuationResult is extended to expose post-movement
+              // on-hand value (Phase 5). Reserved nullable now so binding them
+              // later is additive, not a breaking change.
+              totalValueMinor: null,
+              qtyOnHandBase: null,
             },
           });
         }
@@ -2458,6 +2464,12 @@ export const inventoryRouter = {
             cogsMinor: valuation.cogsMinor,
             currency: valuation.currency,
             scale: valuation.scale,
+            // reserved; populated when the §22 adjustment-approval workflow
+            // lands. Adjustments are audit-critical — who approved a manual
+            // stock write-off/up is the field a Phase-5 audit consumer needs,
+            // so the shape reserves it now (nullable) rather than breaking
+            // later when it becomes a bound field.
+            approvedBy: null,
           },
         });
         await services.recordAudit(tx, ctx, {

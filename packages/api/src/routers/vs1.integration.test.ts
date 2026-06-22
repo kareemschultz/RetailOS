@@ -777,6 +777,30 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         .where(eq(schema.outboxEvent.type, "inventory.valuation_updated"))
     );
     expect(valuationEvents.length).toBeGreaterThanOrEqual(2);
+    // Reserved-field contract (event-map-phase2.md): valuation_updated reserves
+    // the qty==0 ⟺ value==0 integrity fields as PRESENT-but-null today (bound
+    // in Phase 5). Asserting presence — not absence — locks the shape so a
+    // later Phase-5 consumer never sees a missing key.
+    for (const ev of valuationEvents) {
+      const payload = ev.payload as Record<string, unknown>;
+      expect(payload).toHaveProperty("totalValueMinor");
+      expect(payload).toHaveProperty("qtyOnHandBase");
+      expect(typeof payload.occurredAt).toBe("string");
+    }
+    // inventory.adjusted reserves approvedBy (present-but-null until the §22
+    // approval workflow lands).
+    const adjustedEvents = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(eq(schema.outboxEvent.type, "inventory.adjusted"))
+    );
+    expect(adjustedEvents.length).toBeGreaterThanOrEqual(1);
+    for (const ev of adjustedEvents) {
+      expect(ev.payload as Record<string, unknown>).toHaveProperty(
+        "approvedBy"
+      );
+    }
   });
 
   // H1 regression — ONE parameterized harness over every guarded FK-bearing

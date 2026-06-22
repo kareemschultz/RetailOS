@@ -22,9 +22,9 @@
 - **Producer:** `inventory.adjust` (manual adjustment / write-off / found stock).
 - **Phase-2 consumer:** valuation; audit; (manager review surfaces).
 - **Future consumers:** **P5 Accounting** (shrinkage/write-off expense vs inventory), **P12 Analytics** (adjustment-rate, shrinkage trend).
-- **Payload (verified as-built):** `{ skuId, locationId, lotId, qtyDeltaBase, reasonCode, cogsMinor, currency, scale, sourceMovementId, occurredAt }`.
+- **Payload (verified as-built):** `{ skuId, locationId, lotId, qtyDeltaBase, reasonCode, cogsMinor, currency, scale, sourceMovementId, approvedBy, occurredAt }`.
 - **Required IDs:** skuId, locationId, sourceMovementId, actor (envelope/audit).
-- **Notes/risks:** `reasonCode` is an extensible `text` enum (see schema rule); negative vs positive delta drives different P5 postings — keep sign explicit. **Decision (2026-06-22): the event carries `cogsMinor` (the actual value moved through the AVCO/FIFO valuation), not a raw `unitCostMinor`** — a negative adjustment's value can only be expressed as the valuation-computed COGS, which is exactly what P5 posts to shrinkage/write-off; `currency`/`scale` come from that valuation. `lotId` is carried (nullable). **`approvedBy` is deferred** — there is no adjustment-approval workflow yet (§22); it is added when that workflow lands (additive, version stays 1).
+- **Notes/risks:** `reasonCode` is an extensible `text` enum (see schema rule); negative vs positive delta drives different P5 postings — keep sign explicit. **Decision (2026-06-22): the event carries `cogsMinor` (the actual value moved through the AVCO/FIFO valuation), not a raw `unitCostMinor`** — a negative adjustment's value can only be expressed as the valuation-computed COGS, which is exactly what P5 posts to shrinkage/write-off; `currency`/`scale` come from that valuation. `lotId` is carried (nullable). **`approvedBy` is RESERVED nullable (`null` today)** — populated when the §22 adjustment-approval workflow lands. Adjustments are audit-critical (who approved a manual stock write-off/up is exactly what a Phase-5 audit consumer needs), so the shape **reserves the field now rather than shipping it absent and breaking later** — same pattern as `serialIds:null` on `received`. Binding it later is additive (version stays 1).
 
 ### `inventory.count_started`
 - **Producer:** `inventory.count.start`.
@@ -90,9 +90,9 @@
 - **Producer:** the valuation step after any cost-affecting movement (receipt/issue/adjustment/revaluation).
 - **Phase-2 consumer:** valuation read model / report.
 - **Future consumers:** **P5 Accounting** (inventory-asset balance sync, COGS), **P12 Analytics** (margin, valuation roll-forward).
-- **Payload (verified as-built):** `{ skuId, locationId, sourceMovementId, costingMethod, cogsMinor, currency, scale, unvaluedQty, occurredAt }`.
+- **Payload (verified as-built):** `{ skuId, locationId, sourceMovementId, costingMethod, cogsMinor, currency, scale, unvaluedQty, totalValueMinor, qtyOnHandBase, occurredAt }`.
 - **Required IDs:** skuId, locationId, sourceMovementId.
-- **Notes/risks:** as-built the event carries the `ValuationResult` of the movement that triggered it — **`cogsMinor`** (value moved) + **`unvaluedQty`** (oversold units valued at zero, the D5 divergence). **DEFERRED enrichment:** the integer-truth fields `totalValueMinor` + `qtyOnHandBase` (which preserve the qty=0 ⟺ value=0 invariant for P5 inventory-asset balancing) and the display-only `derivedAvgCostMinor` are **not emitted yet** — `applyValuation`'s return (`ValuationResult`) does not expose post-movement on-hand value, so surfacing them needs a valuation-service return extension. Scheduled for the **Phase-5 valuation read-model** work (additive, version stays 1; consumers tolerate the later fields). Documented honestly rather than claimed.
+- **Notes/risks:** as-built the event carries the `ValuationResult` of the movement that triggered it — **`cogsMinor`** (value moved) + **`unvaluedQty`** (oversold units valued at zero, the D5 divergence). **`totalValueMinor` + `qtyOnHandBase` are RESERVED nullable (`null` today)** — these are the qty=0 ⟺ value=0 integrity fields P5 needs for inventory-asset balancing; they are reserved now (not shipped absent) so binding them later is additive, not breaking. They get **populated when `ValuationResult` is extended to expose post-movement on-hand value (Phase 5 valuation read-model)**. The display-only `derivedAvgCostMinor` remains optional/omittable per the still-open D-money mode. Reserved-not-faked: `null` honestly signals "not yet computed."
 
 ### `inventory.revalued`
 - **Producer:** `inventory.revalue` router (manual revaluation — AVCO total-value reset, or FIFO layer unit-cost correction).
