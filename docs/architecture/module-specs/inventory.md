@@ -33,7 +33,7 @@
 | **LIFO** | Tax advantage in high-inflation markets (defers tax). | **Disallowed under IFRS** (IAS 2) — most Caribbean/Commonwealth jurisdictions (incl. Guyana) follow IFRS, so LIFO is generally **not legally usable** for statutory accounts. US-GAAP-only. |
 | **Standard cost** | Predictable; good for manufacturing; variance analysis. | Needs variance accounts + periodic revaluation; overkill for retail Phase 2. |
 
-**✅ DECISION (owner directive, 2026-06-22):**
+**✅ DECISION (owner directive, 2026-06-22) — frozen in [ADR 0007](../adr/0007-inventory-costing-strategy.md):**
 - **Default platform method = Weighted-Average Costing (AVCO).**
 - **FIFO must remain available** and selectable **per tenant / per category / per product** where appropriate — **especially** for pharmacy, expiry/batch/lot-tracked inventory, and regulated goods.
 - **LIFO is NOT supported** by default (not IFRS-aligned). Reserve the enum value only behind an explicit feature flag if a future US-GAAP-only tenant ever requires it; not built in Phase 2.

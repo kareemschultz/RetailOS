@@ -16,3 +16,4 @@ Per charter §34: every architectural decision is recorded as an ADR; **no major
 | 0004 | Central-infra reuse (VPS Postgres/Redis via Pangolin) vs self-contained compose | Accepted |
 | 0005 | Product Intelligence Layer deferred (must be disableable for private/self-hosted) | Proposed |
 | 0006 | RLS role model & fail-closed tenant isolation (owner/migrator/app; ENABLE+FORCE) | Proposed |
+| 0007 | Inventory costing strategy (AVCO default, FIFO per tenant/category/product, mixed catalogs, no LIFO) | Accepted |
