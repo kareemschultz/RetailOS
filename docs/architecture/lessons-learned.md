@@ -222,3 +222,9 @@
 - **Mistake avoided:** leaving `stock_ledger.qty_delta` / `balance_after` as int4 would cap high-volume base-unit ledgers too low once quantities are represented in minor units.
 - **Fix:** Commit 2 widens stock ledger quantities to `bigint(mode:"number")` and updates `StockLedger` sum queries to cast to `bigint` and coerce through `Number(...)`.
 - **Rule:** apply the same range discipline to quantity minor units that we apply to money minor units; int4 is not an ERP-safe ledger type.
+
+### Carry load-bearing accounting invariants into DDL — 2026-06-22
+- **Context:** Phase 2 AVCO storage uses `avg_cost.total_value_minor` as source of truth and derives average cost only for display/posting.
+- **Mistake avoided:** documenting `qty_on_hand = 0 ⇒ total_value_minor = 0` only in service code would leave imports, manual SQL, or future services able to create orphaned value at zero stock.
+- **Fix:** Commit 3 adds `avg_cost_zero_qty_zero_value_chk` (`qty_on_hand <> 0 OR total_value_minor = 0`) in the migration, alongside the service-level plan.
+- **Rule:** when an invariant protects the ledger from silent corruption, enforce it in the database as well as in services/tests.

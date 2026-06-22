@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
-import { index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth";
+import { COSTING_METHODS } from "./product";
 
 // Better Auth `organization` plugin tables (charter §6/§8). A RetailOS tenant
 // maps 1:1 to an organization; `organization.id` is the `tenant_id` value used
@@ -12,6 +13,8 @@ export const organization = pgTable("organization", {
   slug: text("slug").unique(),
   logo: text("logo"),
   metadata: text("metadata"),
+  costingMethod: text("costing_method", { enum: COSTING_METHODS }),
+  barcodeParserConfig: jsonb("barcode_parser_config"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

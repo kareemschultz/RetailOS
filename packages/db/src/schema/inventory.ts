@@ -26,6 +26,39 @@ export const SERIAL_STATUSES = [
   "quarantined",
 ] as const;
 
+export const avgCost = pgTable(
+  "avg_cost",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    skuId: uuid("sku_id")
+      .notNull()
+      .references(() => sku.id),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => location.id),
+    totalValueMinor: bigint("total_value_minor", { mode: "number" })
+      .default(0)
+      .notNull(),
+    qtyOnHand: bigint("qty_on_hand", { mode: "number" }).default(0).notNull(),
+    currency: text("currency").notNull(),
+    scale: integer("scale").default(2).notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    unique("avg_cost_tenantId_sku_location_uq").on(
+      table.tenantId,
+      table.skuId,
+      table.locationId
+    ),
+    index("avg_cost_tenantId_idx").on(table.tenantId),
+    index("avg_cost_sku_location_idx").on(table.skuId, table.locationId),
+  ]
+);
+
 export const lot = pgTable(
   "lot",
   {
@@ -121,5 +154,43 @@ export const stockLedger = pgTable(
     ),
     index("stock_ledger_lotId_idx").on(table.lotId),
     index("stock_ledger_serialId_idx").on(table.serialId),
+  ]
+);
+
+export const valuationLayer = pgTable(
+  "valuation_layer",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    skuId: uuid("sku_id")
+      .notNull()
+      .references(() => sku.id),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => location.id),
+    receivedAt: timestamp("received_at").defaultNow().notNull(),
+    seq: integer("seq").notNull(),
+    qtyRemaining: bigint("qty_remaining", { mode: "number" }).notNull(),
+    unitCostMinor: bigint("unit_cost_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    scale: integer("scale").default(2).notNull(),
+    sourceMovementId: uuid("source_movement_id")
+      .notNull()
+      .references(() => stockLedger.id),
+    ...timestamps,
+  },
+  (table) => [
+    unique("valuation_layer_sourceMovementId_uq").on(
+      table.tenantId,
+      table.sourceMovementId
+    ),
+    index("valuation_layer_tenantId_idx").on(table.tenantId),
+    index("valuation_layer_consume_idx").on(
+      table.tenantId,
+      table.skuId,
+      table.locationId,
+      table.receivedAt,
+      table.seq
+    ),
   ]
 );

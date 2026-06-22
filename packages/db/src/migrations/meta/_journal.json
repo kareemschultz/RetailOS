@@ -50,6 +50,13 @@
       "when": 1782141854542,
       "tag": "0006_many_synch",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782142091814,
+      "tag": "0007_overconfident_junta",
+      "breakpoints": true
     }
   ]
 }

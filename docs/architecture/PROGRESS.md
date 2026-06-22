@@ -16,7 +16,7 @@
 - **Branches/PRs:** **PR #1 (`vs1-phase1`) + PR #3 (`phase-2-inventory`, = re-merge of the auto-closed PR #2) are MERGED to master** (`cd5258e`, `b404c63`); master CI green (4/4 jobs incl. real-Postgres RLS). **Active branch: `phase-2-implementation`** (off master). All work = PRs; never push to master directly.
 - **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + coverage gate + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
 - **Standing build order (Phase 2 onward):** schema → migrations → RLS → **ROBUST seed** → services → routers → validation → RBAC → audit/outbox → tests → API contract docs. **No production UI** until APIs stable+approved; later UI strictly from `ui-inventory/` + MCP registries (never hand-rolled React). POS UI is a **Phase 4** decision (Tauri/offline/SQLite) — not decided now.
-- **Current step:** **Phase 2 implementation in progress.** ✅ **Commit 0 landed** (mechanical RLS coverage gate). ✅ **Commit 1 landed** — catalog schema + migration + RLS. ✅ **Commit 2 ready/landed in this branch** — tracking schema (`lot`, `serial`) + stock ledger lot/serial/cost seams + quantity bigint widening. **Next: Commit 3 (costing storage: `avg_cost`, `valuation_layer`, config columns).**
+- **Current step:** **Phase 2 implementation in progress.** ✅ **Commit 0 landed** (mechanical RLS coverage gate). ✅ **Commit 1 landed** — catalog schema + migration + RLS. ✅ **Commit 2 landed** — tracking schema + stock ledger lot/serial/cost seams. ✅ **Commit 3 ready/landed in this branch** — costing storage (`avg_cost`, `valuation_layer`) + tenant config columns. **Next: rich seed foundation / costing resolver services, per approved order.**
 
 ### ⛔ BLOCKERS / gates
 
@@ -34,7 +34,7 @@
 **⏳ Still OPEN (only one):**
 - **D-money rounding mode** — left OPEN per directive; do NOT assume banker's or half-up; pending Guyana/GRA VAT + target-country rounding verification. First needed Phase 5 (tax/FX division), not Phase 2.
 
-**What I did:** finished + locked all D1–D7 in the §42 spec; added Costing Strategy Examples; kept rounding open; drafted the approved Phase-2 implementation plan, event map, inventory screen map, Commit-0 RLS coverage gate, Commit-1 catalog schema/migration/RLS, and Commit-2 tracking schema/migration/RLS. **No costing resolver/services/routers/UI yet.**
+**What I did:** finished + locked all D1–D7 in the §42 spec; added Costing Strategy Examples; kept rounding open; drafted the approved Phase-2 implementation plan, event map, inventory screen map, Commit-0 RLS coverage gate, Commit-1 catalog schema/migration/RLS, Commit-2 tracking schema/migration/RLS, and Commit-3 costing storage/migration/RLS. **No costing resolver/services/routers/UI yet.**
 
 ### §45 phase reassessment (end of Phase 1 / VS#1)
 - Architecture held: fail-closed RLS + 3-role model + tenant-scoped `withTenant` is the load-bearing spine; every later module inherits it. No ADR changes needed. Codex found real HIGHs at the service/router layers (idempotency race, FK-bypasses-RLS, money int4) — all fixed + regression-tested; 0 CRITICAL across the whole slice.
@@ -52,7 +52,7 @@
 - **PR #3** — `phase-2-inventory` → master — **MERGED** (Phase-2 §41/§42 docs + ADR-0007 after PR #2 auto-closed).
 
 ### 🚧 Active review branch
-- **`phase-2-implementation`** — Commit 0 coverage gate + docs-only planning artifacts; Commit 1 catalog schema/migration/RLS; Commit 2 tracking schema/migration/RLS. Continue in approved order; next is Commit 3 costing storage. Costing resolver/services/routers/UI are not implemented yet.
+- **`phase-2-implementation`** — Commit 0 coverage gate + docs-only planning artifacts; Commit 1 catalog schema/migration/RLS; Commit 2 tracking schema/migration/RLS; Commit 3 costing storage/migration/RLS. Continue in approved order; next is rich seed foundation / resolver services. Costing resolver/services/routers/UI are not implemented yet.
 
 ---
 
@@ -124,6 +124,8 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - Scaffold reality: Better Auth = email/password + Expo plugin only; DB = auth schema only, no migrations; 2 demo oRPC procedures; docker-compose = postgres + web only. All charter foundation domain work (tenant/RBAC/audit/RLS/Redis/object storage/Better Auth plugins) is NOT yet built (deferred past Phase-0 lock-in).
 
 ## Changelog (newest first)
+
+- **2026-06-22** — Phase 2 **Commit 3** (branch `phase-2-implementation`): costing storage group added — `avg_cost` (AVCO source-of-truth projection with `total_value_minor` + `qty_on_hand`) and `valuation_layer` (FIFO layer storage with `received_at`, `seq`, `qty_remaining`, `unit_cost_minor`), plus `organization.costing_method` and `organization.barcode_parser_config`. Migration `0007_overconfident_junta.sql` includes FK/index/unique/check constraints and fail-closed RLS for `avg_cost` + `valuation_layer`; DB-level invariant added: `qty_on_hand <> 0 OR total_value_minor = 0` to mechanically block orphaned AVCO value at zero stock. Verified: static RLS coverage gate 5/5, full migration chain applied in a throwaway Postgres 18 container, `check:mojibake`, `check`, `check-types`, `test` green. **Next: rich seed foundation / costing resolver services.**
 
 - **2026-06-22** — Phase 2 **Commit 2** (branch `phase-2-implementation`): tracking schema group added — `lot` (SKU batch/expiry/status) and `serial` (serial stub with optional lot link), plus nullable `stock_ledger.lot_id`, `serial_id`, and unit-cost money triplet (`unit_cost_minor`, `cost_currency`, `cost_scale`). Widened `stock_ledger.qty_delta` and `balance_after` from int4 to int8 for base-unit quantities (eaches/grams/etc.). Migration `0006_many_synch.sql` includes FK/index/unique/check constraints and fail-closed RLS for `lot` + `serial`; `StockLedger.append` accepts optional lot/serial/cost fields and preserves policy-neutral behavior. Verified: static RLS coverage gate 5/5, full migration chain applied in a throwaway Postgres 18 container, `check`, `check-types`, `test` green. **Next: Commit 3 costing storage (`avg_cost`, `valuation_layer`, config columns).**
 
