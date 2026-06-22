@@ -1,14 +1,88 @@
 import {
+  bigint,
+  date,
   index,
   integer,
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenantId } from "./columns";
+import { actor, softDelete, tenantId, timestamps } from "./columns";
 import { location } from "./company";
-import { product } from "./product";
+import { product, sku } from "./product";
+
+export const LOT_STATUSES = [
+  "available",
+  "quarantined",
+  "expired",
+  "depleted",
+] as const;
+export const SERIAL_STATUSES = [
+  "available",
+  "sold",
+  "returned",
+  "quarantined",
+] as const;
+
+export const lot = pgTable(
+  "lot",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    skuId: uuid("sku_id")
+      .notNull()
+      .references(() => sku.id),
+    lotNumber: text("lot_number").notNull(),
+    expiryDate: date("expiry_date"),
+    manufacturedDate: date("manufactured_date"),
+    status: text("status", { enum: LOT_STATUSES })
+      .default("available")
+      .notNull(),
+    ...timestamps,
+    ...actor,
+    ...softDelete,
+  },
+  (table) => [
+    unique("lot_tenantId_skuId_lotNumber_uq").on(
+      table.tenantId,
+      table.skuId,
+      table.lotNumber
+    ),
+    index("lot_tenantId_idx").on(table.tenantId),
+    index("lot_skuId_idx").on(table.skuId),
+    index("lot_expiryDate_idx").on(table.expiryDate),
+  ]
+);
+
+export const serial = pgTable(
+  "serial",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    skuId: uuid("sku_id")
+      .notNull()
+      .references(() => sku.id),
+    lotId: uuid("lot_id").references(() => lot.id),
+    serialNumber: text("serial_number").notNull(),
+    status: text("status", { enum: SERIAL_STATUSES })
+      .default("available")
+      .notNull(),
+    ...timestamps,
+    ...actor,
+    ...softDelete,
+  },
+  (table) => [
+    unique("serial_tenantId_serialNumber_uq").on(
+      table.tenantId,
+      table.serialNumber
+    ),
+    index("serial_tenantId_idx").on(table.tenantId),
+    index("serial_skuId_idx").on(table.skuId),
+    index("serial_lotId_idx").on(table.lotId),
+  ]
+);
 
 // Append-only stock ledger — the ONLY way stock changes (charter §18/§33).
 // Rows are never updated or deleted; on-hand is derived from the running
@@ -25,9 +99,14 @@ export const stockLedger = pgTable(
     productId: uuid("product_id")
       .notNull()
       .references(() => product.id),
+    lotId: uuid("lot_id").references(() => lot.id),
+    serialId: uuid("serial_id").references(() => serial.id),
     movementType: text("movement_type").notNull(),
-    qtyDelta: integer("qty_delta").notNull(),
-    balanceAfter: integer("balance_after").notNull(),
+    qtyDelta: bigint("qty_delta", { mode: "number" }).notNull(),
+    balanceAfter: bigint("balance_after", { mode: "number" }).notNull(),
+    unitCostMinor: bigint("unit_cost_minor", { mode: "number" }),
+    costCurrency: text("cost_currency"),
+    costScale: integer("cost_scale"),
     refType: text("ref_type"),
     refId: uuid("ref_id"),
     idempotencyKey: text("idempotency_key"),
@@ -40,5 +119,7 @@ export const stockLedger = pgTable(
       table.locationId,
       table.productId
     ),
+    index("stock_ledger_lotId_idx").on(table.lotId),
+    index("stock_ledger_serialId_idx").on(table.serialId),
   ]
 );

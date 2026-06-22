@@ -6,13 +6,18 @@ import type { ServiceContext } from "./types";
 export type StockMovementType = "receipt" | "sale";
 
 export interface StockMovementInput {
+  costCurrency?: string | null;
+  costScale?: number | null;
   idempotencyKey?: string | null;
   locationId: string;
+  lotId?: string | null;
   movementType: StockMovementType;
   productId: string;
   qtyDelta: number;
   refId?: string | null;
   refType?: string | null;
+  serialId?: string | null;
+  unitCostMinor?: number | null;
 }
 
 // The ONLY way stock changes (charter §18/§33): append an immutable ledger row
@@ -34,7 +39,7 @@ export async function appendStockMovement(
 
   // RLS already scopes to the tenant; filter by the cell for the running sum.
   const balanceResult = await tx.execute(sql`
-    SELECT COALESCE(SUM(qty_delta), 0)::int AS balance
+    SELECT COALESCE(SUM(qty_delta), 0)::bigint AS balance
     FROM stock_ledger
     WHERE location_id = ${input.locationId} AND product_id = ${input.productId}
   `);
@@ -49,9 +54,14 @@ export async function appendStockMovement(
       tenantId: ctx.tenantId,
       locationId: input.locationId,
       productId: input.productId,
+      lotId: input.lotId ?? null,
+      serialId: input.serialId ?? null,
       movementType: input.movementType,
       qtyDelta: input.qtyDelta,
       balanceAfter,
+      unitCostMinor: input.unitCostMinor ?? null,
+      costCurrency: input.costCurrency ?? null,
+      costScale: input.costScale ?? null,
       refType: input.refType ?? null,
       refId: input.refId ?? null,
       idempotencyKey: input.idempotencyKey ?? null,
@@ -72,7 +82,7 @@ export async function stockOnHand(
 ): Promise<number> {
   const result = await tx
     .select({
-      balance: sql<number>`COALESCE(SUM(${stockLedger.qtyDelta}), 0)::int`,
+      balance: sql<number>`COALESCE(SUM(${stockLedger.qtyDelta}), 0)::bigint`,
     })
     .from(stockLedger)
     .where(
@@ -81,5 +91,5 @@ export async function stockOnHand(
         eq(stockLedger.productId, productId)
       )
     );
-  return result.at(0)?.balance ?? 0;
+  return Number(result.at(0)?.balance ?? 0);
 }

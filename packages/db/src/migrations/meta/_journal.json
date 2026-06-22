@@ -43,6 +43,13 @@
       "when": 1782141295530,
       "tag": "0005_adorable_harrier",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782141854542,
+      "tag": "0006_many_synch",
+      "breakpoints": true
     }
   ]
 }

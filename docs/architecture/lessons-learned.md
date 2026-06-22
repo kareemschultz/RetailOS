@@ -216,3 +216,9 @@
 - **Mistake caught during self-review:** a plain PostgreSQL `UNIQUE(tenant_id, category_id, product_id, sku_id, from_uom_id, to_uom_id, role)` would treat `NULL` scope columns as distinct, allowing duplicate tenant-level/category-level conversion rows.
 - **Fix:** schema uses Drizzle `.nullsNotDistinct()` and migration uses `UNIQUE NULLS NOT DISTINCT`, with `CHECK (num_nonnulls(category_id, product_id, sku_id) <= 1)` for most-specific-wins scope discipline.
 - **Rule:** when `NULL` is part of a logical uniqueness key, explicitly choose `NULLS NOT DISTINCT` (or an equivalent partial unique index strategy). Plain `UNIQUE` is not enough for scoped config tables.
+
+### Inventory quantities need int8 before UoM minor units — 2026-06-22
+- **Context:** VS#1 used `integer` stock quantities because it only moved simple each-count products. Phase 2 introduces base-unit quantities for cartons/eaches and weighed goods (for example grams).
+- **Mistake avoided:** leaving `stock_ledger.qty_delta` / `balance_after` as int4 would cap high-volume base-unit ledgers too low once quantities are represented in minor units.
+- **Fix:** Commit 2 widens stock ledger quantities to `bigint(mode:"number")` and updates `StockLedger` sum queries to cast to `bigint` and coerce through `Number(...)`.
+- **Rule:** apply the same range discipline to quantity minor units that we apply to money minor units; int4 is not an ERP-safe ledger type.
