@@ -16,7 +16,7 @@
 - **Mode:** unattended overnight. Branch **`vs1-phase1`** (never master; all work = PRs for review).
 - **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
 - **Order:** VS#1 Commits 2→7, then phase roadmap §31 (Phase 1→2→3…) with §41/§42/§45 gates before any new module.
-- **Current step:** VS#1 **Commit 7** (tests + verification) — starting.
+- **Current step:** VS#1 **COMPLETE** (all 7 commits, PR #1). Next: Phase 2 gating — §41 competitive + §42 requirements docs, then **HARD STOP** for the inventory-costing decision before implementing.
 
 ### ⛔ BLOCKERS awaiting your decision (none yet)
 *(When I hard-stop, the blocker + analysis + options go here.)*
@@ -27,7 +27,7 @@
 - *Next expected:* Phase 2 inventory costing FIFO/LIFO/avg.
 
 ### ✅ PRs opened
-- **PR #1** — `vs1-phase1` → master — VS#1 tenant-isolation spine. Commits 1–6 landed (schema; fail-closed RLS + 3-role bootstrap; core services; request context + tenant guard; events/outbox; oRPC routers + minimal RBAC). Open for review; DO NOT MERGE.
+- **PR #1** — `vs1-phase1` → master — **VS#1 COMPLETE** (all 7 commits: schema; fail-closed RLS + 3-role bootstrap; core services; request context + tenant guard; events/outbox; oRPC routers + minimal RBAC; §32 e2e tests + CI integration). All gates green; codex-reviewed each commit. Open for review; **DO NOT MERGE**.
 
 ---
 
@@ -99,6 +99,8 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - Scaffold reality: Better Auth = email/password + Expo plugin only; DB = auth schema only, no migrations; 2 demo oRPC procedures; docker-compose = postgres + web only. All charter foundation domain work (tenant/RBAC/audit/RLS/Redis/object storage/Better Auth plugins) is NOT yet built (deferred past Phase-0 lock-in).
 
 ## Changelog (newest first)
+
+- **2026-06-22** — VS#1 **Commit 7** (PR #1) — **VS#1 COMPLETE**: §32 end-to-end integration test through the oRPC routers (Org→Company→Location→Product→Receipt→Sale→Invoice→Report) vs real Postgres — proves POS idempotency (same key ⇒ one sale, on-hand 7), permission denial (cashier can't create products), report totals match (USD 3000, count 1). CI `db-rls` job runs bootstrap→migrate→`bun run test` with DATABASE_URL+RLS_TEST_DATABASE_URL as `retailos_app` (+ dev-only auth env) so RLS + service + e2e tests all execute under the non-privileged role. Lesson: env-core blocks server vars under happy-dom → `// @vitest-environment node` + lazy imports in skip-guarded beforeAll. Codex: 0 findings. Gates green.
 
 - **2026-06-22** — VS#1 **Commit 6** (PR #1): oRPC routers for the §32 flow — tenant.setActive, company/location/product.create, inventory.receive (→receipt ledger + inventory.received event), pos.createSale (idempotent; sale+lines+ledger deductions+invoice+audit+sale.created event; advisory-locked gapless numbers), reports.salesBasic (grouped by currency). Minimal RBAC (`entitlements.ts`: tenant_admin/manager/cashier), enforced per-route inside the tenant tx. Codex review: 4 HIGH → 3 fixed (cross-tenant FK refs validated via RLS-scoped reads since FK checks bypass RLS; non-negative price; multi-currency report), 1 deferred (oversell = §14 business decision, logged). Gates green; routers type-checked + 4 RBAC tests. (Full §32 e2e through routers = Commit 7.)
 

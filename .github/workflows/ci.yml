@@ -98,10 +98,16 @@ jobs:
         env:
           MIGRATION_DATABASE_URL: postgresql://retailos_migrator:retailos_migrator@localhost:5432/RetailOS
         run: bun -F @RetailOS/db db:migrate
-      - name: Fail-closed RLS tests (as retailos_app)
+      - name: RLS + service + §32 integration tests (as retailos_app)
         env:
+          # Runtime + test connections use the non-privileged app role.
+          DATABASE_URL: postgresql://retailos_app:retailos_app@localhost:5432/RetailOS
           RLS_TEST_DATABASE_URL: postgresql://retailos_app:retailos_app@localhost:5432/RetailOS
-        run: bun -F @RetailOS/db test
+          # Dev/CI-only auth env so the api package (Better Auth) can instantiate.
+          BETTER_AUTH_SECRET: ci-secret-ci-secret-ci-secret-ci-32xx
+          BETTER_AUTH_URL: http://localhost:3000
+          CORS_ORIGIN: http://localhost:3001
+        run: bun run test
 
   e2e:
     name: E2E (Playwright)
