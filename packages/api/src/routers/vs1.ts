@@ -2,7 +2,17 @@ import { auth } from "@RetailOS/auth";
 import type { TenantTransaction } from "@RetailOS/db";
 import { db, schema, services, withTenant } from "@RetailOS/db";
 import { ORPCError } from "@orpc/server";
-import { and, count, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, tenantProcedure } from "../index";
 import type { RequestContext } from "../request-context";
@@ -179,6 +189,37 @@ export const locationRouter = {
 };
 
 export const productRouter = {
+  list: tenantProcedure
+    .input(
+      z.object({
+        brandId: z.string().uuid().optional(),
+        categoryId: z.string().uuid().optional(),
+        includeArchived: z.boolean().default(false),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        if (input.categoryId) {
+          await assertCategoryVisible(tx, input.categoryId);
+        }
+        if (input.brandId) {
+          await assertBrandVisible(tx, input.brandId);
+        }
+        const conditions = [
+          input.categoryId
+            ? eq(schema.product.categoryId, input.categoryId)
+            : null,
+          input.brandId ? eq(schema.product.brandId, input.brandId) : null,
+          input.includeArchived ? null : isNull(schema.product.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select()
+          .from(schema.product)
+          .where(conditions.length ? and(...conditions) : undefined);
+      });
+    }),
   create: tenantProcedure
     .input(
       z.object({
@@ -241,6 +282,22 @@ export const productRouter = {
 };
 
 export const catalogRouter = {
+  categoryList: tenantProcedure
+    .input(z.object({ includeArchived: z.boolean().default(false) }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        return tx
+          .select()
+          .from(schema.category)
+          .where(
+            input.includeArchived
+              ? undefined
+              : isNull(schema.category.deletedAt)
+          );
+      });
+    }),
   categoryCreate: tenantProcedure
     .input(
       z.object({
@@ -278,6 +335,20 @@ export const catalogRouter = {
         return row;
       });
     }),
+  brandList: tenantProcedure
+    .input(z.object({ includeArchived: z.boolean().default(false) }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        return tx
+          .select()
+          .from(schema.brand)
+          .where(
+            input.includeArchived ? undefined : isNull(schema.brand.deletedAt)
+          );
+      });
+    }),
   brandCreate: tenantProcedure
     .input(
       z.object({ code: z.string().min(1).optional(), name: z.string().min(1) })
@@ -306,6 +377,22 @@ export const catalogRouter = {
           after: row,
         });
         return row;
+      });
+    }),
+  uomList: tenantProcedure
+    .input(z.object({ includeArchived: z.boolean().default(false) }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        return tx
+          .select()
+          .from(schema.unitOfMeasure)
+          .where(
+            input.includeArchived
+              ? undefined
+              : isNull(schema.unitOfMeasure.deletedAt)
+          );
       });
     }),
   uomCreate: tenantProcedure
@@ -343,6 +430,30 @@ export const catalogRouter = {
           after: row,
         });
         return row;
+      });
+    }),
+  skuList: tenantProcedure
+    .input(
+      z.object({
+        includeArchived: z.boolean().default(false),
+        productId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        if (input.productId) {
+          await assertProductVisible(tx, input.productId);
+        }
+        const conditions = [
+          input.productId ? eq(schema.sku.productId, input.productId) : null,
+          input.includeArchived ? null : isNull(schema.sku.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select()
+          .from(schema.sku)
+          .where(conditions.length ? and(...conditions) : undefined);
       });
     }),
   skuCreate: tenantProcedure
@@ -390,6 +501,30 @@ export const catalogRouter = {
         return row;
       });
     }),
+  barcodeList: tenantProcedure
+    .input(
+      z.object({
+        includeArchived: z.boolean().default(false),
+        skuId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        const conditions = [
+          input.skuId ? eq(schema.barcode.skuId, input.skuId) : null,
+          input.includeArchived ? null : isNull(schema.barcode.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select()
+          .from(schema.barcode)
+          .where(conditions.length ? and(...conditions) : undefined);
+      });
+    }),
   barcodeCreate: tenantProcedure
     .input(
       z.object({
@@ -428,6 +563,44 @@ export const catalogRouter = {
           after: row,
         });
         return row;
+      });
+    }),
+  uomConversionList: tenantProcedure
+    .input(
+      z.object({
+        categoryId: z.string().uuid().optional(),
+        includeArchived: z.boolean().default(false),
+        productId: z.string().uuid().optional(),
+        skuId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        if (input.categoryId) {
+          await assertCategoryVisible(tx, input.categoryId);
+        }
+        if (input.productId) {
+          await assertProductVisible(tx, input.productId);
+        }
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        const conditions = [
+          input.categoryId
+            ? eq(schema.uomConversion.categoryId, input.categoryId)
+            : null,
+          input.productId
+            ? eq(schema.uomConversion.productId, input.productId)
+            : null,
+          input.skuId ? eq(schema.uomConversion.skuId, input.skuId) : null,
+          input.includeArchived ? null : isNull(schema.uomConversion.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select()
+          .from(schema.uomConversion)
+          .where(conditions.length ? and(...conditions) : undefined);
       });
     }),
   uomConversionCreate: tenantProcedure

@@ -338,6 +338,11 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       { code: "MIX-EA", name: "Mixed Each" },
       admin
     );
+    const carton = await call(
+      appRouter.catalog.uomCreate,
+      { code: "MIX-CTN", name: "Mixed Carton" },
+      admin
+    );
     const avcoProduct = await call(
       appRouter.product.create,
       {
@@ -371,6 +376,49 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       { baseUomId: each.id, code: "MIX-FIFO-EA", productId: fifoProduct.id },
       admin
     );
+    const barcode = await call(
+      appRouter.catalog.barcodeCreate,
+      { skuId: avcoSku.id, value: "0000000000001" },
+      admin
+    );
+    const conversion = await call(
+      appRouter.catalog.uomConversionCreate,
+      {
+        factor: 12,
+        fromUomId: carton.id,
+        role: "purchase",
+        skuId: avcoSku.id,
+        toUomId: each.id,
+      },
+      admin
+    );
+
+    const fifoProducts = await call(
+      appRouter.product.list,
+      { categoryId: fifoCategory.id },
+      admin
+    );
+    const categories = await call(appRouter.catalog.categoryList, {}, admin);
+    const skus = await call(
+      appRouter.catalog.skuList,
+      { productId: avcoProduct.id },
+      admin
+    );
+    const barcodes = await call(
+      appRouter.catalog.barcodeList,
+      { skuId: avcoSku.id },
+      admin
+    );
+    const conversions = await call(
+      appRouter.catalog.uomConversionList,
+      { skuId: avcoSku.id },
+      admin
+    );
+    expect(fifoProducts.map((row) => row.id)).toContain(fifoProduct.id);
+    expect(categories.map((row) => row.id)).toContain(fifoCategory.id);
+    expect(skus.map((row) => row.id)).toContain(avcoSku.id);
+    expect(barcodes.map((row) => row.id)).toContain(barcode.id);
+    expect(conversions.map((row) => row.id)).toContain(conversion.id);
 
     await call(
       appRouter.inventory.receive,

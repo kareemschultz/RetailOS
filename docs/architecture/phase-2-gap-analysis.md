@@ -38,7 +38,7 @@ Still open:
 | Costing resolver | Done | product -> category -> tenant, AVCO and FIFO paths, row locks / `FOR UPDATE`, remainder-safe AVCO. |
 | Inventory services | Done | UoM conversion, FEFO allocation, oversell decision, reorder evaluation, stock-count posting. |
 | Inventory routers/reports | Done | Receive, adjust, count start/line/post, reorder evaluate, valuation report, low-stock report. |
-| Catalog create routers | Done | Category, brand, UoM, SKU, barcode, UoM conversion; RLS-scoped FK guards and audit rows. |
+| Catalog create/list routers | Partial | Create + list for category, brand, UoM, SKU, barcode, UoM conversion; product create/list; RLS-scoped FK guards. Update/archive still pending. |
 | API contract snapshot | Done | `phase-2-api-contracts.md`. |
 | Backend tests | Partial | Service tests are strong; router e2e now covers catalog FK guards and mixed AVCO+FIFO valued receipts through valuation reports. Broader list/update/import/revaluation tests still needed. |
 
@@ -46,8 +46,8 @@ Still open:
 
 ### P0 before Phase 2 backend can be called complete
 
-1. **Catalog API breadth.** Add list/read/update/archive endpoints for category, brand, product extensions, variant, SKU, barcode, UoM, and UoM conversion. Create exists for most catalog entities, but operational back-office workflows need list/update.
-2. **Product update/list/archive.** `product.create` now accepts Phase-2 category/brand/base UoM/costing/tracking fields with RLS-scoped guards, but update/list/archive are still missing.
+1. **Catalog API breadth.** Add update/archive endpoints for category, brand, product extensions, SKU, barcode, UoM, and UoM conversion. Create + list exist for most catalog entities, but operational back-office workflows need update/archive.
+2. **Product update/archive.** `product.create` now accepts Phase-2 category/brand/base UoM/costing/tracking fields with RLS-scoped guards and `product.list` exists, but update/archive are still missing.
 3. **Variant router.** Schema and seed exist, but the API lacks variant create/list/update/archive.
 4. **Lot/expiry management routes.** `inventory.receive` accepts `lotId`, but there are no lot create/update/quarantine/expiry-status endpoints yet.
 5. **Reorder rule CRUD.** Evaluation exists; creating/updating min/max rules through the API is still missing.
@@ -82,7 +82,7 @@ Still open:
 
 ## Immediate recommended order
 
-1. Add catalog read/list/update/archive APIs and product update/list/archive.
+1. Add catalog update/archive APIs and product update/archive.
 2. Add variant API.
 3. Add lot/expiry, reorder-rule CRUD, stock discrepancy review, and revaluation seam.
 4. Add import staging/validation backend design or minimal schema.

@@ -27,26 +27,49 @@
 - **Guards:** referenced category/brand/base UoM must be visible through tenant RLS.
 - **Audit:** `product.create`
 
+### `product.list`
+- **Input:** `{ categoryId?, brandId?, includeArchived? }`
+- **Permission:** `products.create` (temporary catalog-management permission; finer read permission later)
+- **Reads:** `product`
+- **Guards:** referenced category/brand filters must be visible through tenant RLS.
+
 ## Inventory routes
 
 ## Catalog routes
 
 All catalog routes require `products.create` for now; finer-grained catalog permissions can split later without changing route contracts.
 
+### `catalog.categoryList`
+- **Input:** `{ includeArchived? }`
+- **Reads:** `category`
+
 ### `catalog.categoryCreate`
 - **Input:** `{ name, code?, costingMethod?, trackingMode? }`
 - **Writes:** `category`
 - **Audit:** `category.create`
+
+### `catalog.brandList`
+- **Input:** `{ includeArchived? }`
+- **Reads:** `brand`
 
 ### `catalog.brandCreate`
 - **Input:** `{ name, code? }`
 - **Writes:** `brand`
 - **Audit:** `brand.create`
 
+### `catalog.uomList`
+- **Input:** `{ includeArchived? }`
+- **Reads:** `unit_of_measure`
+
 ### `catalog.uomCreate`
 - **Input:** `{ code, name, kind?, decimalScale? }`
 - **Writes:** `unit_of_measure`
 - **Audit:** `uom.create`
+
+### `catalog.skuList`
+- **Input:** `{ productId?, includeArchived? }`
+- **Reads:** `sku`
+- **Guards:** referenced product filter must be visible through tenant RLS.
 
 ### `catalog.skuCreate`
 - **Input:** `{ productId, code, name?, baseUomId?, costingMethod?, trackingMode? }`
@@ -54,11 +77,21 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 - **Guards:** `productId` and `baseUomId` must be visible through tenant RLS.
 - **Audit:** `sku.create`
 
+### `catalog.barcodeList`
+- **Input:** `{ skuId?, includeArchived? }`
+- **Reads:** `barcode`
+- **Guards:** referenced SKU filter must be visible through tenant RLS.
+
 ### `catalog.barcodeCreate`
 - **Input:** `{ skuId, value, symbology?, isPrimary? }`
 - **Writes:** `barcode`
 - **Guards:** `skuId` must be visible through tenant RLS.
 - **Audit:** `barcode.create`
+
+### `catalog.uomConversionList`
+- **Input:** `{ categoryId?, productId?, skuId?, includeArchived? }`
+- **Reads:** `uom_conversion`
+- **Guards:** referenced category/product/SKU filters must be visible through tenant RLS.
 
 ### `catalog.uomConversionCreate`
 - **Input:** `{ fromUomId, toUomId, role, factor, factorScale?, categoryId?, productId?, skuId? }`
@@ -126,8 +159,8 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 
 ## Known gaps / next backend work
 
-- Catalog create endpoints exist for `category`, `brand`, `sku`, `barcode`, `unit_of_measure`, and `uom_conversion`; update/list/delete and `variant` endpoints are still pending.
-- `product.create` accepts Phase-2 category/brand/base UoM/costing/tracking fields; product list/update/archive are still pending.
+- Catalog create + list endpoints exist for `category`, `brand`, `sku`, `barcode`, `unit_of_measure`, and `uom_conversion`; update/archive and `variant` endpoints are still pending.
+- `product.create` accepts Phase-2 category/brand/base UoM/costing/tracking fields; `product.list` exists; product update/archive are still pending.
 - Phase-2 router e2e covers a mixed AVCO+FIFO valued receipt/report flow; broader lot/count/reorder/list-update e2e remains pending.
 - Event payloads are implemented for the new router seams, but the outbox dispatcher/consumer remains a later phase.
 - UI remains intentionally absent.
