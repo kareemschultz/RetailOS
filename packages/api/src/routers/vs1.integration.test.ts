@@ -1,6 +1,7 @@
 // @vitest-environment node
 // Node env (not happy-dom): @t3-oss/env-core blocks server env vars when a
 // `window` global is present, which happy-dom provides.
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Context } from "../context";
 
@@ -59,9 +60,26 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.saleLine);
         await tx.delete(schema.invoice);
         await tx.delete(schema.sale);
+        await tx.delete(schema.stockCountLine);
+        await tx.delete(schema.stockCount);
+        await tx.delete(schema.avgCost);
+        await tx.delete(schema.valuationLayer);
         await tx.delete(schema.stockLedger);
+        await tx.delete(schema.reorderRule);
+        await tx.delete(schema.bomLine);
+        await tx.delete(schema.bom);
+        await tx.delete(schema.bundle);
+        await tx.delete(schema.serial);
+        await tx.delete(schema.lot);
+        await tx.delete(schema.barcode);
+        await tx.delete(schema.uomConversion);
+        await tx.delete(schema.sku);
+        await tx.delete(schema.variant);
         await tx.delete(schema.membership);
         await tx.delete(schema.product);
+        await tx.delete(schema.category);
+        await tx.delete(schema.brand);
+        await tx.delete(schema.unitOfMeasure);
         await tx.delete(schema.location);
         await tx.delete(schema.company);
       });
@@ -208,5 +226,858 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         admin
       )
     ).rejects.toThrow();
+  });
+
+  it("blocks cross-tenant catalog references in SKU and UoM conversion routes", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+
+    const productA = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Catalog Product A",
+        priceMinor: 100,
+        sku: "CAT-A",
+      },
+      admin
+    );
+    const productB = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Catalog Product B",
+        priceMinor: 100,
+        sku: "CAT-B",
+      },
+      adminB
+    );
+    const categoryB = await call(
+      appRouter.catalog.categoryCreate,
+      { name: "Tenant B Category" },
+      adminB
+    );
+    const uomA = await call(
+      appRouter.catalog.uomCreate,
+      { code: "EA-A", name: "Each A" },
+      admin
+    );
+    const cartonA = await call(
+      appRouter.catalog.uomCreate,
+      { code: "CTN-A", name: "Carton A" },
+      admin
+    );
+    const uomB = await call(
+      appRouter.catalog.uomCreate,
+      { code: "EA-B", name: "Each B" },
+      adminB
+    );
+    const skuA = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: uomA.id, code: "CAT-A-EA", productId: productA.id },
+      admin
+    );
+
+    await expect(
+      call(
+        appRouter.catalog.skuCreate,
+        { baseUomId: uomA.id, code: "HIJACK", productId: productB.id },
+        admin
+      )
+    ).rejects.toThrow();
+
+    await expect(
+      call(
+        appRouter.catalog.uomConversionCreate,
+        {
+          factor: 24,
+          fromUomId: cartonA.id,
+          role: "purchase",
+          toUomId: uomB.id,
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    await expect(
+      call(
+        appRouter.catalog.uomConversionCreate,
+        {
+          categoryId: categoryB.id,
+          factor: 24,
+          fromUomId: cartonA.id,
+          role: "purchase",
+          skuId: skuA.id,
+          toUomId: uomA.id,
+        },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
+  it("routes a mixed AVCO+FIFO catalog through valued receipts and valuation reports", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+
+    const company = await call(
+      appRouter.company.create,
+      { name: "Mixed Catalog Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Mixed Store", type: "store" },
+      admin
+    );
+    const fifoCategory = await call(
+      appRouter.catalog.categoryCreate,
+      { costingMethod: "fifo", name: "Mixed Pharmacy" },
+      admin
+    );
+    const each = await call(
+      appRouter.catalog.uomCreate,
+      { code: "MIX-EA", name: "Mixed Each" },
+      admin
+    );
+    const carton = await call(
+      appRouter.catalog.uomCreate,
+      { code: "MIX-CTN", name: "Mixed Carton" },
+      admin
+    );
+    const avcoProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        currency: "USD",
+        name: "Mixed Grocery AVCO",
+        priceMinor: 100,
+        sku: "MIX-AVCO",
+      },
+      admin
+    );
+    const fifoProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        categoryId: fifoCategory.id,
+        currency: "USD",
+        name: "Mixed Pharmacy FIFO",
+        priceMinor: 100,
+        sku: "MIX-FIFO",
+      },
+      admin
+    );
+    const avcoSku = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: "MIX-AVCO-EA", productId: avcoProduct.id },
+      admin
+    );
+    const fifoSku = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: "MIX-FIFO-EA", productId: fifoProduct.id },
+      admin
+    );
+    const barcode = await call(
+      appRouter.catalog.barcodeCreate,
+      { skuId: avcoSku.id, value: "0000000000001" },
+      admin
+    );
+    const conversion = await call(
+      appRouter.catalog.uomConversionCreate,
+      {
+        factor: 12,
+        fromUomId: carton.id,
+        role: "purchase",
+        skuId: avcoSku.id,
+        toUomId: each.id,
+      },
+      admin
+    );
+
+    const fifoProducts = await call(
+      appRouter.product.list,
+      { categoryId: fifoCategory.id },
+      admin
+    );
+    const categories = await call(appRouter.catalog.categoryList, {}, admin);
+    const skus = await call(
+      appRouter.catalog.skuList,
+      { productId: avcoProduct.id },
+      admin
+    );
+    const barcodes = await call(
+      appRouter.catalog.barcodeList,
+      { skuId: avcoSku.id },
+      admin
+    );
+    const conversions = await call(
+      appRouter.catalog.uomConversionList,
+      { skuId: avcoSku.id },
+      admin
+    );
+    expect(fifoProducts.map((row) => row.id)).toContain(fifoProduct.id);
+    expect(categories.map((row) => row.id)).toContain(fifoCategory.id);
+    expect(skus.map((row) => row.id)).toContain(avcoSku.id);
+    expect(barcodes.map((row) => row.id)).toContain(barcode.id);
+    expect(conversions.map((row) => row.id)).toContain(conversion.id);
+
+    const brand = await call(
+      appRouter.catalog.brandCreate,
+      { code: "MIX-BRAND", name: "Mixed Brand" },
+      admin
+    );
+    const updatedBrand = await call(
+      appRouter.catalog.brandUpdate,
+      { id: brand.id, name: "Mixed Brand Updated" },
+      admin
+    );
+    expect(updatedBrand.name).toBe("Mixed Brand Updated");
+    const archivedBrand = await call(
+      appRouter.catalog.brandArchive,
+      { id: brand.id },
+      admin
+    );
+    expect(archivedBrand.deletedAt).toBeTruthy();
+
+    const tempCategory = await call(
+      appRouter.catalog.categoryCreate,
+      { name: "Temporary Category" },
+      admin
+    );
+    const updatedCategory = await call(
+      appRouter.catalog.categoryUpdate,
+      { costingMethod: "fifo", id: tempCategory.id },
+      admin
+    );
+    expect(updatedCategory.costingMethod).toBe("fifo");
+    const archivedCategory = await call(
+      appRouter.catalog.categoryArchive,
+      { id: tempCategory.id },
+      admin
+    );
+    expect(archivedCategory.deletedAt).toBeTruthy();
+
+    const tempUom = await call(
+      appRouter.catalog.uomCreate,
+      { code: "MIX-TEMP", name: "Mixed Temp UoM" },
+      admin
+    );
+    const updatedUom = await call(
+      appRouter.catalog.uomUpdate,
+      { decimalScale: 1, id: tempUom.id },
+      admin
+    );
+    expect(updatedUom.decimalScale).toBe(1);
+    const archivedUom = await call(
+      appRouter.catalog.uomArchive,
+      { id: tempUom.id },
+      admin
+    );
+    expect(archivedUom.deletedAt).toBeTruthy();
+
+    const updatedSku = await call(
+      appRouter.catalog.skuUpdate,
+      { id: avcoSku.id, name: "AVCO SKU Updated" },
+      admin
+    );
+    expect(updatedSku.name).toBe("AVCO SKU Updated");
+    const archiveSku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "MIX-SKU-ARCHIVE", productId: avcoProduct.id },
+      admin
+    );
+    const archivedSku = await call(
+      appRouter.catalog.skuArchive,
+      { id: archiveSku.id },
+      admin
+    );
+    expect(archivedSku.deletedAt).toBeTruthy();
+
+    const updatedBarcode = await call(
+      appRouter.catalog.barcodeUpdate,
+      { id: barcode.id, isPrimary: true },
+      admin
+    );
+    expect(updatedBarcode.isPrimary).toBe(true);
+    const archivedBarcode = await call(
+      appRouter.catalog.barcodeArchive,
+      { id: barcode.id },
+      admin
+    );
+    expect(archivedBarcode.deletedAt).toBeTruthy();
+
+    const updatedConversion = await call(
+      appRouter.catalog.uomConversionUpdate,
+      { factor: 24, id: conversion.id },
+      admin
+    );
+    expect(updatedConversion.factor).toBe(24);
+    const archivedConversion = await call(
+      appRouter.catalog.uomConversionArchive,
+      { id: conversion.id },
+      admin
+    );
+    expect(archivedConversion.deletedAt).toBeTruthy();
+    const importPreview = await call(
+      appRouter.catalog.importPreview,
+      {
+        rows: [
+          {
+            baseUomCode: "MIX-EA",
+            currency: "USD",
+            priceMinor: 100,
+            productName: "Existing Product",
+            productSku: avcoProduct.sku,
+            rowNumber: 1,
+            skuCode: "IMPORT-EXISTING",
+          },
+          {
+            baseUomCode: "MIX-EA",
+            currency: "USD",
+            priceMinor: 100,
+            productName: "Import Product",
+            productSku: "IMPORT-NEW",
+            rowNumber: 2,
+            skuCode: "IMPORT-NEW-EA",
+          },
+        ],
+      },
+      admin
+    );
+    expect(importPreview.errorCount).toBe(1);
+    expect(importPreview.validCount).toBe(1);
+
+    const updatedProduct = await call(
+      appRouter.product.update,
+      { id: avcoProduct.id, name: "Mixed Grocery AVCO Updated" },
+      admin
+    );
+    expect(updatedProduct.name).toBe("Mixed Grocery AVCO Updated");
+    const archiveProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        currency: "USD",
+        name: "Archive Product",
+        priceMinor: 100,
+        sku: "MIX-ARCHIVE",
+      },
+      admin
+    );
+    const archivedProduct = await call(
+      appRouter.product.archive,
+      { id: archiveProduct.id },
+      admin
+    );
+    expect(archivedProduct.deletedAt).toBeTruthy();
+
+    const variant = await call(
+      appRouter.catalog.variantCreate,
+      {
+        name: "Pack",
+        productId: avcoProduct.id,
+        value: "Single",
+      },
+      admin
+    );
+    const updatedVariant = await call(
+      appRouter.catalog.variantUpdate,
+      { id: variant.id, value: "Each" },
+      admin
+    );
+    const variants = await call(
+      appRouter.catalog.variantList,
+      { productId: avcoProduct.id },
+      admin
+    );
+    expect(updatedVariant.value).toBe("Each");
+    expect(variants.map((row) => row.id)).toContain(variant.id);
+    const archivedVariant = await call(
+      appRouter.catalog.variantArchive,
+      { id: variant.id },
+      admin
+    );
+    expect(archivedVariant.deletedAt).toBeTruthy();
+
+    const lot = await call(
+      appRouter.inventory.lotCreate,
+      {
+        expiryDate: "2027-01-01",
+        lotNumber: "MIX-FIFO-LOT",
+        skuId: fifoSku.id,
+      },
+      admin
+    );
+    const updatedLot = await call(
+      appRouter.inventory.lotUpdate,
+      { id: lot.id, status: "quarantined" },
+      admin
+    );
+    const lots = await call(
+      appRouter.inventory.lotList,
+      { skuId: fifoSku.id, status: "quarantined" },
+      admin
+    );
+    expect(updatedLot.status).toBe("quarantined");
+    expect(lots.map((row) => row.id)).toContain(lot.id);
+
+    const rule = await call(
+      appRouter.inventory.reorderRuleUpsert,
+      {
+        locationId: location.id,
+        maxQty: 20,
+        minQty: 10,
+        skuId: avcoSku.id,
+      },
+      admin
+    );
+    const rules = await call(
+      appRouter.inventory.reorderRuleList,
+      { locationId: location.id, skuId: avcoSku.id },
+      admin
+    );
+    expect(rules.map((row) => row.id)).toContain(rule.id);
+
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: avcoProduct.id,
+        qty: 3,
+        skuId: avcoSku.id,
+        unitCostMinor: 101,
+      },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: fifoProduct.id,
+        qty: 4,
+        skuId: fifoSku.id,
+        unitCostMinor: 200,
+      },
+      admin
+    );
+
+    const report = await call(
+      appRouter.reports.valuation,
+      { locationId: location.id },
+      admin
+    );
+    const avco = report.avco.find((row) => row.skuId === avcoSku.id);
+    const fifo = report.fifo.find((row) => row.skuId === fifoSku.id);
+    expect(avco?.qtyOnHand).toBe(3);
+    expect(avco?.totalValueMinor).toBe(303);
+    expect(fifo?.qtyOnHand).toBe(4);
+    expect(fifo?.totalValueMinor).toBe(800);
+    const avcoRevalue = await call(
+      appRouter.inventory.revalue,
+      {
+        currency: "USD",
+        locationId: location.id,
+        reasonCode: "count-value-correction",
+        scale: 2,
+        skuId: avcoSku.id,
+        totalValueMinor: 306,
+      },
+      admin
+    );
+    expect(avcoRevalue.method).toBe("avco");
+    const fifoLayer = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.valuationLayer)
+        .where(eq(schema.valuationLayer.skuId, fifoSku.id))
+        .limit(1)
+    );
+    const fifoLayerRow = fifoLayer.at(0);
+    expect(fifoLayerRow).toBeTruthy();
+    const fifoRevalue = await call(
+      appRouter.inventory.revalue,
+      {
+        fifoLayerId: fifoLayerRow?.id ?? "",
+        locationId: location.id,
+        reasonCode: "vendor-cost-correction",
+        skuId: fifoSku.id,
+        unitCostMinor: 250,
+      },
+      admin
+    );
+    expect(fifoRevalue.method).toBe("fifo");
+    const revaluedReport = await call(
+      appRouter.reports.valuation,
+      { locationId: location.id },
+      admin
+    );
+    expect(
+      revaluedReport.avco.find((row) => row.skuId === avcoSku.id)
+        ?.totalValueMinor
+    ).toBe(306);
+    expect(
+      revaluedReport.fifo.find((row) => row.skuId === fifoSku.id)
+        ?.totalValueMinor
+    ).toBe(1000);
+
+    await call(
+      appRouter.inventory.adjust,
+      {
+        locationId: location.id,
+        productId: avcoProduct.id,
+        qtyDelta: -10,
+        reasonCode: "oversell-test",
+        skuId: avcoSku.id,
+      },
+      admin
+    );
+    const discrepancies = await call(
+      appRouter.inventory.stockDiscrepancyList,
+      { locationId: location.id },
+      admin
+    );
+    expect(discrepancies.some((row) => row.skuId === avcoSku.id)).toBe(true);
+    const reviewed = await call(
+      appRouter.inventory.stockDiscrepancyReview,
+      {
+        locationId: location.id,
+        notes: "Cycle count requested by test",
+        resolution: "count_requested",
+        skuId: avcoSku.id,
+      },
+      admin
+    );
+    expect(reviewed.reviewed).toBe(true);
+    const reorder = await call(
+      appRouter.inventory.reorderEvaluate,
+      { locationId: location.id, skuId: avcoSku.id },
+      admin
+    );
+    expect(reorder?.suggestedQty).toBe(27);
+    const archivedRule = await call(
+      appRouter.inventory.reorderRuleArchive,
+      { id: rule.id },
+      admin
+    );
+    expect(archivedRule.deletedAt).toBeTruthy();
+    const archivedLot = await call(
+      appRouter.inventory.lotArchive,
+      { id: lot.id },
+      admin
+    );
+    expect(archivedLot.deletedAt).toBeTruthy();
+
+    const valuationEvents = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(eq(schema.outboxEvent.type, "inventory.valuation_updated"))
+    );
+    expect(valuationEvents.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // H1 regression — ONE parameterized harness over every guarded FK-bearing
+  // input. Add a row to `cases` when a new FK input lands; it auto-asserts the
+  // cross-tenant reference is rejected.
+  it("rejects cross-tenant FK references on every guarded FK input (H1)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+
+    // Build a minimal company→location→product→sku(lot-tracked)→lot graph in a
+    // tenant, plus an in-tenant stock count, entirely through the routers.
+    const buildGraph = async (
+      ctxWrap: { context: Context },
+      prefix: string
+    ) => {
+      const company = await call(
+        appRouter.company.create,
+        { name: `${prefix}Co` },
+        ctxWrap
+      );
+      const location = await call(
+        appRouter.location.create,
+        { companyId: company.id, name: `${prefix}Loc`, type: "store" },
+        ctxWrap
+      );
+      const product = await call(
+        appRouter.product.create,
+        {
+          sku: `${prefix}-P`,
+          name: `${prefix} Prod`,
+          priceMinor: 100,
+          currency: "USD",
+        },
+        ctxWrap
+      );
+      const sku = await call(
+        appRouter.catalog.skuCreate,
+        { productId: product.id, code: `${prefix}-SKU`, trackingMode: "lot" },
+        ctxWrap
+      );
+      const lot = await call(
+        appRouter.inventory.lotCreate,
+        { skuId: sku.id, lotNumber: `${prefix}-L1` },
+        ctxWrap
+      );
+      const count = await call(
+        appRouter.inventory.countStart,
+        { locationId: location.id, scope: "cycle" },
+        ctxWrap
+      );
+      return {
+        locationId: location.id,
+        productId: product.id,
+        skuId: sku.id,
+        lotId: lot.id,
+        stockCountId: count.id,
+      };
+    };
+
+    const a = await buildGraph(admin, "FKGA");
+    const b = await buildGraph(adminB, "FKGB");
+
+    // Each case: tenant A references a tenant-B-owned id → must be rejected.
+    const cases: { fk: string; attempt: () => Promise<unknown> }[] = [
+      {
+        fk: "countStart.locationId",
+        attempt: () =>
+          call(
+            appRouter.inventory.countStart,
+            { locationId: b.locationId, scope: "cycle" },
+            admin
+          ),
+      },
+      {
+        fk: "adjust.locationId",
+        attempt: () =>
+          call(
+            appRouter.inventory.adjust,
+            {
+              locationId: b.locationId,
+              productId: a.productId,
+              skuId: a.skuId,
+              qtyDelta: -1,
+              reasonCode: "test",
+            },
+            admin
+          ),
+      },
+      {
+        fk: "adjust.lotId",
+        attempt: () =>
+          call(
+            appRouter.inventory.adjust,
+            {
+              locationId: a.locationId,
+              productId: a.productId,
+              skuId: a.skuId,
+              lotId: b.lotId,
+              qtyDelta: -1,
+              reasonCode: "test",
+            },
+            admin
+          ),
+      },
+      {
+        fk: "countLineUpsert.skuId",
+        attempt: () =>
+          call(
+            appRouter.inventory.countLineUpsert,
+            { stockCountId: a.stockCountId, skuId: b.skuId, countedQty: 1 },
+            admin
+          ),
+      },
+      {
+        fk: "countLineUpsert.lotId",
+        attempt: () =>
+          call(
+            appRouter.inventory.countLineUpsert,
+            {
+              stockCountId: a.stockCountId,
+              skuId: a.skuId,
+              lotId: b.lotId,
+              countedQty: 1,
+            },
+            admin
+          ),
+      },
+      {
+        fk: "reorderEvaluate.locationId",
+        attempt: () =>
+          call(
+            appRouter.inventory.reorderEvaluate,
+            { locationId: b.locationId, skuId: a.skuId },
+            admin
+          ),
+      },
+      {
+        fk: "reorderEvaluate.skuId",
+        attempt: () =>
+          call(
+            appRouter.inventory.reorderEvaluate,
+            { locationId: a.locationId, skuId: b.skuId },
+            admin
+          ),
+      },
+    ];
+
+    for (const c of cases) {
+      await expect(c.attempt()).rejects.toThrow();
+    }
+
+    // Positive control: an in-tenant reference still succeeds.
+    const ok = await call(
+      appRouter.inventory.countStart,
+      { locationId: a.locationId, scope: "cycle" },
+      admin
+    );
+    expect(ok.id).toBeTruthy();
+  });
+
+  // H2 regression — D5 allow-oversell-with-flagging: the ledger is NOT
+  // hard-blocked, but an oversell emits inventory.stock_discrepancy for review.
+  it("emits inventory.stock_discrepancy only on oversell, correlated to the sale (H2)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "H2OCo" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "H2OLoc", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { sku: "H2O-P", name: "H2O Prod", priceMinor: 500, currency: "USD" },
+      admin
+    );
+    // Opening balance of 5 into the (location, product) cell — product-keyed, so
+    // it lines up with the sale deduction (no skuId).
+    await withTenant(db, ORG, (tx) =>
+      services.appendStockMovement(
+        tx,
+        { tenantId: ORG },
+        {
+          locationId: location.id,
+          productId: product.id,
+          movementType: "receipt",
+          qtyDelta: 5,
+        }
+      )
+    );
+
+    const discrepancies = () =>
+      withTenant(db, ORG, (tx) =>
+        tx
+          .select()
+          .from(schema.outboxEvent)
+          .where(eq(schema.outboxEvent.type, "inventory.stock_discrepancy"))
+      );
+    const before = await discrepancies();
+
+    // 1) Normal sale within stock (3 of 5) → NO discrepancy.
+    await call(
+      appRouter.pos.createSale,
+      {
+        locationId: location.id,
+        idempotencyKey: "h2-ok",
+        lines: [{ productId: product.id, qty: 3 }],
+      },
+      admin
+    );
+    expect((await discrepancies()).length).toBe(before.length);
+
+    // 2) Oversell (2 left, sell 10) → discrepancy emitted, tenant-scoped + sale-correlated.
+    const oversell = await call(
+      appRouter.pos.createSale,
+      {
+        locationId: location.id,
+        idempotencyKey: "h2-oversell",
+        lines: [{ productId: product.id, qty: 10 }],
+      },
+      admin
+    );
+    const after = await discrepancies();
+    expect(after.length).toBe(before.length + 1);
+    const event = after.at(-1) as {
+      tenantId: string;
+      payload: { saleId?: string; source?: string; resultingOnHand?: number };
+    };
+    expect(event.tenantId).toBe(ORG);
+    expect(event.payload.saleId).toBe(oversell.saleId);
+    expect(event.payload.source).toBe("oversell");
+    expect(event.payload.resultingOnHand).toBeLessThan(0);
+  });
+
+  // PART 2 — costing_method is set-once: changeable on a fresh item, immutable
+  // after the item has any stock_ledger movement (re-valuing history is the
+  // hazard; a mixed AVCO/FIFO catalog is fine).
+  it("enforces costing_method set-once after first movement (D1/ADR-0008)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "SetOnceCo" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "SetOnceLoc", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      {
+        sku: "SETONCE-P",
+        name: "SetOnce",
+        priceMinor: 100,
+        currency: "USD",
+        costingMethod: "avco",
+      },
+      admin
+    );
+
+    // Fresh item (no movements) → changing costing_method SUCCEEDS.
+    const changed = await call(
+      appRouter.product.update,
+      { id: product.id, costingMethod: "fifo" },
+      admin
+    );
+    expect(changed.costingMethod).toBe("fifo");
+
+    // Create a ledger movement for the product (product-keyed, no skuId).
+    await withTenant(db, ORG, (tx) =>
+      services.appendStockMovement(
+        tx,
+        { tenantId: ORG },
+        {
+          locationId: location.id,
+          productId: product.id,
+          movementType: "receipt",
+          qtyDelta: 1,
+        }
+      )
+    );
+
+    // Now CHANGING the method is REJECTED (history exists).
+    await expect(
+      call(
+        appRouter.product.update,
+        { id: product.id, costingMethod: "avco" },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // Re-supplying the SAME value is a no-op, not a change → still allowed.
+    const noop = await call(
+      appRouter.product.update,
+      { id: product.id, costingMethod: "fifo" },
+      admin
+    );
+    expect(noop.costingMethod).toBe("fifo");
   });
 });

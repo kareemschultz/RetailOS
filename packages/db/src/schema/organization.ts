@@ -1,6 +1,13 @@
 import { relations } from "drizzle-orm";
-import { index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth";
+import {
+  COSTING_METHODS,
+  EXPIRY_POLICIES,
+  OVERSELL_POLICIES,
+  REMOVAL_STRATEGIES,
+  RETURN_COSTING_POLICIES,
+} from "./product";
 
 // Better Auth `organization` plugin tables (charter §6/§8). A RetailOS tenant
 // maps 1:1 to an organization; `organization.id` is the `tenant_id` value used
@@ -12,6 +19,17 @@ export const organization = pgTable("organization", {
   slug: text("slug").unique(),
   logo: text("logo"),
   metadata: text("metadata"),
+  // Tenant-default strategy settings (resolver §6: platform default below these).
+  // Financial settings (costing) stay tenant/category level; operational
+  // settings (removal/return) may also resolve deeper (product/category).
+  costingMethod: text("costing_method", { enum: COSTING_METHODS }),
+  removalStrategy: text("removal_strategy", { enum: REMOVAL_STRATEGIES }),
+  returnCostingPolicy: text("return_costing_policy", {
+    enum: RETURN_COSTING_POLICIES,
+  }),
+  oversellPolicy: text("oversell_policy", { enum: OVERSELL_POLICIES }),
+  expiryPolicy: text("expiry_policy", { enum: EXPIRY_POLICIES }),
+  barcodeParserConfig: jsonb("barcode_parser_config"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

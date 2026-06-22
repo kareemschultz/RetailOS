@@ -4,7 +4,19 @@ import type { ServiceContext } from "./types";
 
 // VS#1 domain event types (charter §24). Consumed in later phases.
 export const DomainEventType = {
+  InventoryAdjusted: "inventory.adjusted",
+  // §3 — emitted when negative on-hand is reconciled by a later receipt that
+  // establishes actual cost (Phase 5 Accounting consumes it). Contract defined
+  // in event-map-phase2.md; emit wiring is deferred behavior (reconciliation).
+  InventoryCostReconciliation: "inventory.cost_reconciliation",
+  InventoryCountPosted: "inventory.count_posted",
+  InventoryCountStarted: "inventory.count_started",
   InventoryReceived: "inventory.received",
+  InventoryReorderTriggered: "inventory.reorder_triggered",
+  InventoryRevalued: "inventory.revalued",
+  InventoryStockDiscrepancyReviewed: "inventory.stock_discrepancy_reviewed",
+  InventoryStockDiscrepancy: "inventory.stock_discrepancy",
+  InventoryValuationUpdated: "inventory.valuation_updated",
   SaleCreated: "sale.created",
 } as const;
 

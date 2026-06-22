@@ -1,5 +1,6 @@
 import { index, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { actor, softDelete, tenantId, timestamps } from "./columns";
+import { REMOVAL_STRATEGIES } from "./product";
 
 // Tenant → Company → Location (charter §8). Location types cover retail stores,
 // warehouses, bonded warehouses, DCs, and fulfilment centres.
@@ -28,6 +29,9 @@ export const location = pgTable(
     name: text("name").notNull(),
     // store | warehouse | bonded | distribution_center | fulfillment_center
     type: text("type").default("store").notNull(),
+    // Location-level operational override (resolver §6). Removal strategy is
+    // physical/operational, so it may resolve at the location level.
+    removalStrategy: text("removal_strategy", { enum: REMOVAL_STRATEGIES }),
     ...timestamps,
     ...actor,
     ...softDelete,
