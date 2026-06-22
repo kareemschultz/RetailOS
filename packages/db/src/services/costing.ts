@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { stockLedger } from "../schema";
 import type { TenantTransaction } from "../tenant";
+import { allowedLevelsFor, resolveSetting } from "./settings-resolver";
 import type { ServiceContext } from "./types";
 
 export type CostingMethod = "avco" | "fifo";
@@ -100,8 +101,20 @@ export async function resolveCostingMethod(
   if (!row) {
     throw new Error("costing: target product/SKU not found");
   }
+  // The SQL above FETCHES the per-level values; the WINNER is chosen by the one
+  // shared resolver (settings-resolver.ts) — there is no second inline
+  // precedence path here. Platform default ('avco') is encoded as the platform
+  // level, so the entire resolution (incl. the default) lives in the resolver.
   return (
-    row.product_method ?? row.category_method ?? row.tenant_method ?? "avco"
+    resolveSetting<CostingMethod>(
+      {
+        product: row.product_method ?? undefined,
+        category: row.category_method ?? undefined,
+        tenant: row.tenant_method ?? undefined,
+        platform: "avco",
+      },
+      allowedLevelsFor("costingMethod")
+    ).value ?? "avco"
   );
 }
 
