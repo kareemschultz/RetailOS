@@ -22,12 +22,22 @@ import { appendStockMovement, stockOnHand } from "./stock-ledger";
 // is set, so the default `bun run test` gate stays green without a database.
 const url = process.env.RLS_TEST_DATABASE_URL;
 const TENANT = "svc_tenant";
+// Widens the window between runIdempotent's SELECT-miss and its INSERT so the
+// concurrency test would double-run `fn` (or hit the unique index) if the
+// advisory lock were removed.
+const RACE_WINDOW_MS = 25;
 
 function required<T>(row: T | undefined, what: string): T {
   if (!row) {
     throw new Error(`expected ${what}`);
   }
   return row;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 describe.skipIf(!url)("core services (tenant-scoped, ADR 0006)", () => {
@@ -128,6 +138,33 @@ describe.skipIf(!url)("core services (tenant-scoped, ADR 0006)", () => {
     await expect(run({ a: 2 })).rejects.toBeInstanceOf(
       IdempotencyConflictError
     );
+  });
+
+  it("serializes concurrent same-key callers — fn runs exactly once (advisory lock)", async () => {
+    // Two transactions (separate pooled connections) race on the SAME (tenant,
+    // key). The pg_advisory_xact_lock taken before the existence check must make
+    // the loser wait and then return the stored response — so `fn` runs once and
+    // both callers get the same result. Without the lock, both would miss the
+    // SELECT and either double-run `fn` or collide on the unique (tenant,key)
+    // index.
+    let calls = 0;
+    const run = () =>
+      withTenant(db, TENANT, (tx) =>
+        runIdempotent(
+          tx,
+          { tenantId: TENANT },
+          "svc-race-key",
+          { a: 1 },
+          async () => {
+            calls += 1;
+            await delay(RACE_WINDOW_MS);
+            return { ok: true, n: calls };
+          }
+        )
+      );
+    const [first, second] = await Promise.all([run(), run()]);
+    expect(calls).toBe(1);
+    expect(second).toEqual(first);
   });
 
   it("audit records an immutable row for a mutation", async () => {

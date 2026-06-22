@@ -12,6 +12,9 @@ const url = process.env.RLS_TEST_DATABASE_URL;
 const ORG = "org_e2e";
 const ADMIN = "u_admin_e2e";
 const CASHIER = "u_cashier_e2e";
+// A second tenant, for the cross-tenant FK-bypass regression test.
+const ORG_B = "org_e2e_b";
+const ADMIN_B = "u_admin_e2e_b";
 
 function makeCtx(userId: string, organizationId: string | null): Context {
   return {
@@ -47,37 +50,49 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     services = dbmod.services;
     withTenant = dbmod.withTenant;
 
-    // Clean this tenant (hermetic). FK-safe order; RLS scopes the deletes.
-    await withTenant(db, ORG, async (tx) => {
-      await tx.delete(schema.idempotencyKey);
-      await tx.delete(schema.outboxEvent);
-      await tx.delete(schema.auditLog);
-      await tx.delete(schema.saleLine);
-      await tx.delete(schema.invoice);
-      await tx.delete(schema.sale);
-      await tx.delete(schema.stockLedger);
-      await tx.delete(schema.membership);
-      await tx.delete(schema.product);
-      await tx.delete(schema.location);
-      await tx.delete(schema.company);
-    });
+    // Clean both tenants (hermetic). FK-safe order; RLS scopes the deletes.
+    const cleanTenant = (tenant: string) =>
+      withTenant(db, tenant, async (tx) => {
+        await tx.delete(schema.idempotencyKey);
+        await tx.delete(schema.outboxEvent);
+        await tx.delete(schema.auditLog);
+        await tx.delete(schema.saleLine);
+        await tx.delete(schema.invoice);
+        await tx.delete(schema.sale);
+        await tx.delete(schema.stockLedger);
+        await tx.delete(schema.membership);
+        await tx.delete(schema.product);
+        await tx.delete(schema.location);
+        await tx.delete(schema.company);
+      });
+    await cleanTenant(ORG);
+    await cleanTenant(ORG_B);
     // Identity tables are not RLS-scoped (managed by Better Auth) — upsert.
     await db
       .insert(schema.user)
       .values([
         { id: ADMIN, name: "Admin", email: "admin_e2e@example.com" },
         { id: CASHIER, name: "Cashier", email: "cashier_e2e@example.com" },
+        { id: ADMIN_B, name: "Admin B", email: "admin_e2e_b@example.com" },
       ])
       .onConflictDoNothing();
     await db
       .insert(schema.organization)
-      .values({ id: ORG, name: "E2E Tenant" })
+      .values([
+        { id: ORG, name: "E2E Tenant" },
+        { id: ORG_B, name: "E2E Tenant B" },
+      ])
       .onConflictDoNothing();
     await withTenant(db, ORG, (tx) =>
       tx.insert(schema.membership).values([
         { tenantId: ORG, userId: ADMIN, role: "tenant_admin" },
         { tenantId: ORG, userId: CASHIER, role: "cashier" },
       ])
+    );
+    await withTenant(db, ORG_B, (tx) =>
+      tx
+        .insert(schema.membership)
+        .values([{ tenantId: ORG_B, userId: ADMIN_B, role: "tenant_admin" }])
     );
   });
 
@@ -147,6 +162,50 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         appRouter.product.create,
         { sku: "X", name: "X", priceMinor: 1, currency: "USD" },
         cashier
+      )
+    ).rejects.toThrow();
+  });
+
+  it("blocks cross-tenant FK references (Postgres FK checks bypass RLS)", async () => {
+    // Postgres FK existence checks ignore RLS, so a tenant-scoped insert that
+    // references ANOTHER tenant's row would otherwise create a cross-tenant
+    // dangling reference. The routers guard this with an RLS-scoped existence
+    // read before insert; this proves it.
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+
+    // Tenant B owns a company + location.
+    const companyB = await call(
+      appRouter.company.create,
+      { name: "Co B" },
+      adminB
+    );
+    const locationB = await call(
+      appRouter.location.create,
+      { companyId: companyB.id, name: "Store B", type: "store" },
+      adminB
+    );
+
+    // Tenant A must NOT be able to attach a location to Tenant B's company.
+    await expect(
+      call(
+        appRouter.location.create,
+        { companyId: companyB.id, name: "Hijack", type: "store" },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // Nor receive stock against Tenant B's location (cross-tenant locationId).
+    const productA = await call(
+      appRouter.product.create,
+      { sku: "FK-A", name: "FK Prod A", priceMinor: 100, currency: "USD" },
+      admin
+    );
+    await expect(
+      call(
+        appRouter.inventory.receive,
+        { locationId: locationB.id, productId: productA.id, qty: 1 },
+        admin
       )
     ).rejects.toThrow();
   });
