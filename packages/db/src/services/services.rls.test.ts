@@ -7,12 +7,14 @@ import {
   company,
   idempotencyKey,
   location,
+  outboxEvent,
   product,
   stockLedger,
 } from "../schema";
 import { withTenant } from "../tenant";
 import { recordAudit } from "./audit";
 import { IdempotencyConflictError, runIdempotent } from "./idempotency";
+import { DomainEventType, emitEvent } from "./outbox";
 import { appendStockMovement, stockOnHand } from "./stock-ledger";
 
 // Core-service integration tests — need a real Postgres reached as retailos_app
@@ -42,6 +44,7 @@ describe.skipIf(!url)("core services (tenant-scoped, ADR 0006)", () => {
     await withTenant(db, TENANT, async (tx) => {
       await tx.delete(idempotencyKey);
       await tx.delete(auditLog);
+      await tx.delete(outboxEvent);
       await tx.delete(stockLedger);
       await tx.delete(product);
       await tx.delete(location);
@@ -142,5 +145,42 @@ describe.skipIf(!url)("core services (tenant-scoped, ADR 0006)", () => {
       tx.select().from(auditLog)
     );
     expect(after.length).toBe(before.length + 1);
+  });
+
+  it("outbox emits a pending versioned event in the same tx", async () => {
+    const row = await withTenant(db, TENANT, (tx) =>
+      emitEvent(
+        tx,
+        { tenantId: TENANT, correlationId: "corr-9", requestId: "req-9" },
+        { type: DomainEventType.SaleCreated, payload: { saleId: "x" } }
+      )
+    );
+    expect(row.type).toBe("sale.created");
+    expect(row.version).toBe(1);
+    expect(row.status).toBe("pending");
+    expect(row.correlationId).toBe("corr-9");
+    expect(row.requestId).toBe("req-9");
+    expect(row.tenantId).toBe(TENANT);
+  });
+
+  it("a rolled-back transaction emits no event (same-tx atomicity)", async () => {
+    const before = await withTenant(db, TENANT, (tx) =>
+      tx.select().from(outboxEvent)
+    );
+    await expect(
+      withTenant(db, TENANT, async (tx) => {
+        await emitEvent(
+          tx,
+          { tenantId: TENANT },
+          { type: DomainEventType.SaleCreated, payload: {} }
+        );
+        // Force rollback after the emit: the event row must roll back with it.
+        throw new Error("boom");
+      })
+    ).rejects.toThrow("boom");
+    const after = await withTenant(db, TENANT, (tx) =>
+      tx.select().from(outboxEvent)
+    );
+    expect(after.length).toBe(before.length);
   });
 });

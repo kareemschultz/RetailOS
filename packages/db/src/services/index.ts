@@ -3,5 +3,6 @@
 export * from "./audit";
 export * from "./idempotency";
 export * from "./money";
+export * from "./outbox";
 export * from "./stock-ledger";
 export * from "./types";

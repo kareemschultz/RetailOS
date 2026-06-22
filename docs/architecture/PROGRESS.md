@@ -16,7 +16,7 @@
 - **Mode:** unattended overnight. Branch **`vs1-phase1`** (never master; all work = PRs for review).
 - **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
 - **Order:** VS#1 Commits 2→7, then phase roadmap §31 (Phase 1→2→3…) with §41/§42/§45 gates before any new module.
-- **Current step:** VS#1 **Commit 5** (events + outbox, scoped) — starting.
+- **Current step:** VS#1 **Commit 6** (oRPC routers) — starting.
 
 ### ⛔ BLOCKERS awaiting your decision (none yet)
 *(When I hard-stop, the blocker + analysis + options go here.)*
@@ -26,7 +26,7 @@
 - *Next expected:* Phase 2 inventory costing FIFO/LIFO/avg.
 
 ### ✅ PRs opened
-- **PR #1** — `vs1-phase1` → master — VS#1 tenant-isolation spine. Commits 1–4 landed (schema; fail-closed RLS + 3-role bootstrap; core services; standardized request context + tenant guard). Open for review; DO NOT MERGE.
+- **PR #1** — `vs1-phase1` → master — VS#1 tenant-isolation spine. Commits 1–5 landed (schema; fail-closed RLS + 3-role bootstrap; core services; request context + tenant guard; events/outbox). Open for review; DO NOT MERGE.
 
 ---
 
@@ -98,6 +98,8 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - Scaffold reality: Better Auth = email/password + Expo plugin only; DB = auth schema only, no migrations; 2 demo oRPC procedures; docker-compose = postgres + web only. All charter foundation domain work (tenant/RBAC/audit/RLS/Redis/object storage/Better Auth plugins) is NOT yet built (deferred past Phase-0 lock-in).
 
 ## Changelog (newest first)
+
+- **2026-06-22** — VS#1 **Commit 5** (PR #1): transactional outbox. `emitEvent(tx, ctx, {type, version?, payload})` writes one `outbox_event` row in the SAME tx (versioned envelope = the row: type/version/tenant/correlation/request/created_at + jsonb payload). `DomainEventType` consts (inventory.received, sale.created). No dispatcher/consumers/Svix/DLQ yet (deferred). Tests incl. same-tx rollback atomicity (rolled-back tx emits no event). Codex: 0 findings. 18 db tests vs real PG; gates green.
 
 - **2026-06-22** — VS#1 **Commit 4** (PR #1): standardized request context + tenant guard. `RequestContext` `{tenantId, organizationId, actorUserId, employeeId?, sessionId?, impersonatorUserId?, requestId, correlationId, source, deploymentMode}` (superset of db ServiceContext) built fail-closed by `buildRequestContext` (UNAUTHORIZED w/o user, FORBIDDEN w/o active org); `tenantProcedure` = protectedProcedure + tenant guard. `tenantId` comes ONLY from session.activeOrganizationId (not client headers). Added `DEPLOYMENT_MODE` env; `check-types` added to api+env (now 6 pkgs gated). Codex review: 0 findings. Gates green; 3 guard unit tests.
 
