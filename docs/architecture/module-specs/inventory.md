@@ -13,11 +13,15 @@
 
 > The charter fixes the **architecture** (ledger-based inventory, money in minor units, multi-tenant, audit-everything) but deliberately leaves a number of **product/business policy** choices to the owner. **Implementation of Phase 2 must not begin until each decision below is made by the product owner.** Each item lists the options, trade-offs, a **recommended default (a recommendation, not a decision)**, and what the decision **blocks**. Record the full resolution set as an ADR before coding.
 
-> **Decision status (updated 2026-06-22):**
-> - ✅ **D1 — costing method: DECIDED** (owner directive) — AVCO default, FIFO per tenant/category/product, no LIFO. See D1 below.
-> - ✅ **D5 — negative-stock / oversell: DECIDED** (owner directive) — allow-oversell-with-flagging default, hard-block configurable per tenant/category/product. See D5 below.
+> **Decision status (updated 2026-06-22):** all product-policy decisions are now **LOCKED** by owner directive; only the monetary rounding *mode* stays open (and is not needed until Phase 5). These are the entry criteria for Phase-2 implementation — record the full set as an ADR before coding.
+> - ✅ **D1 — costing method: DECIDED** — AVCO default; FIFO per tenant/category/product; no LIFO. See D1.
+> - ✅ **D2 — multi-UoM: DECIDED** — canonical base units; integer-ratio conversion factors where possible; purchase/stock/sale/reporting units; conversions tenant/category/product configurable. See D2.
+> - ✅ **D3 — serial/batch/lot: DECIDED** — model all three (serial + batch/lot + expiry); ship lot/batch first; serial stubbed but schema must not block it. See D3.
+> - ✅ **D4 — expiry/FEFO: DECIDED** — NOT a global hard-block; tenant/category/product configurable; general-retail default warn-and-override (audited `inventory.override_expiry`); pharmacy/regulated/controlled hard-block selectable per category/product. See D4.
+> - ✅ **D5 — negative-stock / oversell: DECIDED** — allow-oversell-with-flagging default; hard-block configurable per tenant/category/product. See D5.
+> - ✅ **D6 — barcode: DECIDED** — data-driven parser configuration; document GS1/EAN/UPC/Code128 + variable-measure/weight-embedded; conservative Phase-2 build (do not build every standard at once). See D6.
+> - ✅ **D7 — reorder: DECIDED** — fixed min/max rules; suggestions only; no auto-PO; manager approval required before any procurement action. See D7.
 > - ⏳ **D-money — rounding mode: STILL OPEN** (owner directive) — do **not** pick a mode; pending verification of the Guyana/GRA VAT rounding rule and other target-country tax rules. Do not assume banker's or half-up. (Not needed until Phase 5 tax/FX division; tracked in the deferred-decisions log.)
-> - ⏳ **D2, D3, D4, D6, D7 — STILL OPEN** — awaiting owner decision at the Phase-2 approval gate. No Phase-2 schema/costing code until resolved.
 
 ### D1 — Inventory costing method ✅ DECIDED (2026-06-22, owner directive)
 **The charter (§18) lists "FIFO, LIFO, weighted average" as *supported valuation methods* but does not say which is the default, nor whether it is per-tenant / per-company / per-SKU configurable.** This is the single highest-impact decision in the module — it changes the `stock_movement` valuation engine, COGS posting (§20), and every valuation report.
@@ -38,7 +42,25 @@
 - **Still to confirm at the approval gate (mechanics, not the method):** (a) resolution precedence when product / category / tenant settings differ (recommend most-specific-wins: product → category → tenant default); (b) whether changing a SKU's method after movements exist is allowed (recommend: **locked once movements exist**; change only via an explicit, audited revaluation event); (c) AVCO is computed per **SKU×location** (location-scoped average), confirm vs company-wide average.
 - **Blocks (now unblocked for design, pending the mechanics above):** the `valuation_layer` table (needed for FIFO), the AVCO running `avg_cost` per SKU×location, the costing-strategy resolver + config columns on `tenant`/`category`/`product`/`sku`, the `StockLedger` valuation/COGS computation, every valuation report, and the §20 COGS posting interface. **Both** the FIFO `valuation_layer` table **and** the AVCO `avg_cost` projection must exist (a tenant can use both), so neither is gated away.
 
-### D2 — Multi-UoM model (how conversions are defined & stored) ⏳ OPEN (owner decision required)
+### Costing Strategy Examples (how D1 resolves per tenant → category → product)
+
+The effective costing method for a given stock movement is resolved **most-specific-wins**: a **product**-level setting overrides its **category** setting, which overrides the **tenant** default (AVCO if nothing is set). Both storage paths exist for every tenant (`avg_cost` projection for AVCO SKUs, `valuation_layer` cost layers for FIFO SKUs), so the four examples below all run on one schema.
+
+| Vertical | Tenant default | Category override | Product override | Resolved behavior |
+|---|---|---|---|---|
+| **Supermarket** | **AVCO** | — | — | Everything uses the AVCO running average — simplest, stable margins on fast-moving grocery. |
+| **Pharmacy** | **FIFO** | — | (lots tracked) | **FIFO + FEFO**: FIFO cost layers for COGS accuracy; FEFO (D4) drives which lot is picked (soonest-expiry first). Batch/expiry from D3. |
+| **Hardware store** | **AVCO** | high-value tools/electronics → **FIFO** | individual serialized items → **FIFO** + serial | General nuts-and-bolts inventory uses AVCO; high-value/serialized lines resolve to FIFO (per-cost-layer accuracy + serial tracking from D3). |
+| **Mixed-vertical tenant** | **AVCO** | `pharmacy` category → **FIFO**, `grocery` category → **AVCO** | — | AVCO and FIFO categories sit **side by side** in one catalog; each movement resolves independently. |
+
+Resolution walk-through (hardware store, a serialized laptop SKU):
+1. **Product** setting present? laptop SKU → `FIFO` → **use FIFO** (stop). Its movements write/consume `valuation_layer` rows.
+2. If the product had no setting → check its **category** (`electronics` → `FIFO`).
+3. If the category had none → fall back to the **tenant default** (`AVCO`) → movements update `avg_cost`.
+
+The same resolver pattern (product → category → tenant default) is reused by D2 (UoM conversions), D4 (expiry/FEFO enforcement), and D5 (oversell) — one consistent configuration model across the module.
+
+### D2 — Multi-UoM model (how conversions are defined & stored) ✅ DECIDED (2026-06-22, owner directive)
 **Charter §18 requires "buy cartons, stock units, sell cartons or units" (multi-UoM) but does not specify the conversion model.** The ledger must store quantities in **one canonical base unit** (so on-hand math is unambiguous), with display/transaction UoMs converting to/from it.
 
 **Competitor evidence** (`competitive/inventory.md`, cited): **NetSuite forbids fractional/decimal base conversions**; **ERPNext allows decimal factors but with documented rounding bugs** (and a "Must be Whole Number" flag); **Zoho** supports up to 6 decimal places; **Odoo** converts only within a shared UoM *category* (reference unit + ratio); **Cin7 Core** makes each alternate UoM its **own SKU** (SKU explosion); **Finale** has **no auto UoM conversion on POs**. RetailOS's exact integer-minor-unit base + scaled conversion is a **parity-plus** (avoids both the fractional-rounding bugs and the SKU explosion).
@@ -49,11 +71,16 @@
 | **Base unit + rational/scaled conversions** (factor + scale, e.g. 1 kg = 1000 g) | Handles weight/volume goods (deli, hardware-by-length, supermarket scale items). | More complex; rounding policy on conversion must be defined (§19 one-rounding-policy rule). |
 | **Per-SKU UoM set with one flagged `is_base`** | Flexible per product; matches Cin7/Fishbowl. | More tables; validation that exactly one base exists. |
 
-- **Recommended default:** a **`unit_of_measure` + `uom_conversion`** model where each SKU declares one **base unit** and N **alternate units** with a `factor` + `factor_scale` (integer numerator/denominator or scaled-integer) so both discrete (carton↔each) and weighed (kg↔g) goods work without floats. Ledger `qty` is **always base-unit minor** (mirrors money's minor-unit discipline). Conversions apply the **single tenant rounding policy** (§19).
-- **Decide:** (a) is UoM defined per-SKU or shared catalog-wide with per-SKU base assignment; (b) are fractional/weight UoMs in Phase 2 scope or deferred; (c) rounding direction on conversion (recommend: round-half-even, consistent with the money policy once D-money is set).
-- **Blocks:** `unit_of_measure`/`uom_conversion` schema, every `inventory.receive`/`pos.createSale` quantity field, barcode→qty parsing for weight-embedded codes (see D6), and reorder-point units.
+**✅ DECISION (owner directive, 2026-06-22):**
+- **Canonical base units.** Every SKU declares exactly one **base unit**; the ledger `qty` is **always stored in base-unit minor units** (mirrors money's minor-unit discipline) so on-hand math is exact and unambiguous.
+- **Conversion factors stored as integer ratios where possible** (`factor` + `factor_scale`, e.g. carton = 24 × each as an integer factor; weighed goods use a scaled-integer ratio like 1 kg = 1000 g) — **no float drift**. Fractional/weight UoM is supported via the scaled-integer ratio, not floats.
+- **Four UoM roles supported:** **purchase unit**, **stock unit** (= base), **sale unit**, and **reporting unit** — each maps to the base via a conversion so buying cartons, stocking eaches, selling eaches, and reporting in any unit all stay ledger-consistent.
+- **Conversions are tenant / category / product configurable** (same most-specific-wins resolver pattern as D1/D5) — a tenant can define standard conversions, a category can override, and a product can override further.
+- **Model:** `unit_of_measure` (catalog of units) + `uom_conversion` (base ↔ alternate, integer `factor`/`factor_scale`, scoped/overridable per tenant/category/product) + a `base_uom` reference on the SKU.
+- **Still to confirm at the approval gate (mechanics):** (a) whether `unit_of_measure` is a per-tenant shared catalog or fully per-SKU (recommend shared catalog + per-SKU base assignment + per-product conversion overrides); (b) the conversion rounding *direction* depends on the still-open D-money rounding mode — a conversion that cannot be represented as an exact integer in the base unit is **rejected for discrete-only SKUs** and rounded under the (pending) single policy only for weighed SKUs.
+- **Blocks:** `unit_of_measure`/`uom_conversion` schema + per-tenant/category/product override resolver, every `inventory.receive`/`pos.createSale` quantity field, barcode→qty parsing for weight-embedded codes (see D6), and reorder-point units.
 
-### D3 — Serial / batch / lot tracking scope for Phase 2 ⏳ OPEN (owner decision required)
+### D3 — Serial / batch / lot tracking scope for Phase 2 ✅ DECIDED (2026-06-22, owner directive)
 **Charter §18 requires serial/batch/lot/expiry across verticals (pharmacy/supermarket FEFO, electronics serials) but does not say which is mandatory in Phase 2 vs which capture point (at-receive vs at-sale).** Tracking mode is a **per-SKU** property.
 
 **Competitor evidence** (`competitive/inventory.md`, cited): **Zoho** forces an item to be serial **XOR** batch (never both); **NetSuite, Odoo, ERPNext, Cin7, Fishbowl, Finale** all support lot/batch + expiry and serial, with serial captured at **receive** (and again at sale/fulfillment); RMA/warranty serial flows are confirmed in **NetSuite/ERPNext** and unverified elsewhere. Supports modelling all modes now, shipping lot+expiry in Phase 2, and stubbing serial for the Phase-4 POS / electronics vertical.
@@ -64,11 +91,14 @@
 | **Phase 2 = model all three modes, implement `batch/lot` + `expiry`, stub `serial`** | Delivers the highest-value Caribbean need (pharmacy/supermarket batch+expiry+FEFO) and locks the ledger shape so serial drops in later without migration churn. | More work than the minimal slice. |
 | **Phase 2 = full serial + batch + lot + expiry** | Complete. | Large; electronics-serial capture-at-sale + RMA flows pull in POS/warehouse concerns that belong to later phases. |
 
-- **Recommended default:** **per-SKU `tracking_mode ∈ {none, lot, serial}` modelled now**; **implement `lot` (with batch number + expiry) + FEFO in Phase 2**, and **stub `serial`** (column + ledger seam present, capture flows deferred to Phase 4 POS / electronics vertical). Capture point: **lot captured at receive** (and selected at sale); **serial capture-at-receive vs at-sale** is itself a sub-decision deferred with the serial stub.
-- **Decide:** (a) which modes ship functional in Phase 2; (b) for lots — is expiry mandatory when `tracking_mode = lot` or optional; (c) serial capture point (receive vs sale) when serial is implemented.
-- **Blocks:** the `lot`/`serial` tables, the `stock_movement` lot/serial FK, FEFO picking (D4), expiry alerts/reporting, and the receive/sale router payload shape.
+**✅ DECISION (owner directive, 2026-06-22):**
+- **Model all three modes now:** per-SKU `tracking_mode ∈ {none, lot, serial}`, plus **expiry** as a first-class attribute of a lot. The schema and ledger seam are designed so **serial does not require a later migration** to enable.
+- **Ship lot/batch + expiry first** (Phase 2): batch number + expiry captured at receive and selected at issue; this is the highest-value Caribbean need (pharmacy/supermarket) and unblocks FEFO (D4).
+- **Serial may be stubbed** in Phase 2 (the `serial` table + the `stock_movement.serial_id` seam exist; capture/RMA flows are deferred to Phase 4 POS / the electronics vertical) — **but the schema must not block it later** (the FK and tracking-mode enum are present from the start).
+- **Still to confirm at the approval gate (mechanics):** (a) whether expiry is mandatory when `tracking_mode = lot` (recommend mandatory for lot-tracked); (b) the serial capture point (receive vs sale) when serial is implemented (deferred with the stub).
+- **Blocks:** the `lot` (batch no., expiry, mfg date) and `serial` (stub) tables, the `stock_movement` nullable `lot_id`/`serial_id` FKs, FEFO picking (D4), expiry alerts/reporting, and the receive/sale router payload shape.
 
-### D4 — Expiry / FEFO enforcement policy ⏳ OPEN (owner decision required — do NOT assume a universal hard-block)
+### D4 — Expiry / FEFO enforcement policy ✅ DECIDED (2026-06-22, owner directive — NOT a global hard-block)
 **Charter §18 names "FEFO picking, batch/expiry tracking, expiry alerts" for pharmacy/supermarket but does not set the *enforcement* strength.** Two related-but-distinct questions: (1) **FEFO picking order** — does the system *suggest* vs *force* the soonest-expiry lot? and (2) **expired-lot handling** — what happens when someone tries to sell an already-expired lot? **Per owner directive, RetailOS must NOT assume a universal hard-block** — pharmacy/regulated goods may require hard-block, while supermarket/general retail typically needs warn-and-override.
 
 **Competitor evidence** (`competitive/inventory.md`, cited): automated FEFO is confirmed in **Cin7 Core (with explicit warn-OR-enforce validation), Odoo, NetSuite (SuiteApp), ERPNext** (its `Pick Serial/Batch Based On` is configurable to FIFO/LIFO/**Expiry**); FEFO is **manual or unverified** in Zoho, inFlow, Finale, Fishbowl. **No competitor imposes a universal hard-block** — the market norm is advisory or configurable. This validates the directive.
@@ -81,8 +111,13 @@ The three policy options (apply independently to FEFO ordering and to expired-lo
 | **Warn-and-override-with-permission** (system warns + suggests soonest-expiry; a user with permission may override, audited) | Flexible; keeps the human in the loop; matches real-world (skip damaged/quarantined lots). | Allows selling near/at-expiry stock when overridden — relies on the audit trail + permission gate. | Supermarket, general retail. |
 | **Per tenant / category / product configurable** (resolve hard-block vs warn-override most-specific-wins) | One platform serves pharmacy *and* supermarket; matches the D1/D5 strategy pattern. | More config surface; clear surfacing required. | Mixed-vertical tenants (the RetailOS norm). |
 
-- **Recommendation (recommendation only — NOT a decision):** make D4 **configurable per tenant/category/product** (option 3), with the **platform default = warn-and-override-with-permission** (`inventory.override_expiry`) for general retail, and **hard-block selectable** for pharmacy/controlled/regulated categories. This mirrors the D1 costing and D5 oversell strategy pattern (policy resolved above a neutral ledger). **It deliberately does NOT bake in a universal hard-block.**
-- **Decide (OPEN — owner):** (a) FEFO picking strength default (advisory vs enforced); (b) expired-lot handling default (warn-and-override vs hard-block) and whether it is per tenant/category/product; (c) the permission that gates an override (`inventory.override_expiry`); (d) whether near-expiry (not yet expired) is warned at a configurable horizon.
+**✅ DECISION (owner directive, 2026-06-22):**
+- **Expired-lot sale is NOT a global hard-block.** The policy is **tenant / category / product configurable** (same most-specific-wins resolver as D1/D5).
+- **General-retail default = warn-and-override-with-permission:** the system warns and suggests the soonest-expiry lot; a user holding `inventory.override_expiry` may proceed, and the override is **audit-logged** (§22/§25).
+- **Pharmacy / regulated / controlled goods = hard-block selectable per category/product:** where configured, selling an expired (or out-of-FEFO-order, where enforced) lot is rejected outright; any override still requires the audited `inventory.override_expiry` permission.
+- **FEFO picking order** follows the same resolver: advisory (suggest soonest-expiry) by default, enforceable per category/product.
+- **Override is always audited** via `inventory.override_expiry` — no silent expired-lot sales.
+- **Still to confirm at the approval gate (mechanics only):** (a) the near-expiry warning horizon (configurable, e.g. N days before expiry); (b) whether the resolver also honors a location-level setting.
 - **Blocks:** picking/allocation logic, the POS lot-selection UX (Phase 4), expiry-alert thresholds, the `inventory.override_expiry` permission, and the per-tenant/category/product policy resolver.
 
 ### D5 — Negative-stock / oversell policy ✅ DECIDED (2026-06-22, owner directive)
@@ -102,7 +137,7 @@ The three policy options (apply independently to FEFO ordering and to expired-lo
 - **Still to confirm at the approval gate (mechanics):** (a) default config granularity surface (we model per tenant/category/product; confirm location-level too); (b) precedence (recommend most-specific-wins: product → category → tenant); (c) whether the discrepancy event also auto-opens a cycle-count task or just alerts.
 - **Blocks:** the oversell **policy resolver** (separate from `StockLedger.append`, which stays neutral), POS sale acceptance, the `inventory.stock_discrepancy` event + manager-dashboard consumer, `inventory.override_negative` permission for manual overrides, valuation of negative on-hand, and the §14 offline reconciliation design.
 
-### D6 — Barcode symbologies + weight/price-embedded barcode format ⏳ OPEN (owner decision — keep Phase 2 build conservative)
+### D6 — Barcode symbologies + weight/price-embedded barcode format ✅ DECIDED (2026-06-22, owner directive — conservative Phase-2 build)
 **Charter §18 requires "weight/price embedded barcode parsing and scale integration" for supermarkets but the embedded-barcode *format is region/retailer-specific* and not specified.** EAN-13 prefixes `20–29` are reserved for in-store/variable-measure items, but the digit layout (which digits are item code vs weight vs price vs check digit) **varies per retailer/region** and must be configurable, not hardcoded (§12 "country configuration must be data-driven"). Standard symbologies to support: **GS1, EAN-13, UPC-A, EAN-8, Code-128, QR**.
 
 **Competitor evidence** (`competitive/inventory.md`, cited): **only Cin7 Core and Odoo natively parse weight/price-embedded barcodes** (Cin7 via POS GS1/weight/price barcodes; Odoo via a configurable EAN-13 nomenclature with "Weight/Price Barcodes N Decimals"); **Finale** is partial (Bluetooth-scale weight capture, not retail price-embedded EAN-13); **NetSuite, ERPNext, Zoho, inFlow, Fishbowl have none**. So variable-weight parsing is both a **real differentiator** and **not** table-stakes — it can be **modelled now and built conservatively** (the data-driven format config + parser *interface* in Phase 2; the live scale/parser implementation with the Phase-4 POS / hardware bridge, §16). **Phase 2 build scope stays conservative**: standard-symbology `barcode` table + the configurable embedded-format seam, no live scale integration.
@@ -113,11 +148,14 @@ The three policy options (apply independently to FEFO ordering and to expired-lo
 | **Configurable embedded-barcode parser** (tenant defines prefix + field map: item-code / weight / price positions + check) | Works across regions/retailers; future-proof. | More config + a parser interface. |
 | **Defer weight-embedded parsing to a later POS/scale phase** | Smaller Phase 2. | Supermarket vertical can't pilot. |
 
-- **Recommended default (recommendation only):** Phase 2 ships **standard symbology support (EAN-13/UPC-A/EAN-8/Code-128/QR) on the `barcode` table**, and **models a configurable weight/price-embedded barcode parser interface (tenant-defined prefix + field map)** but **defers the live scale-integration + parser implementation to the Phase 4 POS / hardware-bridge work** (§16). The *format config* is decided now so the schema seam exists.
-- **Decide:** (a) which symbologies are in Phase 2 scope; (b) whether the embedded-barcode parser ships in Phase 2 or Phase 4; (c) the default embedded-barcode field-map template for the launch market (GRA/Guyana) — must be data-driven, overridable per tenant.
-- **Blocks:** the `barcode` table format, the embedded-parser interface, scale integration (§16), and the POS scan path.
+**✅ DECISION (owner directive, 2026-06-22):**
+- **Barcode formats are driven by a data-driven parser configuration** — never hardcoded layouts (§12). The variable-measure/weight-embedded layout (which digits are item-code vs weight vs price vs check) is a **tenant-defined prefix + field-map**, overridable per tenant.
+- **Documented support:** **GS1, EAN-13, UPC-A, EAN-8, Code-128** standard symbologies, plus **variable-measure / weight-price-embedded** parsing via the data-driven config.
+- **Conservative Phase-2 build (do NOT build every standard at once):** Phase 2 ships the **`barcode` table** (standard symbologies, multiple per SKU) and the **data-driven embedded-format *config/parser interface*** — but the **live scale integration and the full embedded-parser implementation are deferred to the Phase-4 POS / hardware bridge** (§16). The format config exists now so the schema seam is right; the runtime parsing arrives with the scale hardware.
+- **Still to confirm at the approval gate (mechanics only):** the default embedded-barcode field-map *template* for the launch market (GRA/Guyana) — data-driven and per-tenant overridable.
+- **Blocks:** the `barcode` table, the embedded-parser config interface, scale integration (§16), and the POS scan path.
 
-### D7 — Reorder-point automation (suggest vs auto-PO) ⏳ OPEN (owner decision required)
+### D7 — Reorder-point automation (suggest vs auto-PO) ✅ DECIDED (2026-06-22, owner directive)
 **Charter §18 lists "reorder levels, min/max stock" and "reorder suggestions" but does not say whether reorder triggers *suggest* a PO or *auto-create* one.**
 
 **Competitor evidence** (`competitive/inventory.md`, cited): per-location reorder points are near-universal (Cin7, inFlow, Finale, NetSuite, Odoo); demand-based/auto reordering exists in **Finale (sales-velocity), Cin7 (AI Smart Reorder), Fishbowl (MRP), NetSuite (Demand/Supply Planning), ERPNext (auto Material Request), Odoo (auto-trigger PO/MO)** — but every one of these depends on supplier/cost data and an approval workflow. Since RetailOS procurement (suppliers, POs, landed cost, approvals) is **Phase 6**, auto-PO cannot land in Phase 2 without that data — supporting suggest-only now.
@@ -128,11 +166,14 @@ The three policy options (apply independently to FEFO ordering and to expired-lo
 | **Auto-create draft PO** (system drafts, human approves) | Faster replenishment; still gated. | Needs supplier/cost data + approval wiring (Procurement, Phase 6). |
 | **Fully automatic PO** (auto-create + auto-approve) | Hands-off. | Risky; bypasses the §22 approval workflow; not recommended. |
 
-- **Recommended default:** **suggest only in Phase 2** (low-stock alert via §22 notifications + a reorder-suggestion report), with **auto-draft-PO deferred to Procurement (Phase 6)** where supplier/landed-cost data exists, and always gated by the §22 PO-approval workflow. **Never fully automatic.**
-- **Decide:** (a) Phase 2 = suggest-only confirmation; (b) reorder-point math (fixed min/max vs demand-based / lead-time aware — recommend fixed min/max in Phase 2, demand-based later); (c) per-SKU/per-location reorder points.
-- **Blocks:** the `reorder_rule` schema (min/max + location), the low-stock alert event (§22/§24), and the Procurement auto-draft seam (Phase 6).
+**✅ DECISION (owner directive, 2026-06-22):**
+- **Fixed min/max reorder rules** in Phase 2 (`reorder_rule`: SKU × location, min, max). Demand-based / lead-time-aware reordering is deferred to a later phase.
+- **Generate reorder *suggestions* only** — a low-stock alert (§22 notifications) + a reorder-suggestion report. **No automatic purchase orders.**
+- **No auto-create of POs** in Phase 2 (procurement — suppliers, costs, approvals — is Phase 6). **Manager approval is required before any procurement action**; the suggestion never turns into a PO without a human, gated by the §22 approval workflow.
+- **Still to confirm at the approval gate (mechanics only):** reorder-point granularity (per-SKU and per-location confirmed; whether a category default is also offered).
+- **Blocks:** the `reorder_rule` schema (min/max + location), the `inventory.low_stock` alert event (§22/§24) + reorder-suggestion report, and the Procurement auto-draft seam (Phase 6, gated by approval).
 
-> **Summary of HARD-STOP decisions:** ✅ **D1** costing method *(DECIDED: AVCO default + FIFO per tenant/category/product, no LIFO)* · ⏳ **D2** multi-UoM model · ⏳ **D3** serial/batch/lot scope · ⏳ **D4** expiry/FEFO enforcement · ✅ **D5** negative-stock/oversell *(DECIDED: allow-with-flagging default + per tenant/category/product hard-block)* · ⏳ **D6** barcode symbologies + weight-embedded format · ⏳ **D7** reorder automation · ⏳ **D-money** rounding mode *(OPEN — pending GRA/target-country VAT rounding verification; do not assume a mode)*. The ⏳ items still need an owner decision; all resolutions (decided + pending) are recorded in an ADR before Phase 2 coding.
+> **Summary of HARD-STOP decisions (all product policy LOCKED 2026-06-22):** ✅ **D1** costing *(AVCO default + FIFO per tenant/category/product, no LIFO)* · ✅ **D2** multi-UoM *(canonical base units, integer-ratio factors, purchase/stock/sale/reporting units, tenant/category/product configurable)* · ✅ **D3** serial/batch/lot *(model all three; lot/batch+expiry first; serial stubbed, schema doesn't block it)* · ✅ **D4** expiry/FEFO *(NOT global hard-block; tenant/category/product configurable; general-retail warn-and-override, pharmacy/regulated hard-block selectable; audited override)* · ✅ **D5** oversell *(allow-with-flagging default + per tenant/category/product hard-block)* · ✅ **D6** barcode *(data-driven parser config; GS1/EAN/UPC/Code128 + variable-measure; conservative Phase-2 build)* · ✅ **D7** reorder *(fixed min/max, suggestions only, no auto-PO, manager approval)* · ⏳ **D-money** rounding mode *(OPEN — pending GRA/target-country VAT verification; do not assume a mode; first needed Phase 5)*. Only the rounding mode remains open; all resolutions are recorded in an ADR before Phase 2 coding.
 
 ---
 
