@@ -4,8 +4,8 @@ Phase sequencing per charter §31. Status tracked here; update as phases progres
 
 | Phase | Scope (charter §31) | Status |
 |---|---|---|
-| **0 — Architecture & Foundation** | Charter review, gap analysis, domain model, ERD, governance docs, env strategy, registry/MCP + UI sourcing, design tokens, CI/test infra, Vertical Slice #1 design | **In progress** |
-| 1 — Identity, Tenant, RBAC, Audit | Better Auth plugins, tenant context, RBAC/entitlements, audit, RLS foundation | Not started |
+| **0 — Architecture & Foundation** | Charter review, gap analysis, domain model, ERD, governance docs, env strategy, registry/MCP + UI sourcing, design tokens, CI/test infra, Vertical Slice #1 design | **✅ Complete (locked-in)** |
+| 1 — Identity, Tenant, RBAC, Audit | Better Auth plugins, tenant context, RBAC/entitlements, audit, RLS foundation | **Next (starting)** |
 | 2 — Products & Inventory Ledger | products/variants/SKU/barcode, stock ledger, multi-UoM, serial/batch/expiry | Not started |
 | 3 — Locations, Warehouses, Bonds | companies/locations/warehouses/bonded, transfers, bond release, bins | Not started |
 | 4 — POS & Offline Queue | sale mutation, payments, receipts, shifts, offline queue, idempotency, number blocks, Tauri POS | Not started |
@@ -23,8 +23,8 @@ Phase sequencing per charter §31. Status tracked here; update as phases progres
 
 **Done (committed):**
 - UI component inventory (`ui-inventory/`, 10 files), live-verified across shadcn core/studio Pro/Magic UI free+Pro/ReUI; registry config corrected (root + `packages/ui`); `lessons-learned.md` (12+ entries); `.claude/CLAUDE.md`.
-- This pass: charter committed; root `CLAUDE.md`; ADRs 0001–0003; module-spec template; glossary; this roadmap; competitive program; architecture-review doc set; Vertical Slice #1 design; CI/test/docker foundation config.
+- This pass: charter committed; root `CLAUDE.md`; ADRs 0001–0005; module-spec template; glossary; this roadmap; competitive program; architecture-review doc set; Vertical Slice #1 design; CI/test/docker foundation config; Docker image optimization (2.38GB→168MB) + dependency alignment.
 
-**Remaining for Phase-0 lock-in (§46):** all green per `phase-0-checklist.md` (`check-types`/`check`/`test` pass, CI green, Docker build verified) — then Phase 1 begins.
+**Phase-0 lock-in (§46): COMPLETE** — `check-types`/`check`/`test` green, CI green on master, Docker image builds + boots. A 2026-06-21 audit-only red-team pass (`phase-0-audit.md`) found **zero CRITICAL / zero HIGH**; stale-metadata MEDIUMs resolved; engineering items queued. Phase 1 begins.
 
 > The first **feature** work is Vertical Slice #1 (§32), implemented only after this architecture review is approved (ADR 0002).

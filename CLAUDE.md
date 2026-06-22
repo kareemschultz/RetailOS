@@ -22,6 +22,8 @@
 - Accounting, CRM, ecommerce: `docs/architecture/accounting-crm-ecommerce.md`
 - Platform/SaaS/integrations/events: `docs/architecture/platform-saas-integrations.md`
 - Quality, security, ops: `docs/architecture/quality-security-ops.md` and `docs/architecture/security-baseline.md`
+- Docker images & CI/CD (source of truth): `docs/architecture/docker-and-cicd.md`
+- Tech stack & verified dependency versions: `docs/architecture/tech-stack.md`
 - Folder structure, conventions, env matrix: `docs/architecture/folder-structure-conventions.md`
 - UI/UX & component sourcing: `docs/architecture/ui-ux-plan.md` + `docs/architecture/ui-inventory/INDEX.md`
 - Vertical Slice #1 design: `docs/architecture/vertical-slice-1.md`

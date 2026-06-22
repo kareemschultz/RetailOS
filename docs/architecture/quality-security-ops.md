@@ -162,21 +162,25 @@ Every `lessons-learned.md` entry for a bug or architectural failure gets a corre
 
 | Gate | Tool | Status |
 |---|---|---|
-| Type check | `bun run check-types` (turbo `tsc`) | **Wired now** (root script exists) |
-| Lint + format | Biome / Ultracite (`bun run check`) | **Wired now** (root script exists) |
-| Unit + integration | Vitest (`bun run test`) | **TODO** — `test` script not yet wired (§28) |
-| E2E + VRT | Playwright (incl. offline-E2E, per-theme VRT) | **TODO** — Playwright config not yet added |
-| Accessibility | WCAG **2.2 AA** automated checks | **TODO** |
-| SAST + secret scan | static analysis + secret detection | **TODO** |
-| Dependency audit | `bun`/`npm audit` or equivalent | **TODO** |
-| Container scan | **Trivy** (or equivalent) before registry push | **TODO** |
-| Bundle-size + perf budgets | bundle analysis + §44 budgets | **TODO** |
+| Type check | `bun run check-types` (turbo `tsc`) | ✅ **Wired** (CI quality job) |
+| Lint + format | Biome / Ultracite (`bun run check`) | ✅ **Wired** (CI quality job) |
+| Unit + integration | Vitest (`bun run test`) | ✅ **Wired** (`vitest run`, CI quality job) |
+| E2E + VRT | Playwright (incl. offline-E2E, per-theme VRT) | ✅ E2E wired (CI e2e job, artifact upload); VRT still TODO |
+| Build | `turbo build --filter=!fumadocs` + Docker image build | ✅ **Wired** (CI quality + docker jobs; web ≤350MB size budget) |
+| Accessibility | WCAG **2.2 AA** automated checks | **TODO** (Phase 1+) |
+| SAST + secret scan | static analysis + secret detection | **TODO** (Phase 1+) |
+| Dependency audit | `bun`/`npm audit` or equivalent | **TODO** (Phase 1+) |
+| Container scan | **Trivy** (or equivalent) before registry push | **TODO** (CI/CD phase — see `docker-and-cicd.md`) |
+| Bundle-size + perf budgets | bundle analysis + §44 budgets | **TODO** (Phase 1+; only Docker image-size budget enforced today) |
 
-> **Wired NOW:** `check-types`, `check`/`fix` (root `package.json`). **TODO (Phase 0/1, §28):** a `test` and `lint` root script, `.github/workflows/ci.yml`, Vitest config, Playwright config — none exist in the scaffold yet and must be added before Phase-0 lock-in (§46).
+> **Wired NOW:** `check-types`, `check`, `test`, `build` (root `package.json`) all run in `.github/workflows/ci.yml`
+> (quality + docker + e2e jobs); CI is green on master. The multi-stage distroless web image and image-size gate
+> are implemented — see **`docker-and-cicd.md`** (source of truth for the image/CI strategy). **Still TODO
+> (Phase 1+):** a11y, SAST/secret scan, dependency audit, Trivy container scan, bundle-size + perf-budget gates, VRT.
 
 ### Required root scripts (§28/§43)
 
-Root `package.json` must expose `test`, `lint`, and `check-types` (and the gates above run on every PR). `check-types` and `check` exist; `test` and `lint` are the gap.
+Root `package.json` exposes `test`, `lint`, `check`, `check-types`, and `build`; the CI gates run on every PR. All present and green (the turbo `test`/`lint` *tasks* are currently no-ops because no workspace package defines those scripts — the root `vitest run` / `ultracite check` invocations are what actually gate; tracked as a backlog cleanup in `phase-0-audit.md`).
 
 ### Build & environment (§28)
 
