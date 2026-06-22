@@ -14,13 +14,14 @@
 | Settings resolver | ✅ | ◻ | n/a | n/a | n/a | `settings-resolver.test` (order, depth, set-once semantics) — **not yet wired into services** |
 | Products / Catalog (CRUD, variant, SKU, barcode, UoM) | ◻ | ✅ | ◻ | ✅ | ✅ | router e2e + cross-tenant FK harness; RLS via coverage gate |
 | Inventory ledger (movements, receive, adjust, count) | ◻ | ✅ | ◻ | ✅ | ✅ | `services.rls`, `stock-ledger`, vs1 integration (incl. countLineUpsert audit) |
-| Costing — AVCO/FIFO/value-only | ◻ | ✅ | ◻ | ✅ | ✅ | `costing.rls`: resolver, AVCO zero-value invariant, FIFO layer locking, value-only (Gap A reject), stamp (Gap B), FIFO value-only reject |
+| Costing — AVCO/FIFO/value-only (receive/adjust only) | ◻ | ✅ | ◻ | ✅ | ✅ | `costing.rls`: resolver, AVCO zero-value invariant, FIFO layer locking, value-only (Gap A reject), stamp (Gap B), FIFO value-only reject. **⚠️ Verified for the SKU-level receive/adjust paths ONLY — see "Costing on the sale/issue path" below.** |
+| Costing on the SALE / issue path (POS) | ◻ | ◻ | ◻ | ◻ | ◻ | **NOT VALUED today.** `pos.createSale` (`vs1.ts:2734`) deducts product-level quantity but never calls `applyValuation`: **no** FIFO-layer consumption, **no** AVCO `total_value_minor` reduction, **no** COGS, **no** `costing_method_applied` stamp; `avg_cost.qty_on_hand` diverges from the ledger after any POS sale. Boundary decision pending (POS↔costing — ticket #8). |
 | Costing set-once (D1) | ◻ | ✅ | ◻ | n/a | ✅ | router test: fresh OK / change-after-movement rejected / no-op OK |
 | Idempotency / outbox / audit | ✅ | ✅ | ◻ | ✅ | ✅ | hash unit + concurrency + same-tx atomicity + §32 e2e |
 | Money (minor units) | ✅ | ✅ | ◻ | n/a | ✅ | `money.test` + bigint columns; **precision >2^53 = issue #6 (not yet)** |
 | Oversell flagging (D5) | ◻ | ✅ | ◻ | n/a | ✅ | vs1 integration: oversell emits `inventory.stock_discrepancy`, sale-correlated |
 | Reorder suggestions (D7) | ◻ | ✅ | ◻ | ✅ | ✅ | inventory service + router (suggest-only) |
-| POS sale (basic, online) | ◻ | ✅ | ◻ | ✅ | ✅ | `pos.createSale` §32 flow + idempotency; **offline/Tauri = not-yet (Phase 4)** |
+| POS sale (basic, online) | ◻ | ✅ | ◻ | ✅ | ✅ | `pos.createSale` §32 flow + idempotency — **sale RECORDED + stock deducted (quantity), but NOT cost-valued** (no COGS / no layer consumption — see the sale-path costing row). offline/Tauri = not-yet (Phase 4). |
 | Reporting (valuation, low-stock, sales) | ◻ | ✅ | ◻ | ✅ | ✅ | basic report routers; read-model/star-schema = Phase 12 |
 | cost_reconciliation emit | ◻ | ◻ | ◻ | ◻ | ◻ | **contract only; emit deferred (behavior pass, depends on #6)** |
 | Accounting / GL | ◻ | ◻ | ◻ | ◻ | ◻ | Phase 5 |
