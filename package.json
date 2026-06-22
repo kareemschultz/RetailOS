@@ -47,6 +47,7 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "check": "ultracite check",
+    "check:mojibake": "node scripts/check-mojibake.mjs --all",
     "fix": "ultracite fix",
     "lint": "ultracite check",
     "test": "turbo run test",

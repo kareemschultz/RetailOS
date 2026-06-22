@@ -1,5 +1,8 @@
 {
   "name": "@RetailOS/config",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  }
 }

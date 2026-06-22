@@ -16,15 +16,36 @@
 - **Mode:** unattended overnight. Branch **`vs1-phase1`** (never master; all work = PRs for review).
 - **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
 - **Order:** VS#1 Commits 2→7, then phase roadmap §31 (Phase 1→2→3…) with §41/§42/§45 gates before any new module.
-- **Current step:** VS#1 **COMPLETE** (all 7 commits, PR #1). Next: Phase 2 gating — §41 competitive + §42 requirements docs, then **HARD STOP** for the inventory-costing decision before implementing.
+- **Current step:** VS#1 **COMPLETE** (PR #1, + 2 new regression tests: cross-tenant FK-bypass & idempotency concurrency). Phase 2 gating: §41 competitive + §42 requirements docs **done** (PR #2); **ALL product-policy decisions D1–D7 now LOCKED** by owner directive (only D-money rounding open). **HARD STOP** — awaiting owner approval of the docs before any Phase-2 schema/migration/costing/inventory code.
 
-### ⛔ BLOCKERS awaiting your decision (none yet)
-*(When I hard-stop, the blocker + analysis + options go here.)*
+### ⛔ BLOCKERS awaiting your decision
+
+**HARD STOP before Phase 2 (Products & Inventory Ledger).** VS#1/Phase 1 complete (PR #1, verified — RLS/roles/withTenant/money-bigint/FK-isolation/idempotency all confirmed + 2 regression tests added). Phase-2 §41/§42 docs done (PR #2). **All product-policy decisions are now LOCKED (2026-06-22)**; only the monetary rounding *mode* stays open (not needed until Phase 5). No Phase-2 implementation code until you approve the docs.
+
+**✅ Owner decisions LOCKED (2026-06-22) — all in `module-specs/inventory.md`:**
+1. **D1 costing** — AVCO default; FIFO per tenant/category/product (pharmacy/expiry/lot/regulated); no LIFO; not hardcoded — per-tenant/category/product strategy (both `avg_cost` + `valuation_layer` exist). + Costing Strategy Examples section.
+2. **D2 multi-UoM** — canonical base units; integer-ratio conversion factors where possible; purchase/stock/sale/reporting units; conversions tenant/category/product configurable.
+3. **D3 serial/batch/lot** — model all three (serial + batch/lot + expiry); ship lot/batch+expiry first; serial stubbed but schema must not block it.
+4. **D4 expiry/FEFO** — NOT a global hard-block; tenant/category/product configurable; general-retail default warn-and-override (audited `inventory.override_expiry`); pharmacy/regulated/controlled hard-block selectable per category/product.
+5. **D5 oversell** — allow-oversell-with-flagging default (negative ledger + `inventory.stock_discrepancy`); hard-block configurable per tenant/category/product. Ledger policy-neutral.
+6. **D6 barcode** — data-driven parser config; GS1/EAN/UPC/Code128 + variable-measure/weight-embedded; conservative Phase-2 build (table + config seam; live scale/parser deferred to Phase 4).
+7. **D7 reorder** — fixed min/max; suggestions only; no auto-PO; manager approval required before procurement.
+
+**⏳ Still OPEN (only one):**
+- **D-money rounding mode** — left OPEN per directive; do NOT assume banker's or half-up; pending Guyana/GRA VAT + target-country rounding verification. First needed Phase 5 (tax/FX division), not Phase 2.
+
+**What I did:** finished + locked all D1–D7 in the §42 spec; added Costing Strategy Examples; kept rounding open. **STOPPED — no Phase-2 schema/migration/costing/inventory code written** pending your approval of these docs.
+
+### §45 phase reassessment (end of Phase 1 / VS#1)
+- Architecture held: fail-closed RLS + 3-role model + tenant-scoped `withTenant` is the load-bearing spine; every later module inherits it. No ADR changes needed. Codex found real HIGHs at the service/router layers (idempotency race, FK-bypasses-RLS, money int4) — all fixed + regression-tested; 0 CRITICAL across the whole slice.
+- Tech debt queued (non-blocking): deferred §43 gates (a11y/Trivy/dep-audit/SAST/bundle/VRT), §44 perf gate, distributed number allocator, accounting GL (Phase 5), read-models (Phase 12).
 
 ### 📋 Deferred-decisions log (business/product rules I refused to guess)
-1. **Monetary rounding mode** (half-up / half-even / half-away-from-zero) — charter §19 mandates "one rounding policy" but doesn't pick one. **Not needed for VS#1** (money math is exact integer add/multiply-by-quantity; no division yet). First needed at **division**: tax (Phase 5) and FX. Decide before Phase 5. *(No work blocked now.)*
-2. **Oversell policy** (charter §14: allow-with-backorder / hard-reservation / optimistic-with-correction) — **per tenant/location**. Codex flagged that `pos.createSale` can drive stock negative. By design `StockLedger.appendStockMovement` is **policy-neutral** (records the movement faithfully); enforcing no-negative here would be *choosing* a policy. **Deferred** — VS#1 ships the neutral ledger; the policy gate is applied upstream once you decide. *(No work blocked; behavior is the safe neutral default.)*
-- *Next expected:* Phase 2 inventory costing FIFO/LIFO/avg.
+1. **Monetary rounding mode** (half-up / half-even / half-away-from-zero) — charter §19 mandates "one rounding policy" but doesn't pick one. **STILL OPEN (owner directive 2026-06-22):** do NOT assume banker's or half-up — pending verification of the Guyana/GRA VAT rounding rule + other target-country tax rules. **Not needed for VS#1/Phase 2** (no division yet); first needed at **division**: tax (Phase 5) and FX. *(No work blocked now.)*
+2. ~~**Oversell policy**~~ → **RESOLVED 2026-06-22 (owner directive):** "Allow Oversell with Flagging" default (ledger may go negative, emit `inventory.stock_discrepancy` for manager review); hard-block configurable per tenant/category/product (serialized/controlled/regulated/high-risk). `StockLedger.append` stays **policy-neutral** (as VS#1 shipped); the oversell policy resolver sits ABOVE the ledger. Recorded in `module-specs/inventory.md` D5.
+3. **Inventory costing (D1)** → **RESOLVED 2026-06-22 (owner directive):** AVCO default, FIFO per tenant/category/product, no LIFO, not hardcoded (per-tenant/category/product strategy). Recorded in `module-specs/inventory.md` D1.
+4. **D2/D3/D4/D6/D7** → **ALL RESOLVED 2026-06-22 (owner directive):** UoM (canonical base + integer ratios + 4 unit roles + configurable), serial/batch/lot (all three modelled, lot first, serial stubbed), expiry/FEFO (configurable, no global hard-block, audited override), barcode (data-driven config, conservative build), reorder (fixed min/max, suggest-only, manager approval). All in `module-specs/inventory.md`.
+- *Still open (Phase 5):* monetary rounding mode only.
 
 ### ✅ PRs opened
 - **PR #1** — `vs1-phase1` → master — **VS#1 COMPLETE** (all 7 commits: schema; fail-closed RLS + 3-role bootstrap; core services; request context + tenant guard; events/outbox; oRPC routers + minimal RBAC; §32 e2e tests + CI integration). All gates green; codex-reviewed each commit. Open for review; **DO NOT MERGE**.
