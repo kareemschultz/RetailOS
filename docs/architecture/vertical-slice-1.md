@@ -68,6 +68,31 @@ Namespaced, all `protectedProcedure` + tenant-scoped + permission-checked (§7):
 
 Types pass · tests pass · tenant scoping + RLS-bypass verified · audit works · errors friendly+structured · logs structured · permissions enforced · money in minor units · module spec + this design updated · rollback (expand/contract) noted.
 
+## Approved implementation sequence (2026-06-21 — plan of record)
+
+Approved by the product owner with modifications. **Each commit is gated green** (`check` · `check-types` ·
+`test`). Implemented strictly in order; a review gate after Commit 1 (Schema) before Commit 2 (Migration + RLS).
+
+0. **Seed package** (`packages/db/src/seeds/`) — reusable for dev/CI/Playwright/demos. Seeds run through the
+   **tenant-scoped path** (set `app.tenant_id`); **must never become an RLS/auth bypass**. (Scaffolded with Commit 1.)
+1. **Schema** — Better Auth `organization` + `admin` schema support + the VS#1 domain tables. Every tenant-owned
+   table carries `tenant_id`, `created_at`, `updated_at`, `created_by`, `updated_by` (where applicable) from day one.
+2. **Migration + RLS** — generate + commit migrations; **fail-closed** RLS policies (no `app.tenant_id` ⇒ zero
+   rows / error, **never all tenants**); real Postgres in CI; confirm the app DB role is **non-`BYPASSRLS`**.
+3. **Core services** — `Money`, `StockLedger` (the **sole** stock mutator), `Idempotency` (with payload-hash
+   protection), `AuditLog`.
+4. **Middleware + standardized request context** — define/thread the real context before routers consume it:
+   `{ tenantId, organizationId, userId, employeeId, requestId, correlationId, sessionId, impersonatorId?, source, deploymentMode }`.
+   Shared by audit, events, logging, and later analytics.
+5. **Events + Outbox** — its own commit before routers, scoped to: `outbox_event` usage, a **versioned event
+   envelope**, tenant id, correlation id, request id, **same-transaction** `Outbox.emit`. **No** dispatcher /
+   consumers / Svix / DLQ / retry-UI / webhook delivery yet (deferred).
+6. **Routers** — implement using the **real** request context from middleware (not a stub).
+7. **Tests + verification** (required before merge): tenant scoping · RLS-bypass rejection · **fail-closed RLS**
+   (unset `app.tenant_id` ⇒ zero rows/error) · app DB role is non-`BYPASSRLS` · permission enforcement · POS sale
+   idempotency · stock-ledger invariant · audit written for every mutation · outbox emitted in same tx · sales
+   report totals match committed sales. **Real Postgres in CI.** Minimal RBAC approved; full Entitlements deferred.
+
 ## Known limitations / intentionally deferred
 
 - Single-node number allocator (distributed allocator deferred, I3); accounting posting is a placeholder (Phase 5); read-model/reporting is a direct query (Phase 12); no offline queue in this slice (POS offline is Phase 4); no fiscalization. These are interfaces now to avoid later redesign (§32).

@@ -8,3 +8,7 @@ export function createDb() {
 }
 
 export const db = createDb();
+
+// Re-export the schema namespace so consumers (e.g. the Better Auth adapter)
+// get the full table set from a single import.
+export * as schema from "./schema";
