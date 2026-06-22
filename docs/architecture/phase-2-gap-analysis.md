@@ -41,6 +41,9 @@ Still open:
 | Catalog CRUD routers | Done | Create/list/update/archive for category, brand, UoM, SKU, barcode, UoM conversion; product create/list/update/archive; variant create/list/update/archive; RLS-scoped FK guards and audit for mutations. |
 | Lot/expiry routes | Done | Lot create/list/update/archive with SKU guard and audit. |
 | Reorder rule CRUD | Done | Reorder-rule list/upsert/archive with SKU/location guards, min/max validation, audit, and existing evaluator. |
+| Stock discrepancy review | Done | Derived negative-balance listing from the stock ledger plus audited review event seam. Persistent work queue can wait for manager UI. |
+| Revaluation seam | Done | Explicit audited AVCO and FIFO revaluation route; AVCO zero-qty/zero-value invariant preserved; FIFO layer updates are row-locked. |
+| Import validation seam | Done | `catalog.importPreview` validates product/SKU/UoM/lot/cost rows and returns per-row errors without writing data. Bulk apply/rollback is intentionally a later reviewed operation. |
 | API contract snapshot | Done | `phase-2-api-contracts.md`. |
 | Backend tests | Partial | Service tests are strong; router e2e now covers catalog FK guards and mixed AVCO+FIFO valued receipts through valuation reports. Broader list/update/import/revaluation tests still needed. |
 
@@ -48,9 +51,7 @@ Still open:
 
 ### P0 before Phase 2 backend can be called complete
 
-1. **Stock discrepancy review route.** Oversell/discrepancy events exist, but manager review/resolve endpoints are not built.
-2. **Import seam.** Competitive research marks CSV/Excel import as P0 parity. Add backend-only import staging/validation design or schema before calling Phase 2 feature analysis closed.
-3. **Audited revaluation seam.** Method changes are conceptually locked behind explicit revaluation, but no `inventory.revalue` service/router exists yet.
+No P0 backend gaps remain for the approved Phase-2 scope. Bulk import apply/rollback, persistent discrepancy work queues, and downstream consumers remain deliberate later hardening/UI workflow items.
 
 ### P1 hardening / quality-of-life backend work
 
@@ -79,7 +80,5 @@ Still open:
 
 ## Immediate recommended order
 
-1. Add stock discrepancy review and revaluation seam.
-2. Add import staging/validation backend design or minimal schema.
-3. Run full gates plus throwaway Postgres migration/service/router tests.
-4. Update API contracts and close Phase 2 with a final audit report.
+1. Run full gates plus throwaway Postgres migration/service/router tests.
+2. Update API contracts and close Phase 2 with a final audit report.

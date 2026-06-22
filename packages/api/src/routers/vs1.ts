@@ -84,6 +84,61 @@ function priceSaleLines(products: ProductRow[], lines: SaleLineInput[]) {
   return { total, lineValues };
 }
 
+interface CatalogImportPreviewRow {
+  baseUomCode?: string;
+  lotNumber?: string;
+  productSku: string;
+  rowNumber: number;
+  skuCode?: string;
+  unitCostMinor?: number;
+}
+
+interface CatalogImportPreviewState {
+  existingProductSkus: Set<string>;
+  existingSkuCodes: Set<string>;
+  existingUomCodes: Set<string>;
+  seenProductSkus: Set<string>;
+  seenSkuCodes: Set<string>;
+}
+
+function catalogImportPreviewRow(
+  row: CatalogImportPreviewRow,
+  state: CatalogImportPreviewState
+) {
+  const errors = [
+    state.seenProductSkus.has(row.productSku)
+      ? "duplicate productSku in import file"
+      : null,
+    state.existingProductSkus.has(row.productSku)
+      ? "productSku already exists"
+      : null,
+    row.skuCode && state.seenSkuCodes.has(row.skuCode)
+      ? "duplicate skuCode in import file"
+      : null,
+    row.skuCode && state.existingSkuCodes.has(row.skuCode)
+      ? "skuCode already exists"
+      : null,
+    row.baseUomCode && !state.existingUomCodes.has(row.baseUomCode)
+      ? "baseUomCode not found in this tenant"
+      : null,
+    row.lotNumber && !row.skuCode ? "lotNumber requires skuCode" : null,
+    row.unitCostMinor != null && !row.skuCode
+      ? "unitCostMinor requires skuCode"
+      : null,
+  ].filter((error): error is string => Boolean(error));
+  state.seenProductSkus.add(row.productSku);
+  if (row.skuCode) {
+    state.seenSkuCodes.add(row.skuCode);
+  }
+  return {
+    rowNumber: row.rowNumber,
+    productSku: row.productSku,
+    skuCode: row.skuCode ?? null,
+    status: errors.length ? "error" : "valid",
+    errors,
+  };
+}
+
 export const tenantRouter = {
   // Sets the active organization (tenant) on the session via Better Auth. Not a
   // tenantProcedure — it runs before a tenant is active.
@@ -401,6 +456,85 @@ export const productRouter = {
 };
 
 export const catalogRouter = {
+  importPreview: tenantProcedure
+    .input(
+      z.object({
+        rows: z
+          .array(
+            z.object({
+              rowNumber: z.number().int().positive(),
+              productSku: z.string().min(1),
+              productName: z.string().min(1),
+              priceMinor: z.number().int().min(0),
+              currency: z.string().length(3),
+              scale: z.number().int().min(0).default(2),
+              skuCode: z.string().min(1).optional(),
+              baseUomCode: z.string().min(1).optional(),
+              costingMethod: z.enum(["avco", "fifo"]).optional(),
+              trackingMode: z.enum(["none", "lot", "serial"]).default("none"),
+              lotNumber: z.string().min(1).optional(),
+              expiryDate: z.string().date().optional(),
+              unitCostMinor: z.number().int().min(0).optional(),
+            })
+          )
+          .min(1)
+          .max(1000),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const seenProductSkus = new Set<string>();
+        const seenSkuCodes = new Set<string>();
+        const existingProducts = await tx
+          .select({ sku: schema.product.sku })
+          .from(schema.product)
+          .where(
+            inArray(
+              schema.product.sku,
+              input.rows.map((row) => row.productSku)
+            )
+          );
+        const existingProductSkus = new Set(
+          existingProducts.map((row) => row.sku)
+        );
+        const skuCodes = input.rows
+          .map((row) => row.skuCode)
+          .filter((code): code is string => Boolean(code));
+        const existingSkus = skuCodes.length
+          ? await tx
+              .select({ code: schema.sku.code })
+              .from(schema.sku)
+              .where(inArray(schema.sku.code, skuCodes))
+          : [];
+        const existingSkuCodes = new Set(existingSkus.map((row) => row.code));
+        const uomCodes = input.rows
+          .map((row) => row.baseUomCode)
+          .filter((code): code is string => Boolean(code));
+        const uoms = uomCodes.length
+          ? await tx
+              .select({ code: schema.unitOfMeasure.code })
+              .from(schema.unitOfMeasure)
+              .where(inArray(schema.unitOfMeasure.code, uomCodes))
+          : [];
+        const existingUomCodes = new Set(uoms.map((row) => row.code));
+        const rows = input.rows.map((row) =>
+          catalogImportPreviewRow(row, {
+            existingProductSkus,
+            existingSkuCodes,
+            existingUomCodes,
+            seenProductSkus,
+            seenSkuCodes,
+          })
+        );
+        return {
+          validCount: rows.filter((row) => row.status === "valid").length,
+          errorCount: rows.filter((row) => row.status === "error").length,
+          rows,
+        };
+      });
+    }),
   categoryList: tenantProcedure
     .input(z.object({ includeArchived: z.boolean().default(false) }))
     .handler(({ context, input }) => {
@@ -1904,6 +2038,225 @@ export const inventoryRouter = {
           after: row,
         });
         return row;
+      });
+    }),
+  stockDiscrepancyList: tenantProcedure
+    .input(z.object({ locationId: z.string().uuid().optional() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.count");
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
+        const rows = await tx.execute(sql`
+          WITH latest AS (
+            SELECT DISTINCT ON (sku_id, location_id)
+              id,
+              product_id,
+              sku_id,
+              location_id,
+              balance_after,
+              server_ts
+            FROM stock_ledger
+            WHERE tenant_id = ${ctx.tenantId}
+              AND sku_id IS NOT NULL
+              AND (${input.locationId ?? null}::uuid IS NULL OR location_id = ${input.locationId ?? null})
+            ORDER BY sku_id, location_id, server_ts DESC, id DESC
+          )
+          SELECT *
+          FROM latest
+          WHERE balance_after < 0
+          ORDER BY server_ts DESC
+        `);
+        return rows.rows.map((row) => ({
+          latestMovementId: row.id,
+          productId: row.product_id,
+          skuId: row.sku_id,
+          locationId: row.location_id,
+          balanceAfter: Number(row.balance_after),
+          serverTs: row.server_ts,
+        }));
+      });
+    }),
+  stockDiscrepancyReview: tenantProcedure
+    .input(
+      z.object({
+        skuId: z.string().uuid(),
+        locationId: z.string().uuid(),
+        resolution: z.enum(["count_requested", "accepted", "adjusted"]),
+        notes: z.string().max(2000).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.count");
+        await assertSkuVisible(tx, input.skuId);
+        await assertLocationVisible(tx, input.locationId);
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryStockDiscrepancyReviewed,
+          payload: {
+            skuId: input.skuId,
+            locationId: input.locationId,
+            resolution: input.resolution,
+            notes: input.notes ?? null,
+            reviewedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.stock_discrepancy.review",
+          entityType: "stock_ledger",
+          entityId: input.skuId,
+          after: input,
+        });
+        return { reviewed: true };
+      });
+    }),
+  revalue: tenantProcedure
+    .input(
+      z.object({
+        skuId: z.string().uuid(),
+        locationId: z.string().uuid(),
+        reasonCode: z.string().min(1),
+        totalValueMinor: z.number().int().min(0).optional(),
+        fifoLayerId: z.string().uuid().optional(),
+        unitCostMinor: z.number().int().min(0).optional(),
+        currency: z.string().length(3).optional(),
+        scale: z.number().int().min(0).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.adjust");
+        await assertSkuVisible(tx, input.skuId);
+        await assertLocationVisible(tx, input.locationId);
+        const method = await services.resolveCostingMethod(tx, ctx, {
+          skuId: input.skuId,
+        });
+        if (method === "avco") {
+          if (
+            input.totalValueMinor == null ||
+            input.currency == null ||
+            input.scale == null
+          ) {
+            throw new ORPCError("BAD_REQUEST", {
+              message:
+                "AVCO revaluation requires totalValueMinor/currency/scale",
+            });
+          }
+          const before = (
+            await tx
+              .select()
+              .from(schema.avgCost)
+              .where(
+                and(
+                  eq(schema.avgCost.skuId, input.skuId),
+                  eq(schema.avgCost.locationId, input.locationId)
+                )
+              )
+              .for("update")
+              .limit(1)
+          ).at(0);
+          if (!before) {
+            throw new ORPCError("NOT_FOUND", {
+              message: "AVCO valuation row not found",
+            });
+          }
+          if (before.qtyOnHand === 0 && input.totalValueMinor !== 0) {
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Zero on-hand AVCO row must have zero value",
+            });
+          }
+          const after = firstOrThrow(
+            (
+              await tx
+                .update(schema.avgCost)
+                .set({
+                  totalValueMinor: input.totalValueMinor,
+                  currency: input.currency,
+                  scale: input.scale,
+                })
+                .where(eq(schema.avgCost.id, before.id))
+                .returning()
+            ).at(0)
+          );
+          await services.recordAudit(tx, ctx, {
+            action: "inventory.revalue",
+            entityType: "avg_cost",
+            entityId: after.id,
+            before,
+            after: { row: after, reasonCode: input.reasonCode },
+          });
+          await services.emitEvent(tx, ctx, {
+            type: services.DomainEventType.InventoryRevalued,
+            payload: {
+              method,
+              skuId: input.skuId,
+              locationId: input.locationId,
+              reasonCode: input.reasonCode,
+              totalValueMinor: input.totalValueMinor,
+              currency: input.currency,
+              scale: input.scale,
+            },
+          });
+          return { method, row: after };
+        }
+        if (input.fifoLayerId == null || input.unitCostMinor == null) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "FIFO revaluation requires fifoLayerId/unitCostMinor",
+          });
+        }
+        const before = (
+          await tx
+            .select()
+            .from(schema.valuationLayer)
+            .where(
+              and(
+                eq(schema.valuationLayer.id, input.fifoLayerId),
+                eq(schema.valuationLayer.skuId, input.skuId),
+                eq(schema.valuationLayer.locationId, input.locationId)
+              )
+            )
+            .for("update")
+            .limit(1)
+        ).at(0);
+        if (!before) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "FIFO valuation layer not found",
+          });
+        }
+        const after = firstOrThrow(
+          (
+            await tx
+              .update(schema.valuationLayer)
+              .set({ unitCostMinor: input.unitCostMinor })
+              .where(eq(schema.valuationLayer.id, before.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.revalue",
+          entityType: "valuation_layer",
+          entityId: after.id,
+          before,
+          after: { row: after, reasonCode: input.reasonCode },
+        });
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryRevalued,
+          payload: {
+            method,
+            skuId: input.skuId,
+            locationId: input.locationId,
+            fifoLayerId: input.fifoLayerId,
+            reasonCode: input.reasonCode,
+            unitCostMinor: input.unitCostMinor,
+            currency: after.currency,
+            scale: after.scale,
+          },
+        });
+        return { method, row: after };
       });
     }),
   receive: tenantProcedure

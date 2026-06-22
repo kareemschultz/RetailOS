@@ -517,6 +517,34 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       admin
     );
     expect(archivedConversion.deletedAt).toBeTruthy();
+    const importPreview = await call(
+      appRouter.catalog.importPreview,
+      {
+        rows: [
+          {
+            baseUomCode: "MIX-EA",
+            currency: "USD",
+            priceMinor: 100,
+            productName: "Existing Product",
+            productSku: avcoProduct.sku,
+            rowNumber: 1,
+            skuCode: "IMPORT-EXISTING",
+          },
+          {
+            baseUomCode: "MIX-EA",
+            currency: "USD",
+            priceMinor: 100,
+            productName: "Import Product",
+            productSku: "IMPORT-NEW",
+            rowNumber: 2,
+            skuCode: "IMPORT-NEW-EA",
+          },
+        ],
+      },
+      admin
+    );
+    expect(importPreview.errorCount).toBe(1);
+    expect(importPreview.validCount).toBe(1);
 
     const updatedProduct = await call(
       appRouter.product.update,
@@ -647,12 +675,88 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(avco?.totalValueMinor).toBe(303);
     expect(fifo?.qtyOnHand).toBe(4);
     expect(fifo?.totalValueMinor).toBe(800);
+    const avcoRevalue = await call(
+      appRouter.inventory.revalue,
+      {
+        currency: "USD",
+        locationId: location.id,
+        reasonCode: "count-value-correction",
+        scale: 2,
+        skuId: avcoSku.id,
+        totalValueMinor: 306,
+      },
+      admin
+    );
+    expect(avcoRevalue.method).toBe("avco");
+    const fifoLayer = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.valuationLayer)
+        .where(eq(schema.valuationLayer.skuId, fifoSku.id))
+        .limit(1)
+    );
+    const fifoLayerRow = fifoLayer.at(0);
+    expect(fifoLayerRow).toBeTruthy();
+    const fifoRevalue = await call(
+      appRouter.inventory.revalue,
+      {
+        fifoLayerId: fifoLayerRow?.id ?? "",
+        locationId: location.id,
+        reasonCode: "vendor-cost-correction",
+        skuId: fifoSku.id,
+        unitCostMinor: 250,
+      },
+      admin
+    );
+    expect(fifoRevalue.method).toBe("fifo");
+    const revaluedReport = await call(
+      appRouter.reports.valuation,
+      { locationId: location.id },
+      admin
+    );
+    expect(
+      revaluedReport.avco.find((row) => row.skuId === avcoSku.id)
+        ?.totalValueMinor
+    ).toBe(306);
+    expect(
+      revaluedReport.fifo.find((row) => row.skuId === fifoSku.id)
+        ?.totalValueMinor
+    ).toBe(1000);
+
+    await call(
+      appRouter.inventory.adjust,
+      {
+        locationId: location.id,
+        productId: avcoProduct.id,
+        qtyDelta: -10,
+        reasonCode: "oversell-test",
+        skuId: avcoSku.id,
+      },
+      admin
+    );
+    const discrepancies = await call(
+      appRouter.inventory.stockDiscrepancyList,
+      { locationId: location.id },
+      admin
+    );
+    expect(discrepancies.some((row) => row.skuId === avcoSku.id)).toBe(true);
+    const reviewed = await call(
+      appRouter.inventory.stockDiscrepancyReview,
+      {
+        locationId: location.id,
+        notes: "Cycle count requested by test",
+        resolution: "count_requested",
+        skuId: avcoSku.id,
+      },
+      admin
+    );
+    expect(reviewed.reviewed).toBe(true);
     const reorder = await call(
       appRouter.inventory.reorderEvaluate,
       { locationId: location.id, skuId: avcoSku.id },
       admin
     );
-    expect(reorder?.suggestedQty).toBe(17);
+    expect(reorder?.suggestedQty).toBe(27);
     const archivedRule = await call(
       appRouter.inventory.reorderRuleArchive,
       { id: rule.id },

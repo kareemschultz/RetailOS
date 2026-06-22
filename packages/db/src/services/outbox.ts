@@ -9,6 +9,8 @@ export const DomainEventType = {
   InventoryCountStarted: "inventory.count_started",
   InventoryReceived: "inventory.received",
   InventoryReorderTriggered: "inventory.reorder_triggered",
+  InventoryRevalued: "inventory.revalued",
+  InventoryStockDiscrepancyReviewed: "inventory.stock_discrepancy_reviewed",
   InventoryStockDiscrepancy: "inventory.stock_discrepancy",
   InventoryValuationUpdated: "inventory.valuation_updated",
   SaleCreated: "sale.created",

@@ -52,6 +52,12 @@
 
 All catalog routes require `products.create` for now; finer-grained catalog permissions can split later without changing route contracts.
 
+### `catalog.importPreview`
+- **Input:** `{ rows: [...] }` where each row carries product SKU/name/price/currency plus optional SKU code, base UoM code, costing/tracking, lot/expiry, and unit-cost fields.
+- **Permission:** `products.create`
+- **Reads:** existing products, SKUs, and UoMs through tenant RLS.
+- **Behavior:** validates duplicates, existing SKU conflicts, missing base UoM codes, and lot/cost rows without SKU codes. Returns per-row `valid|error` status and errors. Does **not** write data; bulk apply/rollback is intentionally a later reviewed operation.
+
 ### `catalog.categoryList`
 - **Input:** `{ includeArchived? }`
 - **Reads:** `category`
@@ -211,6 +217,23 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 - **Writes:** `reorder_rule.deleted_at`, `is_active=false`
 - **Audit:** `reorder_rule.archive`
 
+### `inventory.stockDiscrepancyList`
+- **Input:** `{ locationId? }`
+- **Permission:** `inventory.count`
+- **Reads:** latest SKU×location ledger balances where `balance_after < 0`.
+
+### `inventory.stockDiscrepancyReview`
+- **Input:** `{ skuId, locationId, resolution, notes? }` where `resolution` is `count_requested | accepted | adjusted`
+- **Permission:** `inventory.count`
+- **Behavior:** validates SKU/location visibility, emits `inventory.stock_discrepancy_reviewed`, and records audit. Persistent workflow state is deferred until the manager-review UI/work queue exists.
+- **Audit:** `inventory.stock_discrepancy.review`
+
+### `inventory.revalue`
+- **Input:** AVCO `{ skuId, locationId, reasonCode, totalValueMinor, currency, scale }`; FIFO `{ skuId, locationId, reasonCode, fifoLayerId, unitCostMinor }`
+- **Permission:** `inventory.adjust`
+- **Behavior:** resolves effective costing method. AVCO locks and updates the SKU×location `avg_cost` row; FIFO locks and updates a specific `valuation_layer` unit cost. Emits `inventory.revalued` and records before/after audit. Zero-on-hand AVCO rows cannot carry non-zero value.
+- **Audit:** `inventory.revalue`
+
 ### `inventory.receive`
 - **Input:** `{ locationId, productId, qty, skuId?, lotId?, unitCostMinor?, costCurrency?, costScale?, idempotencyKey? }`
 - **Permission:** `inventory.receive`
@@ -273,6 +296,6 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 - Product create/list/update/archive exist with Phase-2 category/brand/base UoM/costing/tracking fields.
 - Variant create/list/update/archive exist.
 - Lot create/list/update/archive and reorder-rule list/upsert/archive exist.
-- Phase-2 router e2e covers mixed AVCO+FIFO valued receipt/report flow plus catalog/product/variant/lot/reorder lifecycle routes; broader import/revaluation/discrepancy e2e remains pending.
+- Phase-2 router e2e covers mixed AVCO+FIFO valued receipt/report flow plus catalog/product/variant/lot/reorder lifecycle routes, revaluation, stock discrepancy review, and import preview validation. Bulk import apply/rollback remains a later reviewed operation.
 - Event payloads are implemented for the new router seams, but the outbox dispatcher/consumer remains a later phase.
 - UI remains intentionally absent.
