@@ -16,17 +16,18 @@
 - **Mode:** unattended overnight. Branch **`vs1-phase1`** (never master; all work = PRs for review).
 - **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
 - **Order:** VS#1 Commits 2→7, then phase roadmap §31 (Phase 1→2→3…) with §41/§42/§45 gates before any new module.
-- **Current step:** VS#1 **Commit 6** (oRPC routers) — starting.
+- **Current step:** VS#1 **Commit 7** (tests + verification) — starting.
 
 ### ⛔ BLOCKERS awaiting your decision (none yet)
 *(When I hard-stop, the blocker + analysis + options go here.)*
 
 ### 📋 Deferred-decisions log (business/product rules I refused to guess)
 1. **Monetary rounding mode** (half-up / half-even / half-away-from-zero) — charter §19 mandates "one rounding policy" but doesn't pick one. **Not needed for VS#1** (money math is exact integer add/multiply-by-quantity; no division yet). First needed at **division**: tax (Phase 5) and FX. Decide before Phase 5. *(No work blocked now.)*
+2. **Oversell policy** (charter §14: allow-with-backorder / hard-reservation / optimistic-with-correction) — **per tenant/location**. Codex flagged that `pos.createSale` can drive stock negative. By design `StockLedger.appendStockMovement` is **policy-neutral** (records the movement faithfully); enforcing no-negative here would be *choosing* a policy. **Deferred** — VS#1 ships the neutral ledger; the policy gate is applied upstream once you decide. *(No work blocked; behavior is the safe neutral default.)*
 - *Next expected:* Phase 2 inventory costing FIFO/LIFO/avg.
 
 ### ✅ PRs opened
-- **PR #1** — `vs1-phase1` → master — VS#1 tenant-isolation spine. Commits 1–5 landed (schema; fail-closed RLS + 3-role bootstrap; core services; request context + tenant guard; events/outbox). Open for review; DO NOT MERGE.
+- **PR #1** — `vs1-phase1` → master — VS#1 tenant-isolation spine. Commits 1–6 landed (schema; fail-closed RLS + 3-role bootstrap; core services; request context + tenant guard; events/outbox; oRPC routers + minimal RBAC). Open for review; DO NOT MERGE.
 
 ---
 
@@ -98,6 +99,8 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - Scaffold reality: Better Auth = email/password + Expo plugin only; DB = auth schema only, no migrations; 2 demo oRPC procedures; docker-compose = postgres + web only. All charter foundation domain work (tenant/RBAC/audit/RLS/Redis/object storage/Better Auth plugins) is NOT yet built (deferred past Phase-0 lock-in).
 
 ## Changelog (newest first)
+
+- **2026-06-22** — VS#1 **Commit 6** (PR #1): oRPC routers for the §32 flow — tenant.setActive, company/location/product.create, inventory.receive (→receipt ledger + inventory.received event), pos.createSale (idempotent; sale+lines+ledger deductions+invoice+audit+sale.created event; advisory-locked gapless numbers), reports.salesBasic (grouped by currency). Minimal RBAC (`entitlements.ts`: tenant_admin/manager/cashier), enforced per-route inside the tenant tx. Codex review: 4 HIGH → 3 fixed (cross-tenant FK refs validated via RLS-scoped reads since FK checks bypass RLS; non-negative price; multi-currency report), 1 deferred (oversell = §14 business decision, logged). Gates green; routers type-checked + 4 RBAC tests. (Full §32 e2e through routers = Commit 7.)
 
 - **2026-06-22** — VS#1 **Commit 5** (PR #1): transactional outbox. `emitEvent(tx, ctx, {type, version?, payload})` writes one `outbox_event` row in the SAME tx (versioned envelope = the row: type/version/tenant/correlation/request/created_at + jsonb payload). `DomainEventType` consts (inventory.received, sale.created). No dispatcher/consumers/Svix/DLQ yet (deferred). Tests incl. same-tx rollback atomicity (rolled-back tx emits no event). Codex: 0 findings. 18 db tests vs real PG; gates green.
 

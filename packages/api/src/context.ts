@@ -26,6 +26,8 @@ export async function createContext({ context }: CreateContextOptions) {
     auth: null,
     session,
     meta,
+    // Raw request headers — needed by tenant.setActive to call Better Auth.
+    headers,
   };
 }
 
