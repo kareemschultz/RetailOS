@@ -164,3 +164,9 @@
   - **Money int range:** only `Number.isInteger` (not `isSafeInteger`) + `integer` (int4, ~$21M) columns — wrong for an enterprise/wholesale ERP. Fix: `Number.isSafeInteger` guard (all ops funnel through `money()`); widen the 4 money columns to `bigint(mode:"number")` (expand-safe int4→int8 ALTER, migration 0004).
 - **Test hermeticity:** integration tests that assert exact counts/balances must clear their tenant's rows in `beforeAll` (RLS-scoped deletes) — CI uses a fresh DB but local re-runs hit persisted state.
 - **Rule:** for idempotency/ledger correctness, take the serialization lock BEFORE the existence check (not just FOR UPDATE); hash canonically; use `bigint(mode:number)` + `isSafeInteger` for money so JS and DB safe ranges align. Money rounding mode stays deferred (no division in VS#1) — logged as a Phase-5 decision.
+
+### Never run `perl -0pi` (or sed -i) in-place on UTF-8 docs — 2026-06-22
+- **Context:** Inserting a changelog line into PROGRESS.md with `perl -0pi -e 's/.../.../'` where the replacement contained non-ASCII (`→`, `§`).
+- **Mistake:** perl processed the file as bytes without `binmode`/`use utf8`; the wide chars in the replacement triggered "Wide character in print" and the whole file's multibyte chars (em-dashes, §, emoji, ☑/☐) were rewritten as mojibake. Committed + pushed the corruption before noticing.
+- **Fix:** Restored from `git show HEAD~1:<file>` and re-applied the edits with the Edit tool (UTF-8 safe).
+- **Rule:** Edit Markdown/UTF-8 docs with the Edit/Write tools, never `perl -0pi`/`sed -i` — and if a shell rewrite is unavoidable, set `binmode`/`-CSD`/`LANG=…UTF-8` and verify (`grep -c "Ã"` = 0) before committing.
