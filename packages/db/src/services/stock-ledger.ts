@@ -3,7 +3,7 @@ import { stockLedger } from "../schema";
 import type { TenantTransaction } from "../tenant";
 import type { ServiceContext } from "./types";
 
-export type StockMovementType = "receipt" | "sale";
+export type StockMovementType = "adjustment" | "receipt" | "sale";
 
 export interface StockMovementInput {
   costCurrency?: string | null;

@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import type { TenantTransaction } from "../tenant";
-import { stockOnHandForSku } from "./stock-ledger";
+import { applyValuation } from "./costing";
+import { appendStockMovement, stockOnHandForSku } from "./stock-ledger";
+import type { ServiceContext } from "./types";
 
 export type OversellPolicy = "allow_with_flag" | "hard_block";
 
@@ -35,6 +37,22 @@ export interface ReorderSuggestion {
   suggestedQty: number;
 }
 
+export interface StockCountPostingAdjustment {
+  countedQty: number;
+  ledgerId: string | null;
+  lotId: string | null;
+  skuId: string;
+  systemQty: number;
+  valuationMinor: number;
+  varianceQty: number;
+}
+
+export interface StockCountPostingResult {
+  adjustments: StockCountPostingAdjustment[];
+  postedAt: Date;
+  stockCountId: string;
+}
+
 interface ConversionRow {
   factor: number;
   factor_scale: number;
@@ -50,6 +68,22 @@ interface FefoLotRow {
 interface ReorderRuleRow {
   max_qty: number | string;
   min_qty: number | string;
+}
+
+interface StockCountHeaderRow {
+  id: string;
+  location_id: string;
+  status: string;
+}
+
+interface StockCountLineRow {
+  counted_qty: number | string;
+  currency: string | null;
+  id: string;
+  lot_id: string | null;
+  scale: number | null;
+  sku_id: string;
+  variance_value_minor: number | string | null;
 }
 
 function asNumber(value: number | string): number {
@@ -177,4 +211,167 @@ export async function evaluateReorder(
     onHand,
     suggestedQty: isBelowMin ? Math.max(0, maxQty - onHand) : 0,
   };
+}
+
+export async function postStockCount(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  input: { stockCountId: string }
+): Promise<StockCountPostingResult> {
+  const headerRows = await tx.execute(sql`
+    SELECT id, location_id, status
+    FROM stock_count
+    WHERE id = ${input.stockCountId}
+      AND deleted_at IS NULL
+    FOR UPDATE
+  `);
+  const header = headerRows.rows.at(0) as StockCountHeaderRow | undefined;
+  if (!header) {
+    throw new Error("stock-count: not found");
+  }
+  if (header.status === "posted") {
+    throw new Error("stock-count: already posted");
+  }
+  if (header.status === "void") {
+    throw new Error("stock-count: void count cannot be posted");
+  }
+
+  const lineRows = await tx.execute(sql`
+    SELECT id, sku_id, lot_id, counted_qty, variance_value_minor, currency, scale
+    FROM stock_count_line
+    WHERE stock_count_id = ${input.stockCountId}
+    ORDER BY created_at, id
+    FOR UPDATE
+  `);
+  const adjustments: StockCountPostingAdjustment[] = [];
+  for (const line of lineRows.rows as unknown as StockCountLineRow[]) {
+    const countedQty = asNumber(line.counted_qty);
+    const systemQty = line.lot_id
+      ? await stockOnHandForSkuLot(
+          tx,
+          header.location_id,
+          line.sku_id,
+          line.lot_id
+        )
+      : await stockOnHandForSku(tx, header.location_id, line.sku_id);
+    const varianceQty = countedQty - systemQty;
+    let ledgerId: string | null = null;
+    let valuationMinor = 0;
+    if (varianceQty !== 0) {
+      const positiveCost = positiveAdjustmentCost(line, varianceQty);
+      const movement = await appendStockMovement(tx, ctx, {
+        costCurrency: positiveCost?.currency ?? null,
+        costScale: positiveCost?.scale ?? null,
+        idempotencyKey: `stock-count:${input.stockCountId}:${line.id}`,
+        locationId: header.location_id,
+        lotId: line.lot_id,
+        movementType: "adjustment",
+        productId: await productIdForSku(tx, line.sku_id),
+        qtyDelta: varianceQty,
+        refId: input.stockCountId,
+        refType: "stock_count",
+        skuId: line.sku_id,
+        unitCostMinor: positiveCost?.unitCostMinor ?? null,
+      });
+      ledgerId = movement.id;
+      const valuation = await applyValuation(tx, ctx, movement);
+      valuationMinor =
+        varianceQty > 0
+          ? (positiveCost?.unitCostMinor ?? 0) * varianceQty
+          : -valuation.cogsMinor;
+    }
+    await tx.execute(sql`
+      UPDATE stock_count_line
+      SET system_qty = ${systemQty},
+          variance_qty = ${varianceQty},
+          variance_value_minor = ${valuationMinor},
+          currency = COALESCE(currency, 'USD'),
+          scale = COALESCE(scale, 2),
+          updated_at = now()
+      WHERE id = ${line.id}
+    `);
+    adjustments.push({
+      countedQty,
+      ledgerId,
+      lotId: line.lot_id,
+      skuId: line.sku_id,
+      systemQty,
+      valuationMinor,
+      varianceQty,
+    });
+  }
+
+  const postedAt = new Date();
+  await tx.execute(sql`
+    UPDATE stock_count
+    SET status = 'posted',
+        posted_at = ${postedAt},
+        posted_by = ${ctx.actorUserId ?? null},
+        updated_at = now()
+    WHERE id = ${input.stockCountId}
+  `);
+
+  return { adjustments, postedAt, stockCountId: input.stockCountId };
+}
+
+async function productIdForSku(
+  tx: TenantTransaction,
+  skuId: string
+): Promise<string> {
+  const rows = await tx.execute(sql`
+    SELECT product_id
+    FROM sku
+    WHERE id = ${skuId}
+    LIMIT 1
+  `);
+  const productId = (rows.rows.at(0) as { product_id?: string } | undefined)
+    ?.product_id;
+  if (!productId) {
+    throw new Error("stock-count: SKU not found");
+  }
+  return productId;
+}
+
+function positiveAdjustmentCost(
+  line: StockCountLineRow,
+  varianceQty: number
+): { currency: string; scale: number; unitCostMinor: number } | null {
+  if (varianceQty <= 0) {
+    return null;
+  }
+  if (
+    line.variance_value_minor == null ||
+    line.currency == null ||
+    line.scale == null
+  ) {
+    throw new Error("stock-count: positive variance requires a value triplet");
+  }
+  const valueMinor = asNumber(line.variance_value_minor);
+  if (valueMinor < 0 || valueMinor % varianceQty !== 0) {
+    throw new Error("stock-count: positive variance value must divide exactly");
+  }
+  return {
+    currency: line.currency,
+    scale: line.scale,
+    unitCostMinor: valueMinor / varianceQty,
+  };
+}
+
+async function stockOnHandForSkuLot(
+  tx: TenantTransaction,
+  locationId: string,
+  skuId: string,
+  lotId: string
+): Promise<number> {
+  const result = await tx.execute(sql`
+    SELECT COALESCE(SUM(qty_delta), 0)::bigint AS balance
+    FROM stock_ledger
+    WHERE location_id = ${locationId}
+      AND sku_id = ${skuId}
+      AND lot_id = ${lotId}
+  `);
+  return asNumber(
+    (result.rows.at(0) as { balance?: number | string } | undefined)?.balance ??
+      0
+  );
 }

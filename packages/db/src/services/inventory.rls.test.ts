@@ -1,8 +1,10 @@
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as schema from "../schema";
 import {
+  avgCost,
   category,
   company,
   location,
@@ -10,16 +12,20 @@ import {
   product,
   reorderRule,
   sku,
+  stockCount,
+  stockCountLine,
   stockLedger,
   unitOfMeasure,
   uomConversion,
 } from "../schema";
 import { withTenant } from "../tenant";
+import { applyValuation } from "./costing";
 import {
   allocateFefoLots,
   convertUom,
   decideOversell,
   evaluateReorder,
+  postStockCount,
 } from "./inventory";
 import { appendStockMovement } from "./stock-ledger";
 
@@ -47,6 +53,9 @@ describe.skipIf(!url)("Phase 2 inventory services (tenant-scoped)", () => {
     pool = new Pool({ connectionString: url });
     db = drizzle(pool, { schema });
     await withTenant(db, TENANT, async (tx) => {
+      await tx.delete(stockCountLine);
+      await tx.delete(stockCount);
+      await tx.delete(avgCost);
       await tx.delete(stockLedger);
       await tx.delete(reorderRule);
       await tx.delete(lot);
@@ -273,6 +282,138 @@ describe.skipIf(!url)("Phase 2 inventory services (tenant-scoped)", () => {
         onHand: 4,
         suggestedQty: 6,
       });
+    });
+  });
+
+  it("posts stock counts as valued adjustment movements", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const prod = required(
+        (
+          await tx
+            .insert(product)
+            .values({
+              tenantId: TENANT,
+              sku: "COUNT-AVCO",
+              name: "Counted AVCO",
+              baseUomId: eachId,
+              costingMethod: "avco",
+              priceMinor: 100,
+              currency: "USD",
+            })
+            .returning()
+        ).at(0),
+        "count product"
+      );
+      const item = required(
+        (
+          await tx
+            .insert(sku)
+            .values({
+              tenantId: TENANT,
+              productId: prod.id,
+              code: "COUNT-AVCO-EA",
+              baseUomId: eachId,
+            })
+            .returning()
+        ).at(0),
+        "count sku"
+      );
+      const receipt = await appendStockMovement(
+        tx,
+        { tenantId: TENANT },
+        {
+          costCurrency: "USD",
+          costScale: 2,
+          locationId,
+          movementType: "receipt",
+          productId: prod.id,
+          qtyDelta: 5,
+          skuId: item.id,
+          unitCostMinor: 100,
+        }
+      );
+      await applyValuation(tx, { tenantId: TENANT }, receipt);
+
+      const shrinkCount = required(
+        (
+          await tx
+            .insert(stockCount)
+            .values({
+              tenantId: TENANT,
+              locationId,
+              scope: "cycle",
+              status: "started",
+            })
+            .returning()
+        ).at(0),
+        "shrink count"
+      );
+      await tx.insert(stockCountLine).values({
+        tenantId: TENANT,
+        stockCountId: shrinkCount.id,
+        skuId: item.id,
+        countedQty: 3,
+      });
+      const shrinkResult = await postStockCount(
+        tx,
+        { tenantId: TENANT },
+        {
+          stockCountId: shrinkCount.id,
+        }
+      );
+      expect(shrinkResult.adjustments).toMatchObject([
+        { countedQty: 3, systemQty: 5, valuationMinor: -200, varianceQty: -2 },
+      ]);
+      let projection = required(
+        (await tx.select().from(avgCost).where(eq(avgCost.skuId, item.id))).at(
+          0
+        ),
+        "avg cost"
+      );
+      expect(projection.qtyOnHand).toBe(3);
+      expect(projection.totalValueMinor).toBe(300);
+
+      const overageCount = required(
+        (
+          await tx
+            .insert(stockCount)
+            .values({
+              tenantId: TENANT,
+              locationId,
+              scope: "cycle",
+              status: "started",
+            })
+            .returning()
+        ).at(0),
+        "overage count"
+      );
+      await tx.insert(stockCountLine).values({
+        tenantId: TENANT,
+        stockCountId: overageCount.id,
+        skuId: item.id,
+        countedQty: 6,
+        varianceValueMinor: 360,
+        currency: "USD",
+        scale: 2,
+      });
+      const overageResult = await postStockCount(
+        tx,
+        { tenantId: TENANT },
+        {
+          stockCountId: overageCount.id,
+        }
+      );
+      expect(overageResult.adjustments).toMatchObject([
+        { countedQty: 6, systemQty: 3, valuationMinor: 360, varianceQty: 3 },
+      ]);
+      projection = required(
+        (await tx.select().from(avgCost).where(eq(avgCost.skuId, item.id))).at(
+          0
+        ),
+        "avg cost"
+      );
+      expect(projection.qtyOnHand).toBe(6);
+      expect(projection.totalValueMinor).toBe(660);
     });
   });
 });
