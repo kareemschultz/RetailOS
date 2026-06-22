@@ -1,4 +1,5 @@
 import {
+  bigint,
   index,
   integer,
   pgTable,
@@ -18,7 +19,9 @@ export const product = pgTable(
     tenantId,
     sku: text("sku").notNull(),
     name: text("name").notNull(),
-    priceMinor: integer("price_minor").notNull(),
+    // Money minor units are int8 (bigint) — int4 caps at ~$21M, too small for an
+    // enterprise/wholesale ERP. mode:"number" keeps a JS number (safe to 2^53).
+    priceMinor: bigint("price_minor", { mode: "number" }).notNull(),
     currency: text("currency").notNull(),
     scale: integer("scale").default(2).notNull(),
     ...timestamps,

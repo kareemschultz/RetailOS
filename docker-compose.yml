@@ -26,6 +26,12 @@ services:
       - "5432:5432"
     volumes:
       - RetailOS_postgres_data:/var/lib/postgresql
+      # Bootstrap the RLS roles (ADR 0006) on FIRST init only — runs as the
+      # superuser, BEFORE any migrations. If the data volume already exists this
+      # does NOT re-run; re-bootstrap manually with:
+      #   docker exec -i RetailOS-postgres psql -U postgres -d RetailOS < packages/db/src/bootstrap/roles.sql
+      # Then apply migrations as retailos_migrator (bun -F @RetailOS/db db:migrate).
+      - ./packages/db/src/bootstrap/roles.sql:/docker-entrypoint-initdb.d/01-roles.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s

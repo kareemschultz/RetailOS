@@ -53,6 +53,6 @@ Better Auth identity tables (`user/session/account/verification/organization/mem
 
 ## Consequences
 
-- Local docker-compose + CI must **provision the three roles** and run the app/tests as `retailos_app` (CI gains a real Postgres service; the central VPS already has a least-privilege `retailos` role per ADR 0004 — it maps to `retailos_app`).
-- A bootstrap step (run as superuser/owner) creates roles + grants before migrations; the migration enables/forces RLS and creates policies.
+- **Role provisioning (decided):** a **versioned bootstrap SQL** — `packages/db/src/bootstrap/roles.sql` — run as superuser creates the three roles + grants. It is **separate from the schema migrations** (cluster-level roles don't belong in expand/contract schema DDL). Local docker-compose runs it on first init (e.g. `/docker-entrypoint-initdb.d/`), CI runs it before `db:migrate`. The runtime `DATABASE_URL` switches to **`retailos_app`** (NOBYPASSRLS, NOSUPERUSER); `drizzle-kit migrate` connects as `retailos_migrator`. The central VPS least-privilege `retailos` role (ADR 0004) maps to `retailos_app`.
+- CI gains a **real Postgres service**; the schema migration (run as `retailos_migrator`) enables/forces RLS and creates the policies.
 - Backfills touching tenant data are tenant-aware or use the future audited maintenance role — never a standing `BYPASSRLS` for the app.

@@ -68,6 +68,16 @@ Namespaced, all `protectedProcedure` + tenant-scoped + permission-checked (§7):
 
 Types pass · tests pass · tenant scoping + RLS-bypass verified · audit works · errors friendly+structured · logs structured · permissions enforced · money in minor units · module spec + this design updated · rollback (expand/contract) noted.
 
+## Implementation status (2026-06-22)
+
+**IMPLEMENTED — all 7 commits on branch `vs1-phase1` (PR #1), each gated green + codex-reviewed.**
+DoD (§35) satisfied: types pass; tests pass (RLS fail-closed + cross-tenant denial + non-`BYPASSRLS`
+role + ledger invariant + POS idempotency + audit-per-mutation + outbox same-tx + §32 e2e + permission
+enforcement, all vs real Postgres in CI `db-rls`); tenant scoping + RLS verified; audit + structured
+errors (oRPC `ORPCError`); permissions enforced (minimal RBAC); money in integer minor units; design +
+ADR 0006 recorded; expand/contract migrations. Deferred (logged): oversell policy (§14), money rounding
+mode (§19), distributed number allocator (I3), accounting GL posting (Phase 5), read-model reporting (Phase 12).
+
 ## Approved implementation sequence (2026-06-21 — plan of record)
 
 Approved by the product owner with modifications. **Each commit is gated green** (`check` · `check-types` ·

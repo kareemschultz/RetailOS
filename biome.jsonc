@@ -2,9 +2,14 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["ultracite/biome/core", "ultracite/biome/react"],
   "files": {
-    // Vendored agent skills and generated files are not RetailOS source — don't lint them.
+    // Vendored agent skills/hooks and generated files are not RetailOS source — don't lint them.
+    // Impeccable installs a copy per harness (.claude/.agents/.cursor/.github); exclude all of them.
     "includes": [
       "!**/.agents/skills",
+      "!**/skills/impeccable",
+      "!**/.codex/hooks.json",
+      "!**/.cursor/hooks.json",
+      "!**/.github/hooks/impeccable.json",
       "!**/routeTree.gen.ts",
       "!**/*.gen.ts",
       "!**/.source",

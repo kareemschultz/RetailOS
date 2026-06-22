@@ -7,6 +7,30 @@
 > Distinct from: `phase-roadmap.md` (strategic Phase 0–13 status) and `phase-0-checklist.md` (§46 gate
 > scoreboard). This file is the day-to-day operational log.
 
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     AUTONOMOUS OVERNIGHT RUN — read this block FIRST in the morning
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+## 🌙 AUTONOMOUS RUN STATUS (top-of-file; morning review)
+
+- **Mode:** unattended overnight. Branch **`vs1-phase1`** (never master; all work = PRs for review).
+- **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
+- **Order:** VS#1 Commits 2→7, then phase roadmap §31 (Phase 1→2→3…) with §41/§42/§45 gates before any new module.
+- **Current step:** VS#1 **COMPLETE** (all 7 commits, PR #1). Next: Phase 2 gating — §41 competitive + §42 requirements docs, then **HARD STOP** for the inventory-costing decision before implementing.
+
+### ⛔ BLOCKERS awaiting your decision (none yet)
+*(When I hard-stop, the blocker + analysis + options go here.)*
+
+### 📋 Deferred-decisions log (business/product rules I refused to guess)
+1. **Monetary rounding mode** (half-up / half-even / half-away-from-zero) — charter §19 mandates "one rounding policy" but doesn't pick one. **Not needed for VS#1** (money math is exact integer add/multiply-by-quantity; no division yet). First needed at **division**: tax (Phase 5) and FX. Decide before Phase 5. *(No work blocked now.)*
+2. **Oversell policy** (charter §14: allow-with-backorder / hard-reservation / optimistic-with-correction) — **per tenant/location**. Codex flagged that `pos.createSale` can drive stock negative. By design `StockLedger.appendStockMovement` is **policy-neutral** (records the movement faithfully); enforcing no-negative here would be *choosing* a policy. **Deferred** — VS#1 ships the neutral ledger; the policy gate is applied upstream once you decide. *(No work blocked; behavior is the safe neutral default.)*
+- *Next expected:* Phase 2 inventory costing FIFO/LIFO/avg.
+
+### ✅ PRs opened
+- **PR #1** — `vs1-phase1` → master — **VS#1 COMPLETE** (all 7 commits: schema; fail-closed RLS + 3-role bootstrap; core services; request context + tenant guard; events/outbox; oRPC routers + minimal RBAC; §32 e2e tests + CI integration). All gates green; codex-reviewed each commit. Open for review; **DO NOT MERGE**.
+
+---
+
 - **Current effort:** Phase 0 — **post-lock-in hardening**: audit-only red-team pass of Phase 0 vs charter v4.1 → fix CRITICAL findings only → then Phase 1 (Vertical Slice #1). Charter §0/§1/§32/§45/§47.
 - **Approved plan:** `~/.claude/plans/retailos-master-architecture-groovy-oasis.md` (Deliverables A–E DONE + merged to `master`).
 - **Working branch:** `master` (Phase-0 branch merged; commits `4ce9499`/`cfcf588`/`bdc51f6`). Foundation docs + config locked-in and CI green.
@@ -75,6 +99,18 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - Scaffold reality: Better Auth = email/password + Expo plugin only; DB = auth schema only, no migrations; 2 demo oRPC procedures; docker-compose = postgres + web only. All charter foundation domain work (tenant/RBAC/audit/RLS/Redis/object storage/Better Auth plugins) is NOT yet built (deferred past Phase-0 lock-in).
 
 ## Changelog (newest first)
+
+- **2026-06-22** — VS#1 **Commit 7** (PR #1) — **VS#1 COMPLETE**: §32 end-to-end integration test through the oRPC routers (Org→Company→Location→Product→Receipt→Sale→Invoice→Report) vs real Postgres — proves POS idempotency (same key ⇒ one sale, on-hand 7), permission denial (cashier can't create products), report totals match (USD 3000, count 1). CI `db-rls` job runs bootstrap→migrate→`bun run test` with DATABASE_URL+RLS_TEST_DATABASE_URL as `retailos_app` (+ dev-only auth env) so RLS + service + e2e tests all execute under the non-privileged role. Lesson: env-core blocks server vars under happy-dom → `// @vitest-environment node` + lazy imports in skip-guarded beforeAll. Codex: 0 findings. Gates green.
+
+- **2026-06-22** — VS#1 **Commit 6** (PR #1): oRPC routers for the §32 flow — tenant.setActive, company/location/product.create, inventory.receive (→receipt ledger + inventory.received event), pos.createSale (idempotent; sale+lines+ledger deductions+invoice+audit+sale.created event; advisory-locked gapless numbers), reports.salesBasic (grouped by currency). Minimal RBAC (`entitlements.ts`: tenant_admin/manager/cashier), enforced per-route inside the tenant tx. Codex review: 4 HIGH → 3 fixed (cross-tenant FK refs validated via RLS-scoped reads since FK checks bypass RLS; non-negative price; multi-currency report), 1 deferred (oversell = §14 business decision, logged). Gates green; routers type-checked + 4 RBAC tests. (Full §32 e2e through routers = Commit 7.)
+
+- **2026-06-22** — VS#1 **Commit 5** (PR #1): transactional outbox. `emitEvent(tx, ctx, {type, version?, payload})` writes one `outbox_event` row in the SAME tx (versioned envelope = the row: type/version/tenant/correlation/request/created_at + jsonb payload). `DomainEventType` consts (inventory.received, sale.created). No dispatcher/consumers/Svix/DLQ yet (deferred). Tests incl. same-tx rollback atomicity (rolled-back tx emits no event). Codex: 0 findings. 18 db tests vs real PG; gates green.
+
+- **2026-06-22** — VS#1 **Commit 4** (PR #1): standardized request context + tenant guard. `RequestContext` `{tenantId, organizationId, actorUserId, employeeId?, sessionId?, impersonatorUserId?, requestId, correlationId, source, deploymentMode}` (superset of db ServiceContext) built fail-closed by `buildRequestContext` (UNAUTHORIZED w/o user, FORBIDDEN w/o active org); `tenantProcedure` = protectedProcedure + tenant guard. `tenantId` comes ONLY from session.activeOrganizationId (not client headers). Added `DEPLOYMENT_MODE` env; `check-types` added to api+env (now 6 pkgs gated). Codex review: 0 findings. Gates green; 3 guard unit tests.
+
+- **2026-06-22** — VS#1 **Commit 3** (PR #1): core services in `packages/db/src/services/` — Money (integer minor units, no rounding yet), StockLedger (sole stock mutator; advisory-lock serialized `balance_after`), Idempotency (canonical payload-hash, advisory-lock pre-select), Audit. New `idempotency_key` table + RLS (now 12 tenant tables). Money columns widened int4→bigint(mode:number). Codex review: 3 HIGH fixed (idempotency race, non-canonical hash, money safe-int/int4) + regression tests. 16 db tests pass vs real PG; gates green. (Note: PROGRESS.md UTF-8 was corrupted by a `perl -0pi` run and restored — never run perl in-place on these docs.)
+
+- **2026-06-22** — VS#1 **Commit 2** (`e9b711e`, PR #1): migrations + fail-closed RLS + 3-role bootstrap (ADR 0006). `roles.sql` (idempotent, superuser, pre-migration): owner/migrator/app all NOSUPERUSER/NOBYPASSRLS/NOCREATEDB/NOCREATEROLE; migrator SET role→owner; revokes PUBLIC schema CREATE + any owner-membership from app. Migration 0001 ENABLE+FORCE RLS + fail-closed policy on 11 tenant tables. URL split (app runtime / migrator migrations). withTenant rejects empty tenant. CI `db-rls` job (real Postgres: bootstrap→migrate→test). 5 RLS tests pass vs real PG. Codex review: 2 HIGH role-hardening fixed, 0 CRIT. Gates green.
 
 - **2026-06-21** — VS#1 **Commit 1** (`c8e7ab1`): schema + Better Auth org/admin + tenant-scoped seed scaffold. Domain tables (company/location/membership/product/stock_ledger/sale/sale_line/invoice/audit_log/outbox_event/number_block) with tenant cols from day one; `withTenant()` GUC primitive; `seeds/` via injected Better-Auth provisioner (no bypass); `tenant_id` text (BA nanoid), domain PKs uuid; added `check-types` to db+auth. NO migration/RLS yet. Gates green (check 115, check-types 4, test 6). **Stopped for review before Commit 2 (Migration + RLS).** Approved 8-step sequence recorded in `vertical-slice-1.md`.
 
