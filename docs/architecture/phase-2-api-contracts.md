@@ -62,7 +62,7 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 ### `catalog.uomConversionCreate`
 - **Input:** `{ fromUomId, toUomId, role, factor, factorScale?, categoryId?, productId?, skuId? }`
 - **Writes:** `uom_conversion`
-- **Guards:** referenced UoMs/product/SKU must be visible through tenant RLS.
+- **Guards:** referenced UoMs/category/product/SKU must be visible through tenant RLS.
 - **Audit:** `uom_conversion.create`
 
 ## Inventory routes

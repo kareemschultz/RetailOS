@@ -430,6 +430,9 @@ export const catalogRouter = {
         await assertPermission(tx, ctx, "products.create");
         await assertUomVisible(tx, input.fromUomId);
         await assertUomVisible(tx, input.toUomId);
+        if (input.categoryId) {
+          await assertCategoryVisible(tx, input.categoryId);
+        }
         if (input.productId) {
           await assertProductVisible(tx, input.productId);
         }
@@ -480,6 +483,24 @@ async function assertProductVisible(
   if (!row) {
     throw new ORPCError("NOT_FOUND", {
       message: "Product not found in this tenant",
+    });
+  }
+}
+
+async function assertCategoryVisible(
+  tx: TenantTransaction,
+  categoryId: string
+): Promise<void> {
+  const row = (
+    await tx
+      .select({ id: schema.category.id })
+      .from(schema.category)
+      .where(eq(schema.category.id, categoryId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Category not found in this tenant",
     });
   }
 }

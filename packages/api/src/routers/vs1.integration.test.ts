@@ -59,9 +59,26 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.saleLine);
         await tx.delete(schema.invoice);
         await tx.delete(schema.sale);
+        await tx.delete(schema.stockCountLine);
+        await tx.delete(schema.stockCount);
+        await tx.delete(schema.avgCost);
+        await tx.delete(schema.valuationLayer);
         await tx.delete(schema.stockLedger);
+        await tx.delete(schema.reorderRule);
+        await tx.delete(schema.bomLine);
+        await tx.delete(schema.bom);
+        await tx.delete(schema.bundle);
+        await tx.delete(schema.serial);
+        await tx.delete(schema.lot);
+        await tx.delete(schema.barcode);
+        await tx.delete(schema.uomConversion);
+        await tx.delete(schema.sku);
+        await tx.delete(schema.variant);
         await tx.delete(schema.membership);
         await tx.delete(schema.product);
+        await tx.delete(schema.category);
+        await tx.delete(schema.brand);
+        await tx.delete(schema.unitOfMeasure);
         await tx.delete(schema.location);
         await tx.delete(schema.company);
       });
@@ -205,6 +222,93 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       call(
         appRouter.inventory.receive,
         { locationId: locationB.id, productId: productA.id, qty: 1 },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
+  it("blocks cross-tenant catalog references in SKU and UoM conversion routes", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+
+    const productA = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Catalog Product A",
+        priceMinor: 100,
+        sku: "CAT-A",
+      },
+      admin
+    );
+    const productB = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Catalog Product B",
+        priceMinor: 100,
+        sku: "CAT-B",
+      },
+      adminB
+    );
+    const categoryB = await call(
+      appRouter.catalog.categoryCreate,
+      { name: "Tenant B Category" },
+      adminB
+    );
+    const uomA = await call(
+      appRouter.catalog.uomCreate,
+      { code: "EA-A", name: "Each A" },
+      admin
+    );
+    const cartonA = await call(
+      appRouter.catalog.uomCreate,
+      { code: "CTN-A", name: "Carton A" },
+      admin
+    );
+    const uomB = await call(
+      appRouter.catalog.uomCreate,
+      { code: "EA-B", name: "Each B" },
+      adminB
+    );
+    const skuA = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: uomA.id, code: "CAT-A-EA", productId: productA.id },
+      admin
+    );
+
+    await expect(
+      call(
+        appRouter.catalog.skuCreate,
+        { baseUomId: uomA.id, code: "HIJACK", productId: productB.id },
+        admin
+      )
+    ).rejects.toThrow();
+
+    await expect(
+      call(
+        appRouter.catalog.uomConversionCreate,
+        {
+          factor: 24,
+          fromUomId: cartonA.id,
+          role: "purchase",
+          toUomId: uomB.id,
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    await expect(
+      call(
+        appRouter.catalog.uomConversionCreate,
+        {
+          categoryId: categoryB.id,
+          factor: 24,
+          fromUomId: cartonA.id,
+          role: "purchase",
+          skuId: skuA.id,
+          toUomId: uomA.id,
+        },
         admin
       )
     ).rejects.toThrow();
