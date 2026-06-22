@@ -49,7 +49,7 @@
     "check": "ultracite check",
     "fix": "ultracite fix",
     "lint": "ultracite check",
-    "test": "vitest run",
+    "test": "turbo run test",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "prepare": "husky"

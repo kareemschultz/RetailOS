@@ -9,7 +9,9 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "test": "vitest run"
+  },
   "dependencies": {
     "@RetailOS/auth": "workspace:*",
     "@RetailOS/db": "workspace:*",

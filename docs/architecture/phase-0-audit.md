@@ -30,7 +30,7 @@ governance metadata (since fixed) plus deferred engineering items (queued).
 | M3 | `phase-0-checklist.md` Docker-hardening row understated (multi-stage distroless image + CI size gate now exist) | §28 | **Fixed** (row updated; lessons 14→16; ADR list) |
 | M4 | `adr/README.md` index omitted ADRs 0004 + 0005 (both exist + substantive) | §34 | **Fixed** (index updated) |
 | M5 | `CLAUDE.md` Architecture-references list did not link `docker-and-cicd.md` / `tech-stack.md` (orphaned) | §34 | **Fixed** (both added) |
-| M6 | turbo `test` task is dead (`dependsOn ^test`, but no workspace package defines a `test` script); only root `vitest run` actually gates | §43 | **Queued** (test-architecture decision; harmless today, CI green) |
+| M6 | turbo `test` task is dead (`dependsOn ^test`, but no workspace package defines a `test` script); only root `vitest run` actually gates | §43 | **Fixed** — added per-package `test` scripts + re-exported `vitest.config.ts` in `packages/{ui,api,db,auth,env}` + `apps/server`; root `test` → `turbo run test` (6 tasks fan out, ui 3 tests run). Dead turbo `lint` task removed (Biome/Ultracite is intentionally a single-root pass — distributing it reintroduces the nested-root error in `lessons-learned.md`); root `check`/`lint` stays. |
 | M7 | Postgres named volume mounts `/var/lib/postgresql` not `…/data` — claimed data-loss risk | §47 | **Dismissed** — false positive. Live probe: `postgres:18-alpine` sets `PGDATA=/var/lib/postgresql/18/docker` and `VOLUME /var/lib/postgresql`; our mount is the **correct parent** for PG18. (Recorded as a lessons-learned entry.) |
 
 ## NICE-TO-HAVE findings (queued / no-action)
@@ -75,7 +75,7 @@ governance metadata (since fixed) plus deferred engineering items (queued).
 
 ## Backlog created by this audit (for Phase 1+)
 
-1. Resolve the turbo `test`/`lint` no-op tasks (decide per-package test scripts vs keep root-only invocation) — M6.
+1. ~~Resolve the turbo `test`/`lint` no-op tasks~~ — **DONE** (per-package `test` scripts + re-exported config; turbo orchestrates 6 packages; dead `lint` task removed, root single-pass kept).
 2. Wire the deferred §43 gates: a11y, Trivy, dependency audit, SAST/secret-scan, bundle-size, VRT.
 3. Add a §44 performance-budget CI gate (POS load/search, admin first-load, warehouse scan).
 4. At Slice-1 implementation: explicit per-mutation audit wiring + a structured logger/error-code interface.
