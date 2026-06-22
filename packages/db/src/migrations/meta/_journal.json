@@ -57,6 +57,13 @@
       "when": 1782142091814,
       "tag": "0007_overconfident_junta",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782142315279,
+      "tag": "0008_reflective_loki",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import {
   bigint,
+  boolean,
   date,
   index,
   integer,
@@ -192,5 +193,87 @@ export const valuationLayer = pgTable(
       table.receivedAt,
       table.seq
     ),
+  ]
+);
+
+export const reorderRule = pgTable(
+  "reorder_rule",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    skuId: uuid("sku_id")
+      .notNull()
+      .references(() => sku.id),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => location.id),
+    minQty: bigint("min_qty", { mode: "number" }).notNull(),
+    maxQty: bigint("max_qty", { mode: "number" }).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    ...timestamps,
+    ...actor,
+    ...softDelete,
+  },
+  (table) => [
+    unique("reorder_rule_tenantId_sku_location_uq").on(
+      table.tenantId,
+      table.skuId,
+      table.locationId
+    ),
+    index("reorder_rule_tenantId_idx").on(table.tenantId),
+    index("reorder_rule_sku_location_idx").on(table.skuId, table.locationId),
+  ]
+);
+
+export const stockCount = pgTable(
+  "stock_count",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => location.id),
+    scope: text("scope").default("cycle").notNull(),
+    status: text("status").default("draft").notNull(),
+    startedAt: timestamp("started_at").defaultNow().notNull(),
+    postedAt: timestamp("posted_at"),
+    postedBy: text("posted_by"),
+    ...timestamps,
+    ...actor,
+    ...softDelete,
+  },
+  (table) => [
+    index("stock_count_tenantId_idx").on(table.tenantId),
+    index("stock_count_locationId_idx").on(table.locationId),
+  ]
+);
+
+export const stockCountLine = pgTable(
+  "stock_count_line",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    stockCountId: uuid("stock_count_id")
+      .notNull()
+      .references(() => stockCount.id),
+    skuId: uuid("sku_id")
+      .notNull()
+      .references(() => sku.id),
+    lotId: uuid("lot_id").references(() => lot.id),
+    countedQty: bigint("counted_qty", { mode: "number" }).notNull(),
+    systemQty: bigint("system_qty", { mode: "number" }),
+    varianceQty: bigint("variance_qty", { mode: "number" }),
+    varianceValueMinor: bigint("variance_value_minor", { mode: "number" }),
+    currency: text("currency"),
+    scale: integer("scale"),
+    ...timestamps,
+  },
+  (table) => [
+    unique("stock_count_line_tenant_count_sku_lot_uq")
+      .on(table.tenantId, table.stockCountId, table.skuId, table.lotId)
+      .nullsNotDistinct(),
+    index("stock_count_line_tenantId_idx").on(table.tenantId),
+    index("stock_count_line_stockCountId_idx").on(table.stockCountId),
+    index("stock_count_line_skuId_idx").on(table.skuId),
   ]
 );

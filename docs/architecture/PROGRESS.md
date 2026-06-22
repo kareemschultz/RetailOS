@@ -16,11 +16,11 @@
 - **Branches/PRs:** **PR #1 (`vs1-phase1`) + PR #3 (`phase-2-inventory`, = re-merge of the auto-closed PR #2) are MERGED to master** (`cd5258e`, `b404c63`); master CI green (4/4 jobs incl. real-Postgres RLS). **Active branch: `phase-2-implementation`** (off master). All work = PRs; never push to master directly.
 - **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + coverage gate + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
 - **Standing build order (Phase 2 onward):** schema → migrations → RLS → **ROBUST seed** → services → routers → validation → RBAC → audit/outbox → tests → API contract docs. **No production UI** until APIs stable+approved; later UI strictly from `ui-inventory/` + MCP registries (never hand-rolled React). POS UI is a **Phase 4** decision (Tauri/offline/SQLite) — not decided now.
-- **Current step:** **Phase 2 implementation in progress.** ✅ **Commit 0 landed** (mechanical RLS coverage gate). ✅ **Commit 1 landed** — catalog schema + migration + RLS. ✅ **Commit 2 landed** — tracking schema + stock ledger lot/serial/cost seams. ✅ **Commit 3 ready/landed in this branch** — costing storage (`avg_cost`, `valuation_layer`) + tenant config columns. **Next: rich seed foundation / costing resolver services, per approved order.**
+- **Current step:** **Phase 2 implementation in progress.** ✅ **Commit 0 landed** (mechanical RLS coverage gate). ✅ **Commit 1 landed** — catalog schema + migration + RLS. ✅ **Commit 2 landed** — tracking schema + stock ledger lot/serial/cost seams. ✅ **Commit 3 landed** — costing storage (`avg_cost`, `valuation_layer`) + tenant config columns. ✅ **Commit 4 ready/landed in this branch** — reorder rules, stock counts, bundle/BOM schema + migration + RLS. **Next: rich seed foundation / costing resolver services, per approved order.**
 
 ### ⛔ BLOCKERS / gates
 
-**Phase 2 implementation is APPROVED and underway in commit order.** All product-policy decisions D1–D7 are LOCKED (below); only D-money rounding stays open (Phase 5, not a Phase-2 blocker — AVCO carries exact-integer remainders, FIFO is division-free; see the plan's *Value-integrity invariants*). Catalog schema is the only Phase-2 implementation surface added so far; **no costing resolver/services/routers/UI yet.**
+**Phase 2 implementation is APPROVED and underway in commit order.** All product-policy decisions D1–D7 are LOCKED (below); only D-money rounding stays open (Phase 5, not a Phase-2 blocker — AVCO carries exact-integer remainders, FIFO is division-free; see the plan's *Value-integrity invariants*). Phase-2 schema groups are now in place through reorder/count/BOM storage; **no rich seed, costing resolver/services/routers/UI yet.**
 
 **✅ Owner decisions LOCKED (2026-06-22) — all in `module-specs/inventory.md`:**
 1. **D1 costing** — AVCO default; FIFO per tenant/category/product (pharmacy/expiry/lot/regulated); no LIFO; not hardcoded — per-tenant/category/product strategy (both `avg_cost` + `valuation_layer` exist). + Costing Strategy Examples section.
@@ -34,7 +34,7 @@
 **⏳ Still OPEN (only one):**
 - **D-money rounding mode** — left OPEN per directive; do NOT assume banker's or half-up; pending Guyana/GRA VAT + target-country rounding verification. First needed Phase 5 (tax/FX division), not Phase 2.
 
-**What I did:** finished + locked all D1–D7 in the §42 spec; added Costing Strategy Examples; kept rounding open; drafted the approved Phase-2 implementation plan, event map, inventory screen map, Commit-0 RLS coverage gate, Commit-1 catalog schema/migration/RLS, Commit-2 tracking schema/migration/RLS, and Commit-3 costing storage/migration/RLS. **No costing resolver/services/routers/UI yet.**
+**What I did:** finished + locked all D1–D7 in the §42 spec; added Costing Strategy Examples; kept rounding open; drafted the approved Phase-2 implementation plan, event map, inventory screen map, Commit-0 RLS coverage gate, Commit-1 catalog schema/migration/RLS, Commit-2 tracking schema/migration/RLS, Commit-3 costing storage/migration/RLS, and Commit-4 reorder/count/BOM schema/migration/RLS. **No rich seed, costing resolver/services/routers/UI yet.**
 
 ### §45 phase reassessment (end of Phase 1 / VS#1)
 - Architecture held: fail-closed RLS + 3-role model + tenant-scoped `withTenant` is the load-bearing spine; every later module inherits it. No ADR changes needed. Codex found real HIGHs at the service/router layers (idempotency race, FK-bypasses-RLS, money int4) — all fixed + regression-tested; 0 CRITICAL across the whole slice.
@@ -52,7 +52,7 @@
 - **PR #3** — `phase-2-inventory` → master — **MERGED** (Phase-2 §41/§42 docs + ADR-0007 after PR #2 auto-closed).
 
 ### 🚧 Active review branch
-- **`phase-2-implementation`** — Commit 0 coverage gate + docs-only planning artifacts; Commit 1 catalog schema/migration/RLS; Commit 2 tracking schema/migration/RLS; Commit 3 costing storage/migration/RLS. Continue in approved order; next is rich seed foundation / resolver services. Costing resolver/services/routers/UI are not implemented yet.
+- **`phase-2-implementation`** — Commit 0 coverage gate + docs-only planning artifacts; Commit 1 catalog schema/migration/RLS; Commit 2 tracking schema/migration/RLS; Commit 3 costing storage/migration/RLS; Commit 4 reorder/count/BOM schema/migration/RLS. Continue in approved order; next is rich seed foundation / resolver services. Costing resolver/services/routers/UI are not implemented yet.
 
 ---
 
