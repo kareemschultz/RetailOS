@@ -1,4 +1,5 @@
 import {
+  bigint,
   index,
   integer,
   pgTable,
@@ -22,7 +23,7 @@ export const sale = pgTable(
       .notNull()
       .references(() => location.id),
     number: text("number").notNull(),
-    totalMinor: integer("total_minor").notNull(),
+    totalMinor: bigint("total_minor", { mode: "number" }).notNull(),
     currency: text("currency").notNull(),
     scale: integer("scale").default(2).notNull(),
     // completed | void (VS#1)
@@ -52,7 +53,7 @@ export const saleLine = pgTable(
       .notNull()
       .references(() => product.id),
     qty: integer("qty").notNull(),
-    unitPriceMinor: integer("unit_price_minor").notNull(),
+    unitPriceMinor: bigint("unit_price_minor", { mode: "number" }).notNull(),
     ...timestamps,
   },
   (table) => [index("sale_line_saleId_idx").on(table.saleId)]
@@ -68,7 +69,7 @@ export const invoice = pgTable(
       .notNull()
       .references(() => sale.id),
     number: text("number").notNull(),
-    totalMinor: integer("total_minor").notNull(),
+    totalMinor: bigint("total_minor", { mode: "number" }).notNull(),
     currency: text("currency").notNull(),
     scale: integer("scale").default(2).notNull(),
     ...timestamps,

@@ -2,7 +2,9 @@ import { sql } from "drizzle-orm";
 import type { createDb } from "./index";
 
 type Database = ReturnType<typeof createDb>;
-type TenantTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+export type TenantTransaction = Parameters<
+  Parameters<Database["transaction"]>[0]
+>[0];
 
 // Runs `fn` inside a transaction with the `app.tenant_id` GUC set, so the
 // fail-closed RLS policies scope every statement to this tenant (charter §8).

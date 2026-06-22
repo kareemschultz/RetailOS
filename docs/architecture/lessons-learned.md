@@ -155,3 +155,12 @@
   - **PG18 PGDATA + roles:** migrator gets `ALTER ROLE … SET role TO retailos_owner` so migration objects are owned by owner (needed to `CREATE POLICY`); owner needs `GRANT CREATE ON DATABASE` (dynamic, `current_database()`) to create the drizzle migrations schema.
   - **Codex adversarial review (2 HIGH, 0 CRIT):** (1) idempotent re-runs didn't reassert `NOCREATEDB/NOCREATEROLE` nor revoke an accidental `retailos_owner` membership from `retailos_app`; (2) `PUBLIC`'s `CREATE` on schema `public` wasn't revoked. Fixed both + added assertions (`rolcreatedb/rolcreaterole=false`, not-owner-member, no schema CREATE).
 - **Rule:** RLS is only real when tested as the actual non-privileged runtime role; a role's *current* flags aren't enough — reassert the safe posture AND revoke inherited/PUBLIC privileges every bootstrap run, and prove it with `pg_roles`/`has_schema_privilege` assertions.
+
+### VS#1 Commit 3 — core services + codex HIGH fixes — 2026-06-22
+- **Context:** Money/StockLedger/Idempotency/Audit services on the tenant-scoped tx.
+- **Codex adversarial review found 3 HIGH (0 CRIT), all fixed:**
+  - **Idempotency race:** `SELECT … FOR UPDATE` locks nothing when the row doesn't exist, so concurrent first-callers both run `fn`. Fix: `pg_advisory_xact_lock` on `(tenant,key)` BEFORE the select (mirrors StockLedger's per-cell lock).
+  - **Non-canonical hash:** `JSON.stringify` key order isn't stable → `{a,b}` vs `{b,a}` false-conflict. Fix: recursive sorted-key `canonicalize()` before hashing.
+  - **Money int range:** only `Number.isInteger` (not `isSafeInteger`) + `integer` (int4, ~$21M) columns — wrong for an enterprise/wholesale ERP. Fix: `Number.isSafeInteger` guard (all ops funnel through `money()`); widen the 4 money columns to `bigint(mode:"number")` (expand-safe int4→int8 ALTER, migration 0004).
+- **Test hermeticity:** integration tests that assert exact counts/balances must clear their tenant's rows in `beforeAll` (RLS-scoped deletes) — CI uses a fresh DB but local re-runs hit persisted state.
+- **Rule:** for idempotency/ledger correctness, take the serialization lock BEFORE the existence check (not just FOR UPDATE); hash canonically; use `bigint(mode:number)` + `isSafeInteger` for money so JS and DB safe ranges align. Money rounding mode stays deferred (no division in VS#1) — logged as a Phase-5 decision.

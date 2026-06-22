@@ -15,6 +15,27 @@
       "when": 1782101027525,
       "tag": "0001_rls_fail_closed",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782101852205,
+      "tag": "0002_worthless_diamondback",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782101852982,
+      "tag": "0003_rls_idempotency_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782102852979,
+      "tag": "0004_charming_strong_guy",
+      "breakpoints": true
     }
   ]
 }
