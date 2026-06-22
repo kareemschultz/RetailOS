@@ -36,18 +36,32 @@ export interface DomainEventInput {
 // the versioned envelope (type + version + tenant + correlation/request id +
 // created_at; payload holds the data). Dispatch / consumers / Svix / DLQ /
 // retry-UI / webhook delivery are deferred — nothing reads the outbox yet.
+//
+// occurredAt (event-map-phase2.md, §14): every payload carries a SERVER-set
+// `occurredAt`. Server time is authoritative; device clocks are never trusted
+// for event ordering. It is injected here — not by producers — so it is
+// uniform across every event and a producer cannot override it (it is applied
+// LAST in the spread, so any caller-supplied `occurredAt` is discarded).
 export async function emitEvent(
   tx: TenantTransaction,
   ctx: ServiceContext,
   event: DomainEventInput
 ) {
+  const occurredAt = new Date().toISOString();
+  const basePayload =
+    event.payload != null &&
+    typeof event.payload === "object" &&
+    !Array.isArray(event.payload)
+      ? (event.payload as Record<string, unknown>)
+      : { value: event.payload };
+  const payload: Record<string, unknown> = { ...basePayload, occurredAt };
   const inserted = await tx
     .insert(outboxEvent)
     .values({
       tenantId: ctx.tenantId,
       type: event.type,
       version: event.version ?? 1,
-      payload: event.payload as Record<string, unknown>,
+      payload,
       correlationId: ctx.correlationId ?? null,
       requestId: ctx.requestId ?? null,
       status: "pending",

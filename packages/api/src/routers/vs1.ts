@@ -2342,6 +2342,10 @@ export const inventoryRouter = {
             productId: input.productId,
             skuId: input.skuId ?? null,
             lotId: input.lotId ?? null,
+            // serial capture is deferred (TRACKING_MODES has `serial`, but no
+            // serial entity is wired yet) — reserved as null so the contract
+            // shape is locked now and consumers tolerate it additively.
+            serialIds: null,
             qtyBase: input.qty,
             unitCostMinor: input.unitCostMinor ?? null,
             currency: input.costCurrency ?? null,
@@ -2592,7 +2596,20 @@ export const inventoryRouter = {
           type: services.DomainEventType.InventoryCountPosted,
           payload: {
             countId: result.stockCountId,
-            lines: result.adjustments,
+            locationId: result.locationId,
+            currency: result.currency,
+            scale: result.scale,
+            // Map the internal posting adjustments to the locked base/Minor
+            // line contract (event-map-phase2.md). The service return keeps its
+            // own field names; only the EVENT payload is normalized.
+            lines: result.adjustments.map((a) => ({
+              skuId: a.skuId,
+              lotId: a.lotId,
+              countedQtyBase: a.countedQty,
+              systemQtyBase: a.systemQty,
+              varianceBase: a.varianceQty,
+              varianceValueMinor: a.valuationMinor,
+            })),
             postedBy: ctx.actorUserId,
           },
         });
