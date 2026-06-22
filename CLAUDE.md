@@ -9,6 +9,8 @@
 - @docs/architecture/lessons-learned.md — append-only verified mistakes; never repeat them. Append after any task with a correction/surprise/contradiction.
 - @docs/architecture/phase-roadmap.md — phase status and what's in scope now.
 - `docs/architecture/PROGRESS.md` — live cross-agent task board + changelog (a `SessionStart` hook surfaces a lean view automatically). **Claim a lane before writing**; `git pull --rebase` before committing (multiple agents share the branch).
+- `docs/architecture/phase-2-implementation-plan.md` — approved Phase 2 build order and costing/RLS/seed/test design; **Commit 0 gate first, resolver later**.
+- `docs/architecture/event-map-phase2.md` and `docs/architecture/inventory-screen-map.md` — downstream event/API/screen planning docs; planning only, no UI implementation.
 - @.claude/CLAUDE.md — code standards (Ultracite/Biome) and shadcn/studio MCP workflow rules.
 
 ## Architecture references (read the relevant ones for your task)
@@ -27,14 +29,17 @@
 - Folder structure, conventions, env matrix: `docs/architecture/folder-structure-conventions.md`
 - UI/UX & component sourcing: `docs/architecture/ui-ux-plan.md` + `docs/architecture/ui-inventory/INDEX.md`
 - Vertical Slice #1 design: `docs/architecture/vertical-slice-1.md`
+- Phase 2 (Inventory): `docs/architecture/phase-2-implementation-plan.md` · `docs/architecture/event-map-phase2.md` · `docs/architecture/inventory-screen-map.md` (D1–D7 locked; ADR-0007 costing)
 - Decisions: `docs/architecture/adr/` · Module specs: `docs/architecture/module-specs/` · Competitive: `docs/architecture/competitive/`
 - Phase-0 lock-in scoreboard: `docs/architecture/phase-0-checklist.md`
 
 ## Non-negotiable rules (charter §33/§39/§40)
 
-- Drizzle (not Prisma); strict TypeScript; Zod validation.
+- Drizzle (not Prisma); strict TypeScript; Zod validation. For **extensible** value sets (tracking_mode, costing_method, oversell/expiry policy, barcode parser type, reason codes, UoM roles, movement types) use `text({ enum: [...] })` + CHECK/Zod — **never native `pgEnum`**.
+- New tenant-owned table ⇒ add fail-closed RLS in the same commit; the `tenant-isolation-coverage` test (packages/db) mechanically blocks any uncovered tenant table.
 - Every query tenant-scoped; every mutation audited; every inventory move is a ledger entry; every POS sale idempotent.
 - Money = integer minor units (amount + currency + scale together); never floats; one rounding policy.
+- Phase 2 schema convention: do not use native Postgres `pgEnum` for extensible inventory values; use Drizzle `text({ enum: [...] })` plus CHECK/Zod validation.
 - No hard deletes for operational data (crypto-shredding for erasure). Server time authoritative for accounting/fiscal; device clocks untrusted.
 - Secrets via envelope encryption; never commit secrets or registry tokens (env vars only); never log decrypted secrets.
 - No architecture change without an ADR. Small, reviewable commits. Run `check-types`, `check`, `test` before claiming done.

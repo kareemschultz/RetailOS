@@ -11,16 +11,16 @@
      AUTONOMOUS OVERNIGHT RUN — read this block FIRST in the morning
      ═══════════════════════════════════════════════════════════════════════════ -->
 
-## 🌙 AUTONOMOUS RUN STATUS (top-of-file; morning review)
+## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
-- **Mode:** unattended overnight. Branch **`vs1-phase1`** (never master; all work = PRs for review).
-- **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
-- **Order:** VS#1 Commits 2→7, then phase roadmap §31 (Phase 1→2→3…) with §41/§42/§45 gates before any new module.
-- **Current step:** VS#1 **COMPLETE** (PR #1, + 2 new regression tests: cross-tenant FK-bypass & idempotency concurrency). Phase 2 gating: §41 competitive + §42 requirements docs **done** (PR #2); **ALL product-policy decisions D1–D7 now LOCKED** by owner directive (only D-money rounding open). **HARD STOP** — awaiting owner approval of the docs before any Phase-2 schema/migration/costing/inventory code.
+- **Branches/PRs:** **PR #1 (`vs1-phase1`) + PR #3 (`phase-2-inventory`, = re-merge of the auto-closed PR #2) are MERGED to master** (`cd5258e`, `b404c63`); master CI green (4/4 jobs incl. real-Postgres RLS). **Active branch: `phase-2-implementation`** (off master). All work = PRs; never push to master directly.
+- **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + coverage gate + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
+- **Standing build order (Phase 2 onward):** schema → migrations → RLS → **ROBUST seed** → services → routers → validation → RBAC → audit/outbox → tests → API contract docs. **No production UI** until APIs stable+approved; later UI strictly from `ui-inventory/` + MCP registries (never hand-rolled React). POS UI is a **Phase 4** decision (Tauri/offline/SQLite) — not decided now.
+- **Current step:** **Phase 2 PLAN APPROVED.** Implementing in approved commit order. ✅ **Commit 0 landed** — `tenant-isolation-coverage.test.ts` (mechanical RLS-coverage gate; demonstrated red→green). Docs added: `phase-2-implementation-plan.md`, `event-map-phase2.md`, `inventory-screen-map.md`, ADR-0007. **Next: Commit 1 (catalog schema + migration + RLS) — STOPPED for owner review after Commit 0.**
 
-### ⛔ BLOCKERS awaiting your decision
+### ⛔ BLOCKERS / gates
 
-**HARD STOP before Phase 2 (Products & Inventory Ledger).** VS#1/Phase 1 complete (PR #1, verified — RLS/roles/withTenant/money-bigint/FK-isolation/idempotency all confirmed + 2 regression tests added). Phase-2 §41/§42 docs done (PR #2). **All product-policy decisions are now LOCKED (2026-06-22)**; only the monetary rounding *mode* stays open (not needed until Phase 5). No Phase-2 implementation code until you approve the docs.
+**Phase 2 implementation is APPROVED and underway in commit order.** All product-policy decisions D1–D7 are LOCKED (below); only D-money rounding stays open (Phase 5, not a Phase-2 blocker — AVCO carries exact-integer remainders, FIFO is division-free; see the plan's *Value-integrity invariants*). **Stopped after Commit 0 for review per owner instruction; no schema/resolver/services/routers/UI yet.**
 
 **✅ Owner decisions LOCKED (2026-06-22) — all in `module-specs/inventory.md`:**
 1. **D1 costing** — AVCO default; FIFO per tenant/category/product (pharmacy/expiry/lot/regulated); no LIFO; not hardcoded — per-tenant/category/product strategy (both `avg_cost` + `valuation_layer` exist). + Costing Strategy Examples section.
@@ -34,7 +34,7 @@
 **⏳ Still OPEN (only one):**
 - **D-money rounding mode** — left OPEN per directive; do NOT assume banker's or half-up; pending Guyana/GRA VAT + target-country rounding verification. First needed Phase 5 (tax/FX division), not Phase 2.
 
-**What I did:** finished + locked all D1–D7 in the §42 spec; added Costing Strategy Examples; kept rounding open. **STOPPED — no Phase-2 schema/migration/costing/inventory code written** pending your approval of these docs.
+**What I did:** finished + locked all D1–D7 in the §42 spec; added Costing Strategy Examples; kept rounding open; drafted the approved Phase-2 implementation plan, event map, inventory screen map, and Commit-0 RLS coverage gate. **STOPPED after Commit 0 for review — no Phase-2 schema/migration/costing/inventory code written.**
 
 ### §45 phase reassessment (end of Phase 1 / VS#1)
 - Architecture held: fail-closed RLS + 3-role model + tenant-scoped `withTenant` is the load-bearing spine; every later module inherits it. No ADR changes needed. Codex found real HIGHs at the service/router layers (idempotency race, FK-bypasses-RLS, money int4) — all fixed + regression-tested; 0 CRITICAL across the whole slice.
@@ -47,8 +47,12 @@
 4. **D2/D3/D4/D6/D7** → **ALL RESOLVED 2026-06-22 (owner directive):** UoM (canonical base + integer ratios + 4 unit roles + configurable), serial/batch/lot (all three modelled, lot first, serial stubbed), expiry/FEFO (configurable, no global hard-block, audited override), barcode (data-driven config, conservative build), reorder (fixed min/max, suggest-only, manager approval). All in `module-specs/inventory.md`.
 - *Still open (Phase 5):* monetary rounding mode only.
 
-### ✅ PRs opened
-- **PR #1** — `vs1-phase1` → master — **VS#1 COMPLETE** (all 7 commits: schema; fail-closed RLS + 3-role bootstrap; core services; request context + tenant guard; events/outbox; oRPC routers + minimal RBAC; §32 e2e tests + CI integration). All gates green; codex-reviewed each commit. Open for review; **DO NOT MERGE**.
+### ✅ PRs merged
+- **PR #1** — `vs1-phase1` → master — **MERGED** (VS#1 complete).
+- **PR #3** — `phase-2-inventory` → master — **MERGED** (Phase-2 §41/§42 docs + ADR-0007 after PR #2 auto-closed).
+
+### 🚧 Active review branch
+- **`phase-2-implementation`** — Commit 0 coverage gate + docs-only planning artifacts. Stop after Commit 0 for owner review; schema/resolver/services/routers/UI are not implemented yet.
 
 ---
 
@@ -120,6 +124,8 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - Scaffold reality: Better Auth = email/password + Expo plugin only; DB = auth schema only, no migrations; 2 demo oRPC procedures; docker-compose = postgres + web only. All charter foundation domain work (tenant/RBAC/audit/RLS/Redis/object storage/Better Auth plugins) is NOT yet built (deferred past Phase-0 lock-in).
 
 ## Changelog (newest first)
+
+- **2026-06-22** — Phase 2 **Commit 0** (branch `phase-2-implementation`): docs-only planning artifacts added (`event-map-phase2.md`, `inventory-screen-map.md`), approved implementation plan updated with the no-native-`pgEnum` schema convention, root `CLAUDE.md` points future agents at the Phase-2 docs, and `tenant-isolation-coverage.test.ts` added as the mechanical RLS coverage gate. Gate statically enumerates Drizzle schema tables and requires every tenant-owned table to have **ENABLE + FORCE + `tenant_isolation` policy** coverage (or an explicit exclusion); red→green demonstrated with a temporary uncovered table and removed before commit. Gates green: `check`, `check-types`, `test`, `check:mojibake`. **Stop here for review; no Phase-2 schema/resolver/services/routers/UI.**
 
 - **2026-06-22** — VS#1 **Commit 7** (PR #1) — **VS#1 COMPLETE**: §32 end-to-end integration test through the oRPC routers (Org→Company→Location→Product→Receipt→Sale→Invoice→Report) vs real Postgres — proves POS idempotency (same key ⇒ one sale, on-hand 7), permission denial (cashier can't create products), report totals match (USD 3000, count 1). CI `db-rls` job runs bootstrap→migrate→`bun run test` with DATABASE_URL+RLS_TEST_DATABASE_URL as `retailos_app` (+ dev-only auth env) so RLS + service + e2e tests all execute under the non-privileged role. Lesson: env-core blocks server vars under happy-dom → `// @vitest-environment node` + lazy imports in skip-guarded beforeAll. Codex: 0 findings. Gates green.
 

@@ -1,6 +1,6 @@
 # Phase 2 — Products & Inventory Ledger — Implementation Plan
 
-- **Status:** PLAN ONLY (awaiting owner approval) — no schema/migration/costing/inventory code written.
+- **Status:** APPROVED PLAN — Commit 0 coverage gate first; no Phase-2 schema/migration/costing/inventory code until Commit 0 review.
 - **Branch:** `phase-2-implementation` (off master `b404c63`).
 - **Specs:** `module-specs/inventory.md` (§42, D1–D7 locked), `competitive/inventory.md` (§41), `adr/0007-inventory-costing-strategy.md`.
 - **Inherits:** the VS#1 spine — fail-closed RLS (ADR 0006), 3-role model, `withTenant`, `StockLedger` sole-mutator, money=bigint minor units, idempotency, audit, outbox. Phase 2 **extends**; it does not rebuild.
@@ -73,6 +73,12 @@ Extended (existing): `product` (+ `costing_method`, `base_uom_id`, `tracking_mod
 Config columns: `costing_method` on `tenant`/`category`/`product`(/`sku`); barcode parser config on `tenant`.
 
 Every new table imports the shared `tenantId` column (the coverage check's definition of tenant-owned) **or** is documented as excluded-with-a-reason. Expected Phase-2 exclusions: none (all are tenant-owned).
+
+## Schema conventions (Phase 2 onward)
+
+- **No native Postgres `pgEnum`** for intentionally-extensible value sets — `tracking_mode`, `costing_method`, oversell policy, expiry/FEFO policy, barcode parser type, adjustment reason codes, UoM roles, movement types. Use Drizzle **`text({ enum: [...] })`** + a CHECK constraint and/or Zod validation. Rationale: these grow over time and `ALTER TYPE … ADD VALUE` is painful (non-transactional, can't remove/reorder) vs. a cheap CHECK swap. Native enums are acceptable only for values that are truly fixed forever.
+- Money = `bigint` minor units + `currency` + `scale` (never floats); quantities = base-unit integers.
+- Every tenant-owned table imports the shared `tenantId` column (the coverage gate's definition) and gets fail-closed RLS in the same commit-group.
 
 ## Migrations (expand/contract, §8)
 
