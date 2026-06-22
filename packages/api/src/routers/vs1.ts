@@ -279,6 +279,125 @@ export const productRouter = {
         return row;
       });
     }),
+  update: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        sku: z.string().min(1).optional(),
+        name: z.string().min(1).optional(),
+        categoryId: z.string().uuid().nullable().optional(),
+        brandId: z.string().uuid().nullable().optional(),
+        baseUomId: z.string().uuid().nullable().optional(),
+        costingMethod: z.enum(["avco", "fifo"]).nullable().optional(),
+        trackingMode: z.enum(["none", "lot", "serial"]).optional(),
+        priceMinor: z.number().int().min(0).optional(),
+        currency: z.string().length(3).optional(),
+        scale: z.number().int().min(0).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        await assertProductVisible(tx, input.id);
+        if (input.categoryId) {
+          await assertCategoryVisible(tx, input.categoryId);
+        }
+        if (input.brandId) {
+          await assertBrandVisible(tx, input.brandId);
+        }
+        if (input.baseUomId) {
+          await assertUomVisible(tx, input.baseUomId);
+        }
+        const before = firstOrThrow(
+          (
+            await tx
+              .select()
+              .from(schema.product)
+              .where(eq(schema.product.id, input.id))
+              .limit(1)
+          ).at(0)
+        );
+        const moneyFields: {
+          currency?: string;
+          minor?: number;
+          scale?: number;
+        } =
+          input.priceMinor == null &&
+          input.currency == null &&
+          input.scale == null
+            ? {}
+            : services.money(
+                input.priceMinor ?? before.priceMinor,
+                input.currency ?? before.currency,
+                input.scale ?? before.scale
+              );
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.product)
+              .set({
+                sku: input.sku,
+                name: input.name,
+                categoryId: input.categoryId,
+                brandId: input.brandId,
+                baseUomId: input.baseUomId,
+                costingMethod: input.costingMethod,
+                trackingMode: input.trackingMode,
+                priceMinor: moneyFields.minor,
+                currency: moneyFields.currency,
+                scale: moneyFields.scale,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.product.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "product.update",
+          entityType: "product",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  archive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        await assertProductVisible(tx, input.id);
+        const before = firstOrThrow(
+          (
+            await tx
+              .select()
+              .from(schema.product)
+              .where(eq(schema.product.id, input.id))
+              .limit(1)
+          ).at(0)
+        );
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.product)
+              .set({ deletedAt: new Date(), updatedBy: ctx.actorUserId })
+              .where(eq(schema.product.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "product.archive",
+          entityType: "product",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
 };
 
 export const catalogRouter = {
@@ -335,6 +454,72 @@ export const catalogRouter = {
         return row;
       });
     }),
+  categoryUpdate: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        code: z.string().min(1).nullable().optional(),
+        name: z.string().min(1).optional(),
+        costingMethod: z.enum(["avco", "fifo"]).nullable().optional(),
+        trackingMode: z.enum(["none", "lot", "serial"]).nullable().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertCategoryVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.category)
+              .set({
+                code: input.code,
+                name: input.name,
+                costingMethod: input.costingMethod,
+                trackingMode: input.trackingMode,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.category.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "category.update",
+          entityType: "category",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  categoryArchive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertCategoryVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.category)
+              .set({ deletedAt: new Date(), updatedBy: ctx.actorUserId })
+              .where(eq(schema.category.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "category.archive",
+          entityType: "category",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
   brandList: tenantProcedure
     .input(z.object({ includeArchived: z.boolean().default(false) }))
     .handler(({ context, input }) => {
@@ -374,6 +559,68 @@ export const catalogRouter = {
           action: "brand.create",
           entityType: "brand",
           entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  brandUpdate: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        code: z.string().min(1).nullable().optional(),
+        name: z.string().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertBrandVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.brand)
+              .set({
+                code: input.code,
+                name: input.name,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.brand.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "brand.update",
+          entityType: "brand",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  brandArchive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertBrandVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.brand)
+              .set({ deletedAt: new Date(), updatedBy: ctx.actorUserId })
+              .where(eq(schema.brand.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "brand.archive",
+          entityType: "brand",
+          entityId: row.id,
+          before,
           after: row,
         });
         return row;
@@ -427,6 +674,200 @@ export const catalogRouter = {
           action: "uom.create",
           entityType: "unit_of_measure",
           entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  uomUpdate: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        code: z.string().min(1).optional(),
+        name: z.string().min(1).optional(),
+        kind: z.enum(["count", "weight", "volume", "length"]).optional(),
+        decimalScale: z.number().int().min(0).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertUomVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.unitOfMeasure)
+              .set({
+                code: input.code,
+                name: input.name,
+                kind: input.kind,
+                decimalScale: input.decimalScale,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.unitOfMeasure.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "uom.update",
+          entityType: "unit_of_measure",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  uomArchive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertUomVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.unitOfMeasure)
+              .set({ deletedAt: new Date(), updatedBy: ctx.actorUserId })
+              .where(eq(schema.unitOfMeasure.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "uom.archive",
+          entityType: "unit_of_measure",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  variantList: tenantProcedure
+    .input(
+      z.object({
+        includeArchived: z.boolean().default(false),
+        productId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        if (input.productId) {
+          await assertProductVisible(tx, input.productId);
+        }
+        const conditions = [
+          input.productId
+            ? eq(schema.variant.productId, input.productId)
+            : null,
+          input.includeArchived ? null : isNull(schema.variant.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select()
+          .from(schema.variant)
+          .where(conditions.length ? and(...conditions) : undefined);
+      });
+    }),
+  variantCreate: tenantProcedure
+    .input(
+      z.object({
+        productId: z.string().uuid(),
+        name: z.string().min(1),
+        value: z.string().min(1),
+        sortOrder: z.number().int().default(0),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        await assertProductVisible(tx, input.productId);
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.variant)
+              .values({
+                tenantId: ctx.tenantId,
+                productId: input.productId,
+                name: input.name,
+                value: input.value,
+                sortOrder: input.sortOrder,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "variant.create",
+          entityType: "variant",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  variantUpdate: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        value: z.string().min(1).optional(),
+        sortOrder: z.number().int().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertVariantVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.variant)
+              .set({
+                name: input.name,
+                value: input.value,
+                sortOrder: input.sortOrder,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.variant.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "variant.update",
+          entityType: "variant",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  variantArchive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertVariantVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.variant)
+              .set({ deletedAt: new Date(), updatedBy: ctx.actorUserId })
+              .where(eq(schema.variant.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "variant.archive",
+          entityType: "variant",
+          entityId: row.id,
+          before,
           after: row,
         });
         return row;
@@ -501,6 +942,83 @@ export const catalogRouter = {
         return row;
       });
     }),
+  skuUpdate: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        code: z.string().min(1).optional(),
+        name: z.string().min(1).nullable().optional(),
+        baseUomId: z.string().uuid().nullable().optional(),
+        costingMethod: z.enum(["avco", "fifo"]).nullable().optional(),
+        trackingMode: z.enum(["none", "lot", "serial"]).optional(),
+        isActive: z.boolean().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertSkuVisible(tx, input.id);
+        if (input.baseUomId) {
+          await assertUomVisible(tx, input.baseUomId);
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.sku)
+              .set({
+                code: input.code,
+                name: input.name,
+                baseUomId: input.baseUomId,
+                costingMethod: input.costingMethod,
+                trackingMode: input.trackingMode,
+                isActive: input.isActive,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.sku.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "sku.update",
+          entityType: "sku",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  skuArchive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertSkuVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.sku)
+              .set({
+                deletedAt: new Date(),
+                isActive: false,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.sku.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "sku.archive",
+          entityType: "sku",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
   barcodeList: tenantProcedure
     .input(
       z.object({
@@ -560,6 +1078,72 @@ export const catalogRouter = {
           action: "barcode.create",
           entityType: "barcode",
           entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  barcodeUpdate: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        value: z.string().min(1).optional(),
+        symbology: z
+          .enum(["ean13", "upca", "ean8", "code128", "gs1", "qr"])
+          .optional(),
+        isPrimary: z.boolean().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertBarcodeVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.barcode)
+              .set({
+                value: input.value,
+                symbology: input.symbology,
+                isPrimary: input.isPrimary,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.barcode.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "barcode.update",
+          entityType: "barcode",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  barcodeArchive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertBarcodeVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.barcode)
+              .set({ deletedAt: new Date(), updatedBy: ctx.actorUserId })
+              .where(eq(schema.barcode.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "barcode.archive",
+          entityType: "barcode",
+          entityId: row.id,
+          before,
           after: row,
         });
         return row;
@@ -659,6 +1243,101 @@ export const catalogRouter = {
         return row;
       });
     }),
+  uomConversionUpdate: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        categoryId: z.string().uuid().nullable().optional(),
+        productId: z.string().uuid().nullable().optional(),
+        skuId: z.string().uuid().nullable().optional(),
+        fromUomId: z.string().uuid().optional(),
+        toUomId: z.string().uuid().optional(),
+        role: z.enum(["purchase", "stock", "sale", "reporting"]).optional(),
+        factor: z.number().int().positive().optional(),
+        factorScale: z.number().int().min(0).optional(),
+        isActive: z.boolean().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertUomConversionVisible(tx, input.id);
+        if (input.categoryId) {
+          await assertCategoryVisible(tx, input.categoryId);
+        }
+        if (input.productId) {
+          await assertProductVisible(tx, input.productId);
+        }
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        if (input.fromUomId) {
+          await assertUomVisible(tx, input.fromUomId);
+        }
+        if (input.toUomId) {
+          await assertUomVisible(tx, input.toUomId);
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.uomConversion)
+              .set({
+                categoryId: input.categoryId,
+                productId: input.productId,
+                skuId: input.skuId,
+                fromUomId: input.fromUomId,
+                toUomId: input.toUomId,
+                role: input.role,
+                factor: input.factor,
+                factorScale: input.factorScale,
+                isActive: input.isActive,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.uomConversion.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "uom_conversion.update",
+          entityType: "uom_conversion",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  uomConversionArchive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const before = await assertUomConversionVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.uomConversion)
+              .set({
+                deletedAt: new Date(),
+                isActive: false,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.uomConversion.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "uom_conversion.archive",
+          entityType: "uom_conversion",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
 };
 
 async function assertProductVisible(
@@ -679,13 +1358,31 @@ async function assertProductVisible(
   }
 }
 
-async function assertCategoryVisible(
+async function assertLocationVisible(
   tx: TenantTransaction,
-  categoryId: string
+  locationId: string
 ): Promise<void> {
   const row = (
     await tx
-      .select({ id: schema.category.id })
+      .select({ id: schema.location.id })
+      .from(schema.location)
+      .where(eq(schema.location.id, locationId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Location not found in this tenant",
+    });
+  }
+}
+
+async function assertCategoryVisible(
+  tx: TenantTransaction,
+  categoryId: string
+): Promise<typeof schema.category.$inferSelect> {
+  const row = (
+    await tx
+      .select()
       .from(schema.category)
       .where(eq(schema.category.id, categoryId))
       .limit(1)
@@ -695,15 +1392,16 @@ async function assertCategoryVisible(
       message: "Category not found in this tenant",
     });
   }
+  return row;
 }
 
 async function assertBrandVisible(
   tx: TenantTransaction,
   brandId: string
-): Promise<void> {
+): Promise<typeof schema.brand.$inferSelect> {
   const row = (
     await tx
-      .select({ id: schema.brand.id })
+      .select()
       .from(schema.brand)
       .where(eq(schema.brand.id, brandId))
       .limit(1)
@@ -713,33 +1411,84 @@ async function assertBrandVisible(
       message: "Brand not found in this tenant",
     });
   }
+  return row;
 }
 
 async function assertSkuVisible(
   tx: TenantTransaction,
   skuId: string
-): Promise<void> {
+): Promise<typeof schema.sku.$inferSelect> {
   const row = (
-    await tx
-      .select({ id: schema.sku.id })
-      .from(schema.sku)
-      .where(eq(schema.sku.id, skuId))
-      .limit(1)
+    await tx.select().from(schema.sku).where(eq(schema.sku.id, skuId)).limit(1)
   ).at(0);
   if (!row) {
     throw new ORPCError("NOT_FOUND", {
       message: "SKU not found in this tenant",
     });
   }
+  return row;
+}
+
+async function assertVariantVisible(
+  tx: TenantTransaction,
+  variantId: string
+): Promise<typeof schema.variant.$inferSelect> {
+  const row = (
+    await tx
+      .select()
+      .from(schema.variant)
+      .where(eq(schema.variant.id, variantId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Variant not found in this tenant",
+    });
+  }
+  return row;
+}
+
+async function assertLotVisible(
+  tx: TenantTransaction,
+  lotId: string
+): Promise<typeof schema.lot.$inferSelect> {
+  const row = (
+    await tx.select().from(schema.lot).where(eq(schema.lot.id, lotId)).limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Lot not found in this tenant",
+    });
+  }
+  return row;
+}
+
+async function assertReorderRuleVisible(
+  tx: TenantTransaction,
+  reorderRuleId: string
+): Promise<typeof schema.reorderRule.$inferSelect> {
+  const row = (
+    await tx
+      .select()
+      .from(schema.reorderRule)
+      .where(eq(schema.reorderRule.id, reorderRuleId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Reorder rule not found in this tenant",
+    });
+  }
+  return row;
 }
 
 async function assertUomVisible(
   tx: TenantTransaction,
   uomId: string
-): Promise<void> {
+): Promise<typeof schema.unitOfMeasure.$inferSelect> {
   const row = (
     await tx
-      .select({ id: schema.unitOfMeasure.id })
+      .select()
       .from(schema.unitOfMeasure)
       .where(eq(schema.unitOfMeasure.id, uomId))
       .limit(1)
@@ -749,6 +1498,45 @@ async function assertUomVisible(
       message: "Unit of measure not found in this tenant",
     });
   }
+  return row;
+}
+
+async function assertBarcodeVisible(
+  tx: TenantTransaction,
+  barcodeId: string
+): Promise<typeof schema.barcode.$inferSelect> {
+  const row = (
+    await tx
+      .select()
+      .from(schema.barcode)
+      .where(eq(schema.barcode.id, barcodeId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Barcode not found in this tenant",
+    });
+  }
+  return row;
+}
+
+async function assertUomConversionVisible(
+  tx: TenantTransaction,
+  conversionId: string
+): Promise<typeof schema.uomConversion.$inferSelect> {
+  const row = (
+    await tx
+      .select()
+      .from(schema.uomConversion)
+      .where(eq(schema.uomConversion.id, conversionId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "UoM conversion not found in this tenant",
+    });
+  }
+  return row;
 }
 
 const inventoryReceiveInput = z.object({
@@ -846,6 +1634,278 @@ function assertReceiptCostTriplet(input: InventoryReceiveInput): void {
 }
 
 export const inventoryRouter = {
+  lotList: tenantProcedure
+    .input(
+      z.object({
+        includeArchived: z.boolean().default(false),
+        skuId: z.string().uuid().optional(),
+        status: z
+          .enum(["available", "quarantined", "expired", "depleted"])
+          .optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.receive");
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        const conditions = [
+          input.skuId ? eq(schema.lot.skuId, input.skuId) : null,
+          input.status ? eq(schema.lot.status, input.status) : null,
+          input.includeArchived ? null : isNull(schema.lot.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select()
+          .from(schema.lot)
+          .where(conditions.length ? and(...conditions) : undefined);
+      });
+    }),
+  lotCreate: tenantProcedure
+    .input(
+      z.object({
+        skuId: z.string().uuid(),
+        lotNumber: z.string().min(1),
+        expiryDate: z.string().date().optional(),
+        manufacturedDate: z.string().date().optional(),
+        status: z
+          .enum(["available", "quarantined", "expired", "depleted"])
+          .default("available"),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.receive");
+        await assertSkuVisible(tx, input.skuId);
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.lot)
+              .values({
+                tenantId: ctx.tenantId,
+                skuId: input.skuId,
+                lotNumber: input.lotNumber,
+                expiryDate: input.expiryDate ?? null,
+                manufacturedDate: input.manufacturedDate ?? null,
+                status: input.status,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "lot.create",
+          entityType: "lot",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  lotUpdate: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        lotNumber: z.string().min(1).optional(),
+        expiryDate: z.string().date().nullable().optional(),
+        manufacturedDate: z.string().date().nullable().optional(),
+        status: z
+          .enum(["available", "quarantined", "expired", "depleted"])
+          .optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.receive");
+        const before = await assertLotVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.lot)
+              .set({
+                lotNumber: input.lotNumber,
+                expiryDate: input.expiryDate,
+                manufacturedDate: input.manufacturedDate,
+                status: input.status,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.lot.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "lot.update",
+          entityType: "lot",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  lotArchive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.receive");
+        const before = await assertLotVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.lot)
+              .set({ deletedAt: new Date(), updatedBy: ctx.actorUserId })
+              .where(eq(schema.lot.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "lot.archive",
+          entityType: "lot",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  reorderRuleList: tenantProcedure
+    .input(
+      z.object({
+        includeArchived: z.boolean().default(false),
+        locationId: z.string().uuid().optional(),
+        skuId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.reorder");
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        const conditions = [
+          input.locationId
+            ? eq(schema.reorderRule.locationId, input.locationId)
+            : null,
+          input.skuId ? eq(schema.reorderRule.skuId, input.skuId) : null,
+          input.includeArchived ? null : isNull(schema.reorderRule.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select()
+          .from(schema.reorderRule)
+          .where(conditions.length ? and(...conditions) : undefined);
+      });
+    }),
+  reorderRuleUpsert: tenantProcedure
+    .input(
+      z.object({
+        skuId: z.string().uuid(),
+        locationId: z.string().uuid(),
+        minQty: z.number().int().min(0),
+        maxQty: z.number().int().min(0),
+        isActive: z.boolean().default(true),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.reorder");
+        await assertSkuVisible(tx, input.skuId);
+        await assertLocationVisible(tx, input.locationId);
+        if (input.maxQty < input.minQty) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "maxQty must be greater than or equal to minQty",
+          });
+        }
+        const before = (
+          await tx
+            .select()
+            .from(schema.reorderRule)
+            .where(
+              and(
+                eq(schema.reorderRule.skuId, input.skuId),
+                eq(schema.reorderRule.locationId, input.locationId)
+              )
+            )
+            .limit(1)
+        ).at(0);
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.reorderRule)
+              .values({
+                tenantId: ctx.tenantId,
+                skuId: input.skuId,
+                locationId: input.locationId,
+                minQty: input.minQty,
+                maxQty: input.maxQty,
+                isActive: input.isActive,
+                createdBy: ctx.actorUserId,
+              })
+              .onConflictDoUpdate({
+                target: [
+                  schema.reorderRule.tenantId,
+                  schema.reorderRule.skuId,
+                  schema.reorderRule.locationId,
+                ],
+                set: {
+                  minQty: input.minQty,
+                  maxQty: input.maxQty,
+                  isActive: input.isActive,
+                  deletedAt: null,
+                  updatedBy: ctx.actorUserId,
+                },
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: before ? "reorder_rule.update" : "reorder_rule.create",
+          entityType: "reorder_rule",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  reorderRuleArchive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.reorder");
+        const before = await assertReorderRuleVisible(tx, input.id);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.reorderRule)
+              .set({
+                deletedAt: new Date(),
+                isActive: false,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.reorderRule.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "reorder_rule.archive",
+          entityType: "reorder_rule",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
   receive: tenantProcedure
     .input(inventoryReceiveInput)
     .handler(({ context, input }) => {

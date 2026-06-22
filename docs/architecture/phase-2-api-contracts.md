@@ -33,6 +33,19 @@
 - **Reads:** `product`
 - **Guards:** referenced category/brand filters must be visible through tenant RLS.
 
+### `product.update`
+- **Input:** `{ id, sku?, name?, categoryId?, brandId?, baseUomId?, costingMethod?, trackingMode?, priceMinor?, currency?, scale? }`
+- **Permission:** `products.create`
+- **Writes:** `product`
+- **Guards:** referenced category/brand/base UoM must be visible through tenant RLS.
+- **Audit:** `product.update`
+
+### `product.archive`
+- **Input:** `{ id }`
+- **Permission:** `products.create`
+- **Writes:** `product.deleted_at`
+- **Audit:** `product.archive`
+
 ## Inventory routes
 
 ## Catalog routes
@@ -48,6 +61,11 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 - **Writes:** `category`
 - **Audit:** `category.create`
 
+### `catalog.categoryUpdate` / `catalog.categoryArchive`
+- **Input:** update `{ id, name?, code?, costingMethod?, trackingMode? }`; archive `{ id }`
+- **Writes:** `category`
+- **Audit:** `category.update` / `category.archive`
+
 ### `catalog.brandList`
 - **Input:** `{ includeArchived? }`
 - **Reads:** `brand`
@@ -57,6 +75,11 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 - **Writes:** `brand`
 - **Audit:** `brand.create`
 
+### `catalog.brandUpdate` / `catalog.brandArchive`
+- **Input:** update `{ id, name?, code? }`; archive `{ id }`
+- **Writes:** `brand`
+- **Audit:** `brand.update` / `brand.archive`
+
 ### `catalog.uomList`
 - **Input:** `{ includeArchived? }`
 - **Reads:** `unit_of_measure`
@@ -65,6 +88,32 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 - **Input:** `{ code, name, kind?, decimalScale? }`
 - **Writes:** `unit_of_measure`
 - **Audit:** `uom.create`
+
+### `catalog.uomUpdate` / `catalog.uomArchive`
+- **Input:** update `{ id, code?, name?, kind?, decimalScale? }`; archive `{ id }`
+- **Writes:** `unit_of_measure`
+- **Audit:** `uom.update` / `uom.archive`
+
+### `catalog.variantList`
+- **Input:** `{ productId?, includeArchived? }`
+- **Reads:** `variant`
+- **Guards:** referenced product filter must be visible through tenant RLS.
+
+### `catalog.variantCreate`
+- **Input:** `{ productId, name, value, sortOrder? }`
+- **Writes:** `variant`
+- **Guards:** `productId` must be visible through tenant RLS.
+- **Audit:** `variant.create`
+
+### `catalog.variantUpdate`
+- **Input:** `{ id, name?, value?, sortOrder? }`
+- **Writes:** `variant`
+- **Audit:** `variant.update`
+
+### `catalog.variantArchive`
+- **Input:** `{ id }`
+- **Writes:** `variant.deleted_at`
+- **Audit:** `variant.archive`
 
 ### `catalog.skuList`
 - **Input:** `{ productId?, includeArchived? }`
@@ -77,6 +126,12 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 - **Guards:** `productId` and `baseUomId` must be visible through tenant RLS.
 - **Audit:** `sku.create`
 
+### `catalog.skuUpdate` / `catalog.skuArchive`
+- **Input:** update `{ id, code?, name?, baseUomId?, costingMethod?, trackingMode?, isActive? }`; archive `{ id }`
+- **Writes:** `sku`
+- **Guards:** referenced base UoM must be visible through tenant RLS.
+- **Audit:** `sku.update` / `sku.archive`
+
 ### `catalog.barcodeList`
 - **Input:** `{ skuId?, includeArchived? }`
 - **Reads:** `barcode`
@@ -87,6 +142,11 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 - **Writes:** `barcode`
 - **Guards:** `skuId` must be visible through tenant RLS.
 - **Audit:** `barcode.create`
+
+### `catalog.barcodeUpdate` / `catalog.barcodeArchive`
+- **Input:** update `{ id, value?, symbology?, isPrimary? }`; archive `{ id }`
+- **Writes:** `barcode`
+- **Audit:** `barcode.update` / `barcode.archive`
 
 ### `catalog.uomConversionList`
 - **Input:** `{ categoryId?, productId?, skuId?, includeArchived? }`
@@ -99,7 +159,57 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 - **Guards:** referenced UoMs/category/product/SKU must be visible through tenant RLS.
 - **Audit:** `uom_conversion.create`
 
+### `catalog.uomConversionUpdate` / `catalog.uomConversionArchive`
+- **Input:** update `{ id, fromUomId?, toUomId?, role?, factor?, factorScale?, categoryId?, productId?, skuId?, isActive? }`; archive `{ id }`
+- **Writes:** `uom_conversion`
+- **Guards:** referenced UoMs/category/product/SKU must be visible through tenant RLS.
+- **Audit:** `uom_conversion.update` / `uom_conversion.archive`
+
 ## Inventory routes
+
+### `inventory.lotList`
+- **Input:** `{ skuId?, status?, includeArchived? }`
+- **Permission:** `inventory.receive`
+- **Reads:** `lot`
+- **Guards:** referenced SKU filter must be visible through tenant RLS.
+
+### `inventory.lotCreate`
+- **Input:** `{ skuId, lotNumber, expiryDate?, manufacturedDate?, status? }`
+- **Permission:** `inventory.receive`
+- **Writes:** `lot`
+- **Guard:** `skuId` must be visible through tenant RLS.
+- **Audit:** `lot.create`
+
+### `inventory.lotUpdate`
+- **Input:** `{ id, lotNumber?, expiryDate?, manufacturedDate?, status? }`
+- **Permission:** `inventory.receive`
+- **Writes:** `lot`
+- **Audit:** `lot.update`
+
+### `inventory.lotArchive`
+- **Input:** `{ id }`
+- **Permission:** `inventory.receive`
+- **Writes:** `lot.deleted_at`
+- **Audit:** `lot.archive`
+
+### `inventory.reorderRuleList`
+- **Input:** `{ skuId?, locationId?, includeArchived? }`
+- **Permission:** `inventory.reorder`
+- **Reads:** `reorder_rule`
+- **Guards:** referenced SKU/location filters must be visible through tenant RLS.
+
+### `inventory.reorderRuleUpsert`
+- **Input:** `{ skuId, locationId, minQty, maxQty, isActive? }`
+- **Permission:** `inventory.reorder`
+- **Writes:** `reorder_rule`
+- **Guards:** referenced SKU/location must be visible through tenant RLS; `maxQty >= minQty`.
+- **Audit:** `reorder_rule.create` or `reorder_rule.update`
+
+### `inventory.reorderRuleArchive`
+- **Input:** `{ id }`
+- **Permission:** `inventory.reorder`
+- **Writes:** `reorder_rule.deleted_at`, `is_active=false`
+- **Audit:** `reorder_rule.archive`
 
 ### `inventory.receive`
 - **Input:** `{ locationId, productId, qty, skuId?, lotId?, unitCostMinor?, costCurrency?, costScale?, idempotencyKey? }`
@@ -159,8 +269,10 @@ All catalog routes require `products.create` for now; finer-grained catalog perm
 
 ## Known gaps / next backend work
 
-- Catalog create + list endpoints exist for `category`, `brand`, `sku`, `barcode`, `unit_of_measure`, and `uom_conversion`; update/archive and `variant` endpoints are still pending.
-- `product.create` accepts Phase-2 category/brand/base UoM/costing/tracking fields; `product.list` exists; product update/archive are still pending.
-- Phase-2 router e2e covers a mixed AVCO+FIFO valued receipt/report flow; broader lot/count/reorder/list-update e2e remains pending.
+- Catalog create + list + update + archive endpoints exist for `category`, `brand`, `sku`, `barcode`, `unit_of_measure`, and `uom_conversion`.
+- Product create/list/update/archive exist with Phase-2 category/brand/base UoM/costing/tracking fields.
+- Variant create/list/update/archive exist.
+- Lot create/list/update/archive and reorder-rule list/upsert/archive exist.
+- Phase-2 router e2e covers mixed AVCO+FIFO valued receipt/report flow plus catalog/product/variant/lot/reorder lifecycle routes; broader import/revaluation/discrepancy e2e remains pending.
 - Event payloads are implemented for the new router seams, but the outbox dispatcher/consumer remains a later phase.
 - UI remains intentionally absent.

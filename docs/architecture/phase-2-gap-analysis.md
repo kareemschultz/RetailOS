@@ -38,7 +38,9 @@ Still open:
 | Costing resolver | Done | product -> category -> tenant, AVCO and FIFO paths, row locks / `FOR UPDATE`, remainder-safe AVCO. |
 | Inventory services | Done | UoM conversion, FEFO allocation, oversell decision, reorder evaluation, stock-count posting. |
 | Inventory routers/reports | Done | Receive, adjust, count start/line/post, reorder evaluate, valuation report, low-stock report. |
-| Catalog create/list routers | Partial | Create + list for category, brand, UoM, SKU, barcode, UoM conversion; product create/list; RLS-scoped FK guards. Update/archive still pending. |
+| Catalog CRUD routers | Done | Create/list/update/archive for category, brand, UoM, SKU, barcode, UoM conversion; product create/list/update/archive; variant create/list/update/archive; RLS-scoped FK guards and audit for mutations. |
+| Lot/expiry routes | Done | Lot create/list/update/archive with SKU guard and audit. |
+| Reorder rule CRUD | Done | Reorder-rule list/upsert/archive with SKU/location guards, min/max validation, audit, and existing evaluator. |
 | API contract snapshot | Done | `phase-2-api-contracts.md`. |
 | Backend tests | Partial | Service tests are strong; router e2e now covers catalog FK guards and mixed AVCO+FIFO valued receipts through valuation reports. Broader list/update/import/revaluation tests still needed. |
 
@@ -46,14 +48,9 @@ Still open:
 
 ### P0 before Phase 2 backend can be called complete
 
-1. **Catalog API breadth.** Add update/archive endpoints for category, brand, product extensions, SKU, barcode, UoM, and UoM conversion. Create + list exist for most catalog entities, but operational back-office workflows need update/archive.
-2. **Product update/archive.** `product.create` now accepts Phase-2 category/brand/base UoM/costing/tracking fields with RLS-scoped guards and `product.list` exists, but update/archive are still missing.
-3. **Variant router.** Schema and seed exist, but the API lacks variant create/list/update/archive.
-4. **Lot/expiry management routes.** `inventory.receive` accepts `lotId`, but there are no lot create/update/quarantine/expiry-status endpoints yet.
-5. **Reorder rule CRUD.** Evaluation exists; creating/updating min/max rules through the API is still missing.
-6. **Stock discrepancy review route.** Oversell/discrepancy events exist, but manager review/resolve endpoints are not built.
-7. **Import seam.** Competitive research marks CSV/Excel import as P0 parity. Add backend-only import staging/validation design or schema before calling Phase 2 feature analysis closed.
-8. **Audited revaluation seam.** Method changes are conceptually locked behind explicit revaluation, but no `inventory.revalue` service/router exists yet.
+1. **Stock discrepancy review route.** Oversell/discrepancy events exist, but manager review/resolve endpoints are not built.
+2. **Import seam.** Competitive research marks CSV/Excel import as P0 parity. Add backend-only import staging/validation design or schema before calling Phase 2 feature analysis closed.
+3. **Audited revaluation seam.** Method changes are conceptually locked behind explicit revaluation, but no `inventory.revalue` service/router exists yet.
 
 ### P1 hardening / quality-of-life backend work
 
@@ -82,9 +79,7 @@ Still open:
 
 ## Immediate recommended order
 
-1. Add catalog update/archive APIs and product update/archive.
-2. Add variant API.
-3. Add lot/expiry, reorder-rule CRUD, stock discrepancy review, and revaluation seam.
-4. Add import staging/validation backend design or minimal schema.
-5. Run full gates plus throwaway Postgres migration/service/router tests.
-6. Update API contracts and close Phase 2 with a final audit report.
+1. Add stock discrepancy review and revaluation seam.
+2. Add import staging/validation backend design or minimal schema.
+3. Run full gates plus throwaway Postgres migration/service/router tests.
+4. Update API contracts and close Phase 2 with a final audit report.

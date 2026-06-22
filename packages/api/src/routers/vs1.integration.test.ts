@@ -420,6 +420,195 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(barcodes.map((row) => row.id)).toContain(barcode.id);
     expect(conversions.map((row) => row.id)).toContain(conversion.id);
 
+    const brand = await call(
+      appRouter.catalog.brandCreate,
+      { code: "MIX-BRAND", name: "Mixed Brand" },
+      admin
+    );
+    const updatedBrand = await call(
+      appRouter.catalog.brandUpdate,
+      { id: brand.id, name: "Mixed Brand Updated" },
+      admin
+    );
+    expect(updatedBrand.name).toBe("Mixed Brand Updated");
+    const archivedBrand = await call(
+      appRouter.catalog.brandArchive,
+      { id: brand.id },
+      admin
+    );
+    expect(archivedBrand.deletedAt).toBeTruthy();
+
+    const tempCategory = await call(
+      appRouter.catalog.categoryCreate,
+      { name: "Temporary Category" },
+      admin
+    );
+    const updatedCategory = await call(
+      appRouter.catalog.categoryUpdate,
+      { costingMethod: "fifo", id: tempCategory.id },
+      admin
+    );
+    expect(updatedCategory.costingMethod).toBe("fifo");
+    const archivedCategory = await call(
+      appRouter.catalog.categoryArchive,
+      { id: tempCategory.id },
+      admin
+    );
+    expect(archivedCategory.deletedAt).toBeTruthy();
+
+    const tempUom = await call(
+      appRouter.catalog.uomCreate,
+      { code: "MIX-TEMP", name: "Mixed Temp UoM" },
+      admin
+    );
+    const updatedUom = await call(
+      appRouter.catalog.uomUpdate,
+      { decimalScale: 1, id: tempUom.id },
+      admin
+    );
+    expect(updatedUom.decimalScale).toBe(1);
+    const archivedUom = await call(
+      appRouter.catalog.uomArchive,
+      { id: tempUom.id },
+      admin
+    );
+    expect(archivedUom.deletedAt).toBeTruthy();
+
+    const updatedSku = await call(
+      appRouter.catalog.skuUpdate,
+      { id: avcoSku.id, name: "AVCO SKU Updated" },
+      admin
+    );
+    expect(updatedSku.name).toBe("AVCO SKU Updated");
+    const archiveSku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "MIX-SKU-ARCHIVE", productId: avcoProduct.id },
+      admin
+    );
+    const archivedSku = await call(
+      appRouter.catalog.skuArchive,
+      { id: archiveSku.id },
+      admin
+    );
+    expect(archivedSku.deletedAt).toBeTruthy();
+
+    const updatedBarcode = await call(
+      appRouter.catalog.barcodeUpdate,
+      { id: barcode.id, isPrimary: true },
+      admin
+    );
+    expect(updatedBarcode.isPrimary).toBe(true);
+    const archivedBarcode = await call(
+      appRouter.catalog.barcodeArchive,
+      { id: barcode.id },
+      admin
+    );
+    expect(archivedBarcode.deletedAt).toBeTruthy();
+
+    const updatedConversion = await call(
+      appRouter.catalog.uomConversionUpdate,
+      { factor: 24, id: conversion.id },
+      admin
+    );
+    expect(updatedConversion.factor).toBe(24);
+    const archivedConversion = await call(
+      appRouter.catalog.uomConversionArchive,
+      { id: conversion.id },
+      admin
+    );
+    expect(archivedConversion.deletedAt).toBeTruthy();
+
+    const updatedProduct = await call(
+      appRouter.product.update,
+      { id: avcoProduct.id, name: "Mixed Grocery AVCO Updated" },
+      admin
+    );
+    expect(updatedProduct.name).toBe("Mixed Grocery AVCO Updated");
+    const archiveProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        currency: "USD",
+        name: "Archive Product",
+        priceMinor: 100,
+        sku: "MIX-ARCHIVE",
+      },
+      admin
+    );
+    const archivedProduct = await call(
+      appRouter.product.archive,
+      { id: archiveProduct.id },
+      admin
+    );
+    expect(archivedProduct.deletedAt).toBeTruthy();
+
+    const variant = await call(
+      appRouter.catalog.variantCreate,
+      {
+        name: "Pack",
+        productId: avcoProduct.id,
+        value: "Single",
+      },
+      admin
+    );
+    const updatedVariant = await call(
+      appRouter.catalog.variantUpdate,
+      { id: variant.id, value: "Each" },
+      admin
+    );
+    const variants = await call(
+      appRouter.catalog.variantList,
+      { productId: avcoProduct.id },
+      admin
+    );
+    expect(updatedVariant.value).toBe("Each");
+    expect(variants.map((row) => row.id)).toContain(variant.id);
+    const archivedVariant = await call(
+      appRouter.catalog.variantArchive,
+      { id: variant.id },
+      admin
+    );
+    expect(archivedVariant.deletedAt).toBeTruthy();
+
+    const lot = await call(
+      appRouter.inventory.lotCreate,
+      {
+        expiryDate: "2027-01-01",
+        lotNumber: "MIX-FIFO-LOT",
+        skuId: fifoSku.id,
+      },
+      admin
+    );
+    const updatedLot = await call(
+      appRouter.inventory.lotUpdate,
+      { id: lot.id, status: "quarantined" },
+      admin
+    );
+    const lots = await call(
+      appRouter.inventory.lotList,
+      { skuId: fifoSku.id, status: "quarantined" },
+      admin
+    );
+    expect(updatedLot.status).toBe("quarantined");
+    expect(lots.map((row) => row.id)).toContain(lot.id);
+
+    const rule = await call(
+      appRouter.inventory.reorderRuleUpsert,
+      {
+        locationId: location.id,
+        maxQty: 20,
+        minQty: 10,
+        skuId: avcoSku.id,
+      },
+      admin
+    );
+    const rules = await call(
+      appRouter.inventory.reorderRuleList,
+      { locationId: location.id, skuId: avcoSku.id },
+      admin
+    );
+    expect(rules.map((row) => row.id)).toContain(rule.id);
+
     await call(
       appRouter.inventory.receive,
       {
@@ -458,6 +647,24 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(avco?.totalValueMinor).toBe(303);
     expect(fifo?.qtyOnHand).toBe(4);
     expect(fifo?.totalValueMinor).toBe(800);
+    const reorder = await call(
+      appRouter.inventory.reorderEvaluate,
+      { locationId: location.id, skuId: avcoSku.id },
+      admin
+    );
+    expect(reorder?.suggestedQty).toBe(17);
+    const archivedRule = await call(
+      appRouter.inventory.reorderRuleArchive,
+      { id: rule.id },
+      admin
+    );
+    expect(archivedRule.deletedAt).toBeTruthy();
+    const archivedLot = await call(
+      appRouter.inventory.lotArchive,
+      { id: lot.id },
+      admin
+    );
+    expect(archivedLot.deletedAt).toBeTruthy();
 
     const valuationEvents = await withTenant(db, ORG, (tx) =>
       tx
