@@ -5,7 +5,7 @@
 > **n/a** (out of scope for that layer). DB-gated suites are run against a real
 > ephemeral Postgres (bootstrap → migrate as `retailos_migrator` → run as
 > `retailos_app`); they are skipped in the default gate but executed in CI's
-> `db-rls` job and in pre-merge verification. Last verified: 2026-06-22, branch `phase-2-behavior` @ `28c0511` (item 3 / M1 normalization) — default `test` 7/7, DB-gated **db 45/45, api 11/11**, check 157/0, check-types 6/6.
+> `db-rls` job and in pre-merge verification. Last verified: 2026-06-22, **master `72b2100`** (PR #9 merge; Phase 2 complete) — default `test` 7/7, DB-gated **db 45/45, api 11/11**, check 157/0, check-types 6/6; master CI 4/4 green (Quality gates, E2E, Docker build, RLS real-Postgres).
 
 | Area | Unit | Integration | E2E | RLS | DB | Notes (what's verified) |
 |---|:--:|:--:|:--:|:--:|:--:|---|
