@@ -15,6 +15,14 @@ export function withTenant<T>(
   tenant: string,
   fn: (tx: TenantTransaction) => Promise<T>
 ): Promise<T> {
+  // Cannot be called without a tenant id: an empty/blank id would set the RLS
+  // GUC to '' and silently scope to "no tenant". Reject (rather than throw
+  // synchronously) so callers always get a promise.
+  if (!tenant.trim()) {
+    return Promise.reject(
+      new Error("withTenant: a non-empty tenant id is required")
+    );
+  }
   return database.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.tenant_id', ${tenant}, true)`);
     return fn(tx);

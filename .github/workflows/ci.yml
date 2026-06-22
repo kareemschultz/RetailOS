@@ -66,6 +66,43 @@ jobs:
             exit 1
           fi
 
+  db-rls:
+    name: RLS / tenant-isolation (real Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: RetailOS
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - run: bun install --frozen-lockfile
+      # ADR 0006: bootstrap roles as the superuser BEFORE migrations (never a
+      # Drizzle migration). Then migrate as retailos_migrator; test as retailos_app.
+      - name: Bootstrap RLS roles (superuser, pre-migration)
+        env:
+          PGPASSWORD: password
+        run: psql -h localhost -U postgres -d RetailOS -v ON_ERROR_STOP=1 -f packages/db/src/bootstrap/roles.sql
+      - name: Apply migrations (as retailos_migrator)
+        env:
+          MIGRATION_DATABASE_URL: postgresql://retailos_migrator:retailos_migrator@localhost:5432/RetailOS
+        run: bun -F @RetailOS/db db:migrate
+      - name: Fail-closed RLS tests (as retailos_app)
+        env:
+          RLS_TEST_DATABASE_URL: postgresql://retailos_app:retailos_app@localhost:5432/RetailOS
+        run: bun -F @RetailOS/db test
+
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest

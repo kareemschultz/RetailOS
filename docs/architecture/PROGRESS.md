@@ -7,6 +7,28 @@
 > Distinct from: `phase-roadmap.md` (strategic Phase 0–13 status) and `phase-0-checklist.md` (§46 gate
 > scoreboard). This file is the day-to-day operational log.
 
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     AUTONOMOUS OVERNIGHT RUN — read this block FIRST in the morning
+     ═══════════════════════════════════════════════════════════════════════════ -->
+
+## 🌙 AUTONOMOUS RUN STATUS (top-of-file; morning review)
+
+- **Mode:** unattended overnight. Branch **`vs1-phase1`** (never master; all work = PRs for review).
+- **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
+- **Order:** VS#1 Commits 2→7, then phase roadmap §31 (Phase 1→2→3…) with §41/§42/§45 gates before any new module.
+- **Current step:** VS#1 **Commit 2** (Migration + fail-closed RLS + role bootstrap) — in progress.
+
+### ⛔ BLOCKERS awaiting your decision (none yet)
+*(When I hard-stop, the blocker + analysis + options go here.)*
+
+### 📋 Deferred-decisions log (business/product rules I refused to guess)
+*(Running list; empty so far. First expected: Phase 2 inventory costing FIFO/LIFO/avg.)*
+
+### ✅ PRs opened
+*(Updated as branches are pushed.)*
+
+---
+
 - **Current effort:** Phase 0 — **post-lock-in hardening**: audit-only red-team pass of Phase 0 vs charter v4.1 → fix CRITICAL findings only → then Phase 1 (Vertical Slice #1). Charter §0/§1/§32/§45/§47.
 - **Approved plan:** `~/.claude/plans/retailos-master-architecture-groovy-oasis.md` (Deliverables A–E DONE + merged to `master`).
 - **Working branch:** `master` (Phase-0 branch merged; commits `4ce9499`/`cfcf588`/`bdc51f6`). Foundation docs + config locked-in and CI green.
