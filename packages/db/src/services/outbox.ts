@@ -4,7 +4,13 @@ import type { ServiceContext } from "./types";
 
 // VS#1 domain event types (charter §24). Consumed in later phases.
 export const DomainEventType = {
+  InventoryAdjusted: "inventory.adjusted",
+  InventoryCountPosted: "inventory.count_posted",
+  InventoryCountStarted: "inventory.count_started",
   InventoryReceived: "inventory.received",
+  InventoryReorderTriggered: "inventory.reorder_triggered",
+  InventoryStockDiscrepancy: "inventory.stock_discrepancy",
+  InventoryValuationUpdated: "inventory.valuation_updated",
   SaleCreated: "sale.created",
 } as const;
 

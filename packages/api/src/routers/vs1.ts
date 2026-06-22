@@ -2,7 +2,7 @@ import { auth } from "@RetailOS/auth";
 import type { TenantTransaction } from "@RetailOS/db";
 import { db, schema, services, withTenant } from "@RetailOS/db";
 import { ORPCError } from "@orpc/server";
-import { and, count, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, tenantProcedure } from "../index";
 import type { RequestContext } from "../request-context";
@@ -221,59 +221,153 @@ export const productRouter = {
     }),
 };
 
+const inventoryReceiveInput = z.object({
+  locationId: z.string().uuid(),
+  lotId: z.string().uuid().optional(),
+  productId: z.string().uuid(),
+  skuId: z.string().uuid().optional(),
+  qty: z.number().int().positive(),
+  unitCostMinor: z.number().int().min(0).optional(),
+  costCurrency: z.string().length(3).optional(),
+  costScale: z.number().int().min(0).optional(),
+  idempotencyKey: z.string().min(1).optional(),
+});
+
+type InventoryReceiveInput = z.infer<typeof inventoryReceiveInput>;
+
+async function assertInventoryReceiveReferences(
+  tx: TenantTransaction,
+  input: InventoryReceiveInput
+): Promise<void> {
+  const loc = (
+    await tx
+      .select({ id: schema.location.id })
+      .from(schema.location)
+      .where(eq(schema.location.id, input.locationId))
+      .limit(1)
+  ).at(0);
+  if (!loc) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Location not found in this tenant",
+    });
+  }
+  const prod = (
+    await tx
+      .select({ id: schema.product.id })
+      .from(schema.product)
+      .where(eq(schema.product.id, input.productId))
+      .limit(1)
+  ).at(0);
+  if (!prod) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Product not found in this tenant",
+    });
+  }
+  if (input.skuId) {
+    await assertSkuBelongsToProduct(tx, input.skuId, input.productId);
+    assertReceiptCostTriplet(input);
+  }
+  if (input.lotId) {
+    const lot = (
+      await tx
+        .select({ id: schema.lot.id })
+        .from(schema.lot)
+        .where(eq(schema.lot.id, input.lotId))
+        .limit(1)
+    ).at(0);
+    if (!lot) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Lot not found in this tenant",
+      });
+    }
+  }
+}
+
+async function assertSkuBelongsToProduct(
+  tx: TenantTransaction,
+  skuId: string,
+  productId: string
+): Promise<void> {
+  const item = (
+    await tx
+      .select({ id: schema.sku.id })
+      .from(schema.sku)
+      .where(and(eq(schema.sku.id, skuId), eq(schema.sku.productId, productId)))
+      .limit(1)
+  ).at(0);
+  if (!item) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "SKU not found in this tenant/product",
+    });
+  }
+}
+
+function assertReceiptCostTriplet(input: InventoryReceiveInput): void {
+  if (
+    input.unitCostMinor == null ||
+    input.costCurrency == null ||
+    input.costScale == null
+  ) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "SKU-valued receipt requires unitCostMinor/costCurrency/costScale",
+    });
+  }
+}
+
 export const inventoryRouter = {
   receive: tenantProcedure
-    .input(
-      z.object({
-        locationId: z.string().uuid(),
-        productId: z.string().uuid(),
-        qty: z.number().int().positive(),
-      })
-    )
+    .input(inventoryReceiveInput)
     .handler(({ context, input }) => {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "inventory.receive");
-        // RLS-scoped existence checks (FK checks bypass RLS — see location.create).
-        const loc = (
-          await tx
-            .select({ id: schema.location.id })
-            .from(schema.location)
-            .where(eq(schema.location.id, input.locationId))
-            .limit(1)
-        ).at(0);
-        if (!loc) {
-          throw new ORPCError("NOT_FOUND", {
-            message: "Location not found in this tenant",
-          });
-        }
-        const prod = (
-          await tx
-            .select({ id: schema.product.id })
-            .from(schema.product)
-            .where(eq(schema.product.id, input.productId))
-            .limit(1)
-        ).at(0);
-        if (!prod) {
-          throw new ORPCError("NOT_FOUND", {
-            message: "Product not found in this tenant",
-          });
-        }
+        await assertInventoryReceiveReferences(tx, input);
         const ledger = await services.appendStockMovement(tx, ctx, {
+          costCurrency: input.costCurrency ?? null,
+          costScale: input.costScale ?? null,
+          idempotencyKey: input.idempotencyKey ?? null,
           locationId: input.locationId,
+          lotId: input.lotId ?? null,
           productId: input.productId,
           movementType: "receipt",
           qtyDelta: input.qty,
+          skuId: input.skuId ?? null,
+          unitCostMinor: input.unitCostMinor ?? null,
         });
+        const valuation = input.skuId
+          ? await services.applyValuation(tx, ctx, ledger)
+          : null;
         await services.emitEvent(tx, ctx, {
           type: services.DomainEventType.InventoryReceived,
           payload: {
             locationId: input.locationId,
             productId: input.productId,
-            qty: input.qty,
-            ledgerId: ledger.id,
+            skuId: input.skuId ?? null,
+            lotId: input.lotId ?? null,
+            qtyBase: input.qty,
+            unitCostMinor: input.unitCostMinor ?? null,
+            currency: input.costCurrency ?? null,
+            scale: input.costScale ?? null,
+            sourceMovementId: ledger.id,
+            costingMethod: valuation?.method ?? null,
           },
         });
+        if (valuation) {
+          await services.emitEvent(tx, ctx, {
+            type: services.DomainEventType.InventoryValuationUpdated,
+            payload: {
+              locationId: input.locationId,
+              skuId: input.skuId,
+              sourceMovementId: ledger.id,
+              costingMethod: valuation.method,
+              cogsMinor: valuation.cogsMinor,
+              currency: valuation.currency,
+              scale: valuation.scale,
+              unvaluedQty: valuation.unvaluedQty,
+            },
+          });
+        }
         await services.recordAudit(tx, ctx, {
           action: "inventory.receive",
           entityType: "stock_ledger",
@@ -281,6 +375,250 @@ export const inventoryRouter = {
           after: ledger,
         });
         return ledger;
+      });
+    }),
+  adjust: tenantProcedure
+    .input(
+      z.object({
+        locationId: z.string().uuid(),
+        productId: z.string().uuid(),
+        skuId: z.string().uuid(),
+        lotId: z.string().uuid().optional(),
+        qtyDelta: z
+          .number()
+          .int()
+          .refine((qty) => qty !== 0),
+        reasonCode: z.string().min(1),
+        unitCostMinor: z.number().int().min(0).optional(),
+        costCurrency: z.string().length(3).optional(),
+        costScale: z.number().int().min(0).optional(),
+        idempotencyKey: z.string().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.adjust");
+        const item = (
+          await tx
+            .select({ id: schema.sku.id })
+            .from(schema.sku)
+            .where(
+              and(
+                eq(schema.sku.id, input.skuId),
+                eq(schema.sku.productId, input.productId)
+              )
+            )
+            .limit(1)
+        ).at(0);
+        if (!item) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "SKU not found in this tenant/product",
+          });
+        }
+        if (
+          input.qtyDelta > 0 &&
+          (input.unitCostMinor == null ||
+            input.costCurrency == null ||
+            input.costScale == null)
+        ) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "Positive adjustment requires unitCostMinor/costCurrency/costScale",
+          });
+        }
+        const ledger = await services.appendStockMovement(tx, ctx, {
+          costCurrency: input.costCurrency ?? null,
+          costScale: input.costScale ?? null,
+          idempotencyKey: input.idempotencyKey ?? null,
+          locationId: input.locationId,
+          lotId: input.lotId ?? null,
+          movementType: "adjustment",
+          productId: input.productId,
+          qtyDelta: input.qtyDelta,
+          refType: "inventory.adjust",
+          skuId: input.skuId,
+          unitCostMinor: input.unitCostMinor ?? null,
+        });
+        const valuation = await services.applyValuation(tx, ctx, ledger);
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryAdjusted,
+          payload: {
+            locationId: input.locationId,
+            skuId: input.skuId,
+            lotId: input.lotId ?? null,
+            qtyDeltaBase: input.qtyDelta,
+            reasonCode: input.reasonCode,
+            sourceMovementId: ledger.id,
+            cogsMinor: valuation.cogsMinor,
+            currency: valuation.currency,
+            scale: valuation.scale,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.adjust",
+          entityType: "stock_ledger",
+          entityId: ledger.id,
+          after: { ledger, valuation, reasonCode: input.reasonCode },
+        });
+        return { ledger, valuation };
+      });
+    }),
+  countStart: tenantProcedure
+    .input(
+      z.object({
+        locationId: z.string().uuid(),
+        scope: z.enum(["full", "cycle", "zone"]).default("cycle"),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.count");
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.stockCount)
+              .values({
+                tenantId: ctx.tenantId,
+                locationId: input.locationId,
+                scope: input.scope,
+                status: "started",
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryCountStarted,
+          payload: {
+            countId: row.id,
+            locationId: input.locationId,
+            scope: input.scope,
+            startedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.count.start",
+          entityType: "stock_count",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  countLineUpsert: tenantProcedure
+    .input(
+      z.object({
+        stockCountId: z.string().uuid(),
+        skuId: z.string().uuid(),
+        lotId: z.string().uuid().optional(),
+        countedQty: z.number().int().min(0),
+        varianceValueMinor: z.number().int().optional(),
+        currency: z.string().length(3).optional(),
+        scale: z.number().int().min(0).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.count");
+        const countRow = (
+          await tx
+            .select({ id: schema.stockCount.id })
+            .from(schema.stockCount)
+            .where(eq(schema.stockCount.id, input.stockCountId))
+            .limit(1)
+        ).at(0);
+        if (!countRow) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Stock count not found in this tenant",
+          });
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.stockCountLine)
+              .values({
+                tenantId: ctx.tenantId,
+                stockCountId: input.stockCountId,
+                skuId: input.skuId,
+                lotId: input.lotId ?? null,
+                countedQty: input.countedQty,
+                varianceValueMinor: input.varianceValueMinor ?? null,
+                currency: input.currency ?? null,
+                scale: input.scale ?? null,
+              })
+              .onConflictDoUpdate({
+                target: [
+                  schema.stockCountLine.tenantId,
+                  schema.stockCountLine.stockCountId,
+                  schema.stockCountLine.skuId,
+                  schema.stockCountLine.lotId,
+                ],
+                set: {
+                  countedQty: input.countedQty,
+                  varianceValueMinor: input.varianceValueMinor ?? null,
+                  currency: input.currency ?? null,
+                  scale: input.scale ?? null,
+                },
+              })
+              .returning()
+          ).at(0)
+        );
+        return row;
+      });
+    }),
+  countPost: tenantProcedure
+    .input(z.object({ stockCountId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.count");
+        const result = await services.postStockCount(tx, ctx, input);
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryCountPosted,
+          payload: {
+            countId: result.stockCountId,
+            lines: result.adjustments,
+            postedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.count.post",
+          entityType: "stock_count",
+          entityId: result.stockCountId,
+          after: result,
+        });
+        return result;
+      });
+    }),
+  reorderEvaluate: tenantProcedure
+    .input(
+      z.object({
+        locationId: z.string().uuid(),
+        skuId: z.string().uuid(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.reorder");
+        const result = await services.evaluateReorder(tx, input);
+        if (result?.isBelowMin) {
+          await services.emitEvent(tx, ctx, {
+            type: services.DomainEventType.InventoryReorderTriggered,
+            payload: {
+              skuId: input.skuId,
+              locationId: input.locationId,
+              onHandBase: result.onHand,
+              minQty: result.minQty,
+              maxQty: result.maxQty,
+              suggestedQtyBase: result.suggestedQty,
+            },
+          });
+        }
+        return result;
       });
     }),
 };
@@ -486,6 +824,88 @@ export const reportsRouter = {
             totalMinor: Number(r.totalMinor),
           })),
         };
+      });
+    }),
+  valuation: tenantProcedure
+    .input(
+      z.object({
+        locationId: z.string().uuid().optional(),
+        skuId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        const conditions: SQL[] = [];
+        if (input.locationId) {
+          conditions.push(eq(schema.avgCost.locationId, input.locationId));
+        }
+        if (input.skuId) {
+          conditions.push(eq(schema.avgCost.skuId, input.skuId));
+        }
+        const avcoRows = await tx
+          .select()
+          .from(schema.avgCost)
+          .where(conditions.length ? and(...conditions) : undefined);
+        const fifoRows = await tx.execute(sql`
+          SELECT
+            sku_id,
+            location_id,
+            currency,
+            scale,
+            COALESCE(SUM(qty_remaining), 0)::bigint AS qty_on_hand,
+            COALESCE(SUM(qty_remaining * unit_cost_minor), 0)::bigint AS total_value_minor
+          FROM valuation_layer
+          WHERE qty_remaining > 0
+            AND (${input.locationId ?? null}::uuid IS NULL OR location_id = ${input.locationId ?? null})
+            AND (${input.skuId ?? null}::uuid IS NULL OR sku_id = ${input.skuId ?? null})
+          GROUP BY sku_id, location_id, currency, scale
+        `);
+        return {
+          avco: avcoRows,
+          fifo: fifoRows.rows.map((row) => ({
+            skuId: row.sku_id,
+            locationId: row.location_id,
+            currency: row.currency,
+            scale: Number(row.scale),
+            qtyOnHand: Number(row.qty_on_hand),
+            totalValueMinor: Number(row.total_value_minor),
+          })),
+        };
+      });
+    }),
+  lowStock: tenantProcedure
+    .input(z.object({ locationId: z.string().uuid().optional() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        const rows = await tx.execute(sql`
+          SELECT
+            rr.sku_id,
+            rr.location_id,
+            rr.min_qty,
+            rr.max_qty,
+            COALESCE(SUM(sl.qty_delta), 0)::bigint AS on_hand
+          FROM reorder_rule rr
+          LEFT JOIN stock_ledger sl
+            ON sl.sku_id = rr.sku_id
+           AND sl.location_id = rr.location_id
+          WHERE rr.is_active = true
+            AND rr.deleted_at IS NULL
+            AND (${input.locationId ?? null}::uuid IS NULL OR rr.location_id = ${input.locationId ?? null})
+          GROUP BY rr.sku_id, rr.location_id, rr.min_qty, rr.max_qty
+          HAVING COALESCE(SUM(sl.qty_delta), 0) < rr.min_qty
+        `);
+        return rows.rows.map((row) => ({
+          skuId: row.sku_id,
+          locationId: row.location_id,
+          minQty: Number(row.min_qty),
+          maxQty: Number(row.max_qty),
+          onHand: Number(row.on_hand),
+          suggestedQty: Math.max(0, Number(row.max_qty) - Number(row.on_hand)),
+        }));
       });
     }),
 };
