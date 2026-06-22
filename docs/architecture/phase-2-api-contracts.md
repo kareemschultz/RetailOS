@@ -28,6 +28,45 @@
 
 ## Inventory routes
 
+## Catalog routes
+
+All catalog routes require `products.create` for now; finer-grained catalog permissions can split later without changing route contracts.
+
+### `catalog.categoryCreate`
+- **Input:** `{ name, code?, costingMethod?, trackingMode? }`
+- **Writes:** `category`
+- **Audit:** `category.create`
+
+### `catalog.brandCreate`
+- **Input:** `{ name, code? }`
+- **Writes:** `brand`
+- **Audit:** `brand.create`
+
+### `catalog.uomCreate`
+- **Input:** `{ code, name, kind?, decimalScale? }`
+- **Writes:** `unit_of_measure`
+- **Audit:** `uom.create`
+
+### `catalog.skuCreate`
+- **Input:** `{ productId, code, name?, baseUomId?, costingMethod?, trackingMode? }`
+- **Writes:** `sku`
+- **Guards:** `productId` and `baseUomId` must be visible through tenant RLS.
+- **Audit:** `sku.create`
+
+### `catalog.barcodeCreate`
+- **Input:** `{ skuId, value, symbology?, isPrimary? }`
+- **Writes:** `barcode`
+- **Guards:** `skuId` must be visible through tenant RLS.
+- **Audit:** `barcode.create`
+
+### `catalog.uomConversionCreate`
+- **Input:** `{ fromUomId, toUomId, role, factor, factorScale?, categoryId?, productId?, skuId? }`
+- **Writes:** `uom_conversion`
+- **Guards:** referenced UoMs/product/SKU must be visible through tenant RLS.
+- **Audit:** `uom_conversion.create`
+
+## Inventory routes
+
 ### `inventory.receive`
 - **Input:** `{ locationId, productId, qty, skuId?, lotId?, unitCostMinor?, costCurrency?, costScale?, idempotencyKey? }`
 - **Permission:** `inventory.receive`
@@ -86,7 +125,7 @@
 
 ## Known gaps / next backend work
 
-- Catalog management routers for `category`, `brand`, `variant`, `sku`, `barcode`, `unit_of_measure`, and `uom_conversion` are not yet exposed as CRUD endpoints.
+- Catalog create endpoints exist for `category`, `brand`, `sku`, `barcode`, `unit_of_measure`, and `uom_conversion`; update/list/delete and `variant` endpoints are still pending.
 - Phase-2 router e2e should add a dedicated mixed-catalog flow that creates SKU/lot data and calls the new SKU-aware receipt/count/report routes through oRPC.
 - Event payloads are implemented for the new router seams, but the outbox dispatcher/consumer remains a later phase.
 - UI remains intentionally absent.

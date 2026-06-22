@@ -221,6 +221,305 @@ export const productRouter = {
     }),
 };
 
+export const catalogRouter = {
+  categoryCreate: tenantProcedure
+    .input(
+      z.object({
+        code: z.string().min(1).optional(),
+        name: z.string().min(1),
+        costingMethod: z.enum(["avco", "fifo"]).optional(),
+        trackingMode: z.enum(["none", "lot", "serial"]).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.category)
+              .values({
+                tenantId: ctx.tenantId,
+                code: input.code ?? null,
+                name: input.name,
+                costingMethod: input.costingMethod ?? null,
+                trackingMode: input.trackingMode ?? null,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "category.create",
+          entityType: "category",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  brandCreate: tenantProcedure
+    .input(
+      z.object({ code: z.string().min(1).optional(), name: z.string().min(1) })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.brand)
+              .values({
+                tenantId: ctx.tenantId,
+                code: input.code ?? null,
+                name: input.name,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "brand.create",
+          entityType: "brand",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  uomCreate: tenantProcedure
+    .input(
+      z.object({
+        code: z.string().min(1),
+        name: z.string().min(1),
+        kind: z.enum(["count", "weight", "volume", "length"]).default("count"),
+        decimalScale: z.number().int().min(0).default(0),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.unitOfMeasure)
+              .values({
+                tenantId: ctx.tenantId,
+                code: input.code,
+                name: input.name,
+                kind: input.kind,
+                decimalScale: input.decimalScale,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "uom.create",
+          entityType: "unit_of_measure",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  skuCreate: tenantProcedure
+    .input(
+      z.object({
+        productId: z.string().uuid(),
+        code: z.string().min(1),
+        name: z.string().min(1).optional(),
+        baseUomId: z.string().uuid().optional(),
+        costingMethod: z.enum(["avco", "fifo"]).optional(),
+        trackingMode: z.enum(["none", "lot", "serial"]).default("none"),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        await assertProductVisible(tx, input.productId);
+        if (input.baseUomId) {
+          await assertUomVisible(tx, input.baseUomId);
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.sku)
+              .values({
+                tenantId: ctx.tenantId,
+                productId: input.productId,
+                code: input.code,
+                name: input.name ?? null,
+                baseUomId: input.baseUomId ?? null,
+                costingMethod: input.costingMethod ?? null,
+                trackingMode: input.trackingMode,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "sku.create",
+          entityType: "sku",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  barcodeCreate: tenantProcedure
+    .input(
+      z.object({
+        skuId: z.string().uuid(),
+        value: z.string().min(1),
+        symbology: z
+          .enum(["ean13", "upca", "ean8", "code128", "gs1", "qr"])
+          .default("ean13"),
+        isPrimary: z.boolean().default(false),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        await assertSkuVisible(tx, input.skuId);
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.barcode)
+              .values({
+                tenantId: ctx.tenantId,
+                skuId: input.skuId,
+                value: input.value,
+                symbology: input.symbology,
+                isPrimary: input.isPrimary,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "barcode.create",
+          entityType: "barcode",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  uomConversionCreate: tenantProcedure
+    .input(
+      z.object({
+        fromUomId: z.string().uuid(),
+        toUomId: z.string().uuid(),
+        role: z.enum(["purchase", "stock", "sale", "reporting"]),
+        factor: z.number().int().positive(),
+        factorScale: z.number().int().min(0).default(0),
+        categoryId: z.string().uuid().optional(),
+        productId: z.string().uuid().optional(),
+        skuId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        await assertUomVisible(tx, input.fromUomId);
+        await assertUomVisible(tx, input.toUomId);
+        if (input.productId) {
+          await assertProductVisible(tx, input.productId);
+        }
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.uomConversion)
+              .values({
+                tenantId: ctx.tenantId,
+                categoryId: input.categoryId ?? null,
+                productId: input.productId ?? null,
+                skuId: input.skuId ?? null,
+                fromUomId: input.fromUomId,
+                toUomId: input.toUomId,
+                role: input.role,
+                factor: input.factor,
+                factorScale: input.factorScale,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "uom_conversion.create",
+          entityType: "uom_conversion",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+};
+
+async function assertProductVisible(
+  tx: TenantTransaction,
+  productId: string
+): Promise<void> {
+  const row = (
+    await tx
+      .select({ id: schema.product.id })
+      .from(schema.product)
+      .where(eq(schema.product.id, productId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Product not found in this tenant",
+    });
+  }
+}
+
+async function assertSkuVisible(
+  tx: TenantTransaction,
+  skuId: string
+): Promise<void> {
+  const row = (
+    await tx
+      .select({ id: schema.sku.id })
+      .from(schema.sku)
+      .where(eq(schema.sku.id, skuId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "SKU not found in this tenant",
+    });
+  }
+}
+
+async function assertUomVisible(
+  tx: TenantTransaction,
+  uomId: string
+): Promise<void> {
+  const row = (
+    await tx
+      .select({ id: schema.unitOfMeasure.id })
+      .from(schema.unitOfMeasure)
+      .where(eq(schema.unitOfMeasure.id, uomId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Unit of measure not found in this tenant",
+    });
+  }
+}
+
 const inventoryReceiveInput = z.object({
   locationId: z.string().uuid(),
   lotId: z.string().uuid().optional(),

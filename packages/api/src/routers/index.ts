@@ -2,6 +2,7 @@ import type { RouterClient } from "@orpc/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
 import {
+  catalogRouter,
   companyRouter,
   inventoryRouter,
   locationRouter,
@@ -19,6 +20,7 @@ export const appRouter = {
   })),
   // Vertical Slice #1 flow (charter §32).
   tenant: tenantRouter,
+  catalog: catalogRouter,
   company: companyRouter,
   location: locationRouter,
   product: productRouter,
