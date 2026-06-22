@@ -198,6 +198,31 @@ describe.skipIf(!url)("core services (tenant-scoped, ADR 0006)", () => {
     expect(row.correlationId).toBe("corr-9");
     expect(row.requestId).toBe("req-9");
     expect(row.tenantId).toBe(TENANT);
+    // M1 contract (event-map-phase2.md): emitEvent injects a server-set
+    // `occurredAt` into EVERY payload (server time authoritative, §14). It is
+    // an ISO-8601 string and is added without the producer setting it.
+    const payload = row.payload as Record<string, unknown>;
+    expect(payload.saleId).toBe("x");
+    expect(typeof payload.occurredAt).toBe("string");
+    expect(Number.isNaN(Date.parse(payload.occurredAt as string))).toBe(false);
+  });
+
+  it("emitEvent occurredAt is server-set and overrides any producer value", async () => {
+    const row = await withTenant(db, TENANT, (tx) =>
+      emitEvent(
+        tx,
+        { tenantId: TENANT },
+        {
+          type: DomainEventType.SaleCreated,
+          // A producer trying to set occurredAt must NOT win — server time is
+          // authoritative; device clocks are untrusted (§14).
+          payload: { saleId: "y", occurredAt: "1999-01-01T00:00:00.000Z" },
+        }
+      )
+    );
+    const payload = row.payload as Record<string, unknown>;
+    expect(payload.occurredAt).not.toBe("1999-01-01T00:00:00.000Z");
+    expect(Number.isNaN(Date.parse(payload.occurredAt as string))).toBe(false);
   });
 
   it("a rolled-back transaction emits no event (same-tx atomicity)", async () => {

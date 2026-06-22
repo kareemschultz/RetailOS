@@ -49,7 +49,14 @@ export interface StockCountPostingAdjustment {
 
 export interface StockCountPostingResult {
   adjustments: StockCountPostingAdjustment[];
+  // Top-level location + valuation currency/scale for the count_posted event
+  // contract (event-map-phase2.md). All variance valuations resolve to one
+  // currency/scale per count (lines COALESCE to USD/2), so they are surfaced
+  // once at the header rather than per line.
+  currency: string;
+  locationId: string;
   postedAt: Date;
+  scale: number;
   stockCountId: string;
 }
 
@@ -244,7 +251,17 @@ export async function postStockCount(
     FOR UPDATE
   `);
   const adjustments: StockCountPostingAdjustment[] = [];
+  // Count-level valuation currency/scale for the count_posted event header.
+  // Lines COALESCE to USD/2; adopt the first explicit line currency/scale.
+  let countCurrency = "USD";
+  let countScale = 2;
   for (const line of lineRows.rows as unknown as StockCountLineRow[]) {
+    if (line.currency != null) {
+      countCurrency = line.currency;
+    }
+    if (line.scale != null) {
+      countScale = line.scale;
+    }
     const countedQty = asNumber(line.counted_qty);
     const systemQty = line.lot_id
       ? await stockOnHandForSkuLot(
@@ -311,7 +328,14 @@ export async function postStockCount(
     WHERE id = ${input.stockCountId}
   `);
 
-  return { adjustments, postedAt, stockCountId: input.stockCountId };
+  return {
+    adjustments,
+    currency: countCurrency,
+    locationId: header.location_id,
+    postedAt,
+    scale: countScale,
+    stockCountId: input.stockCountId,
+  };
 }
 
 async function productIdForSku(
