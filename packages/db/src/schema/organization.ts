@@ -3,6 +3,8 @@ import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import {
   COSTING_METHODS,
+  EXPIRY_POLICIES,
+  OVERSELL_POLICIES,
   REMOVAL_STRATEGIES,
   RETURN_COSTING_POLICIES,
 } from "./product";
@@ -25,6 +27,8 @@ export const organization = pgTable("organization", {
   returnCostingPolicy: text("return_costing_policy", {
     enum: RETURN_COSTING_POLICIES,
   }),
+  oversellPolicy: text("oversell_policy", { enum: OVERSELL_POLICIES }),
+  expiryPolicy: text("expiry_policy", { enum: EXPIRY_POLICIES }),
   barcodeParserConfig: jsonb("barcode_parser_config"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

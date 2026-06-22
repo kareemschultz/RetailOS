@@ -373,6 +373,11 @@ export const productRouter = {
               .limit(1)
           ).at(0)
         );
+        await assertCostingMethodSetOnce(tx, {
+          currentMethod: before.costingMethod,
+          nextMethod: input.costingMethod,
+          productId: input.id,
+        });
         const moneyFields: {
           currency?: string;
           minor?: number;
@@ -1093,6 +1098,11 @@ export const catalogRouter = {
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "products.create");
         const before = await assertSkuVisible(tx, input.id);
+        await assertCostingMethodSetOnce(tx, {
+          currentMethod: before.costingMethod,
+          nextMethod: input.costingMethod,
+          skuId: input.id,
+        });
         if (input.baseUomId) {
           await assertUomVisible(tx, input.baseUomId);
         }
@@ -1595,6 +1605,50 @@ async function assertLotVisible(
     });
   }
   return row;
+}
+
+// PART 2 — costing_method is SET-ONCE: immutable for a product/sku once that
+// item has ANY stock_ledger movement (changing it would re-value history; the
+// `costing_method_applied` stamp makes a violation detectable after the fact).
+// A FIFO pharmacy SKU beside an AVCO grocery SKU in one tenant is valid — only
+// CHANGING an item's method after movements exist is rejected. See ADR 0008 / D1.
+async function assertCostingMethodSetOnce(
+  tx: TenantTransaction,
+  opts: {
+    currentMethod: "avco" | "fifo" | null;
+    nextMethod: "avco" | "fifo" | null | undefined;
+    productId?: string;
+    skuId?: string;
+  }
+): Promise<void> {
+  // Field not supplied → not a change.
+  if (opts.nextMethod === undefined) {
+    return;
+  }
+  // Same effective value → not a change.
+  if ((opts.nextMethod ?? null) === (opts.currentMethod ?? null)) {
+    return;
+  }
+  let condition: ReturnType<typeof eq> | null = null;
+  if (opts.skuId) {
+    condition = eq(schema.stockLedger.skuId, opts.skuId);
+  } else if (opts.productId) {
+    condition = eq(schema.stockLedger.productId, opts.productId);
+  }
+  if (!condition) {
+    return;
+  }
+  const existing = await tx
+    .select({ id: schema.stockLedger.id })
+    .from(schema.stockLedger)
+    .where(condition)
+    .limit(1);
+  if (existing.length > 0) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        "costing_method is set-once: it cannot be changed after stock movements exist for this item",
+    });
+  }
 }
 
 async function assertReorderRuleVisible(

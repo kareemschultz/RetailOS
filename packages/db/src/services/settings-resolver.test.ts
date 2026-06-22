@@ -33,16 +33,22 @@ describe("settings resolver (§6)", () => {
     expect(r.source).toBe("location");
   });
 
-  it("financial settings resolve at category/tenant/platform only (no product/location)", () => {
+  it("costing resolves at ALL levels by default (D1); FINANCIAL_LEVELS is an opt-in cap", () => {
     expect(isFinancialSetting("costingMethod")).toBe(true);
-    expect(allowedLevelsFor("costingMethod")).toEqual(FINANCIAL_LEVELS);
-    // A per-product costing override is IGNORED for financial consistency.
-    const r = resolveSetting(
+    // Default honors D1 — a per-product costing override wins.
+    const def = resolveSetting(
       { product: "fifo", category: "avco", tenant: "avco" },
       allowedLevelsFor("costingMethod")
     );
-    expect(r.value).toBe("avco");
-    expect(r.source).toBe("category");
+    expect(def.value).toBe("fifo");
+    expect(def.source).toBe("product");
+    // Opt-in shallow cap: passing FINANCIAL_LEVELS explicitly ignores product/location.
+    const capped = resolveSetting(
+      { product: "fifo", category: "avco", tenant: "avco" },
+      FINANCIAL_LEVELS
+    );
+    expect(capped.value).toBe("avco");
+    expect(capped.source).toBe("category");
   });
 
   it("operational settings may resolve at the deepest level", () => {

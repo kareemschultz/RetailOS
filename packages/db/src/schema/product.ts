@@ -74,6 +74,8 @@ export const category = pgTable(
     returnCostingPolicy: text("return_costing_policy", {
       enum: RETURN_COSTING_POLICIES,
     }),
+    oversellPolicy: text("oversell_policy", { enum: OVERSELL_POLICIES }),
+    expiryPolicy: text("expiry_policy", { enum: EXPIRY_POLICIES }),
     ...timestamps,
     ...actor,
     ...softDelete,
@@ -149,6 +151,8 @@ export const product = pgTable(
     returnCostingPolicy: text("return_costing_policy", {
       enum: RETURN_COSTING_POLICIES,
     }),
+    oversellPolicy: text("oversell_policy", { enum: OVERSELL_POLICIES }),
+    expiryPolicy: text("expiry_policy", { enum: EXPIRY_POLICIES }),
     // Money minor units are int8 (bigint) — int4 caps at ~$21M, too small for an
     // enterprise/wholesale ERP. mode:"number" keeps a JS number (safe to 2^53).
     priceMinor: bigint("price_minor", { mode: "number" }).notNull(),

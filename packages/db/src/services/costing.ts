@@ -334,6 +334,14 @@ async function applyAvcoValueOnly(
       "costing: value-only adjustment requires an existing AVCO balance for the SKU×location"
     );
   }
+  // GAP A — invariant guard: a value-only adjustment on zero (or negative) stock
+  // would orphan value on no quantity, breaking qty==0 ⟺ total_value_minor==0.
+  // Landed cost / value-only only has meaning when inventory is on hand.
+  if (asNumber(row.qty_on_hand) <= 0) {
+    throw new Error(
+      "value-only adjustment requires qty_on_hand > 0 — cannot value zero stock"
+    );
+  }
   // Quantity is intentionally NOT touched — value moves, qty stays.
   await tx.execute(sql`
     UPDATE avg_cost
@@ -362,6 +370,18 @@ export async function applyValuation(
     productId: movement.productId,
     skuId,
   });
+  // GAP B / seam #2 — stamp the resolved financial strategy onto THIS movement
+  // row at write time, so a later costing-method change can never silently
+  // re-value committed history. Done here (after resolve, before branching)
+  // rather than at the call site, so every valued movement is stamped without a
+  // double-resolve. (A FIFO value-only adjustment throws below; its stamp rolls
+  // back with the transaction.)
+  await tx.execute(sql`
+    UPDATE stock_ledger
+    SET costing_method_applied = ${method}
+    WHERE id = ${movement.id}
+      AND tenant_id = ${ctx.tenantId}
+  `);
   // §2/§6 — value-only valuation adjustment: AVCO applies the value delta;
   // FIFO REJECTS (value-only FIFO landed-cost allocation is an OPEN decision),
   // so a FIFO product cannot silently mis-apply.

@@ -8,12 +8,13 @@
 
 - **Resolution order (most specific wins):** `product → category → location → tenant → platform default`. Implemented as a pure `resolveSetting(values, allowedLevels)` — services must route config lookups through it, not scatter ad-hoc joins.
 - **Depth rules:**
-  - **Financial-consistency settings** (`costingMethod`, `valuationBehavior`) resolve at **category / tenant / platform only** (`FINANCIAL_LEVELS`) — arbitrary per-product/per-location costing overrides are **not** honored for financial integrity.
-  - **Operational/physical settings** (tracking mode, UoM, expiry policy, removal strategy, reorder policy, oversell policy) may resolve at **any** level.
-- **Historical integrity (seam #2 — the load-bearing rule):** the resolver returns the **current** effective setting and must **never** be used to re-interpret historical movements. The financial strategy actually applied is **stamped on the movement row at write time** — `stock_ledger.costing_method_applied` (nullable column added this pass). A later config change therefore cannot silently re-value committed history. (Alternative considered: effective-dated append-only settings-history table — heavier; the write-time stamp is sufficient and cheaper, and is the chosen seam. A settings-history table remains a future option without conflicting with the stamp.)
+  - **Operational/physical settings** (tracking mode, UoM, expiry policy, removal strategy, reorder policy, oversell policy) resolve at **any** level (product → category → location → tenant → platform).
+  - **Financial-consistency settings** (`costingMethod`, `valuationBehavior`) **MAY resolve to product/sku level too** (per D1 — a FIFO pharmacy SKU beside an AVCO grocery SKU in one tenant is a standard, valid catalog). The integrity rule is **NOT a depth cap** — it is **set-once-immutable** (below).
+- **Set-once integrity rule (REPLACES the earlier category-cap, 2026-06-22):** `costingMethod` is **immutable for a product/sku once that item has ANY `stock_ledger` movement.** Enforced at the service/validation boundary (`assertCostingMethodSetOnce` in the catalog routers): a change attempt on an item with existing ledger rows is rejected with a structured `CONFLICT`. The hazard was never per-item costing — it is **changing an item's method after it has ledger history** (which would re-value the past). Set-once removes that hazard while keeping item-level costing.
+- **Historical integrity (seam #2 — load-bearing):** the resolver returns the **current** effective setting and must **never** re-interpret historical movements. The financial strategy actually applied is **stamped on the movement row at write time** — `stock_ledger.costing_method_applied`, written by `applyValuation` after it resolves the method. This makes a set-once violation **detectable after the fact** and guarantees a later config change cannot silently re-value committed history. (Alternative considered: effective-dated settings-history table — heavier; the stamp + set-once is sufficient.)
 
-### OPEN — conflict with locked D1
-D1 (ADR 0007) decided costing is selectable **per tenant/category/product**. The depth rule here restricts *financial* settings to **category max**. These conflict on the product level. **Resolution deferred to the owner:** either relax the depth rule to include product (honoring D1 literally) or amend D1 to category-max. Until resolved, the resolver utility *defaults* financial settings to category-max (seam-#2 guidance), and `costing.ts`'s existing `resolveCostingMethod` (still product→category→tenant per D1) is **unchanged this pass** — it will adopt the resolver + the agreed depth in the behavior pass. Flagged in PROGRESS deferred-decisions.
+### RESOLVED — D1 vs ADR-0008 (owner decision 2026-06-22)
+Reconciled **toward D1**: financial settings keep **product/sku-level** selectability; the `FINANCIAL_LEVELS` category-cap in `settings-resolver.ts` is retained only as an *optional* `allowedLevels` argument callers may pass, **not** the default policy for costing. The integrity guarantee is **set-once-after-first-movement** (enforced + tested), not a depth cap. `costing.ts`'s `resolveCostingMethod` (product→category→tenant) is therefore **correct as-is** and is no longer in conflict. The product/sku `costing_method` columns and their seed/test coverage are **kept**.
 
 ## Decision — currency seam (§7)
 
@@ -23,5 +24,5 @@ D1 (ADR 0007) decided costing is selectable **per tenant/category/product**. The
 
 ## Consequences
 - Services gain a single, testable resolver (pure unit-tested) instead of scattered lookups.
-- History is immutable under config change (stamp on the movement).
-- The D1/depth conflict is explicit and owner-deferred, not silently resolved.
+- History is immutable under config change (write-time stamp on the movement + set-once enforcement).
+- The D1/depth conflict is **RESOLVED toward D1** (2026-06-22): item-level costing is kept; the integrity guarantee is **set-once-after-first-movement** (enforced in `assertCostingMethodSetOnce` + tested), not a depth cap. `costing.ts` resolution is unchanged and no longer in conflict.

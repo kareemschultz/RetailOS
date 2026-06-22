@@ -1013,4 +1013,71 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(event.payload.source).toBe("oversell");
     expect(event.payload.resultingOnHand).toBeLessThan(0);
   });
+
+  // PART 2 — costing_method is set-once: changeable on a fresh item, immutable
+  // after the item has any stock_ledger movement (re-valuing history is the
+  // hazard; a mixed AVCO/FIFO catalog is fine).
+  it("enforces costing_method set-once after first movement (D1/ADR-0008)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "SetOnceCo" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "SetOnceLoc", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      {
+        sku: "SETONCE-P",
+        name: "SetOnce",
+        priceMinor: 100,
+        currency: "USD",
+        costingMethod: "avco",
+      },
+      admin
+    );
+
+    // Fresh item (no movements) → changing costing_method SUCCEEDS.
+    const changed = await call(
+      appRouter.product.update,
+      { id: product.id, costingMethod: "fifo" },
+      admin
+    );
+    expect(changed.costingMethod).toBe("fifo");
+
+    // Create a ledger movement for the product (product-keyed, no skuId).
+    await withTenant(db, ORG, (tx) =>
+      services.appendStockMovement(
+        tx,
+        { tenantId: ORG },
+        {
+          locationId: location.id,
+          productId: product.id,
+          movementType: "receipt",
+          qtyDelta: 1,
+        }
+      )
+    );
+
+    // Now CHANGING the method is REJECTED (history exists).
+    await expect(
+      call(
+        appRouter.product.update,
+        { id: product.id, costingMethod: "avco" },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // Re-supplying the SAME value is a no-op, not a change → still allowed.
+    const noop = await call(
+      appRouter.product.update,
+      { id: product.id, costingMethod: "fifo" },
+      admin
+    );
+    expect(noop.costingMethod).toBe("fifo");
+  });
 });
