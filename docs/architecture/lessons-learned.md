@@ -228,3 +228,15 @@
 - **Mistake avoided:** documenting `qty_on_hand = 0 ⇒ total_value_minor = 0` only in service code would leave imports, manual SQL, or future services able to create orphaned value at zero stock.
 - **Fix:** Commit 3 adds `avg_cost_zero_qty_zero_value_chk` (`qty_on_hand <> 0 OR total_value_minor = 0`) in the migration, alongside the service-level plan.
 - **Rule:** when an invariant protects the ledger from silent corruption, enforce it in the database as well as in services/tests.
+
+### Phase-2 valuation needs SKU-level ledger identity — 2026-06-22
+- **Context:** VS#1 `stock_ledger` was product-based because the first slice had only simple products. Phase 2 valuation storage (`avg_cost`, `valuation_layer`) is SKU×location.
+- **Audit finding:** implementing costing on top of product-only ledger rows would make variants/SKUs under the same product share a running stock/cost cell, corrupting balances and valuation in mixed catalogs.
+- **Fix:** Commit 6 adds nullable `stock_ledger.sku_id` + index/FK and updates `appendStockMovement` to lock and compute `balance_after` by SKU when `skuId` is present, while keeping legacy product-level callers working.
+- **Rule:** whenever a lower-level identity is introduced (product → SKU, location → bin, tenant → company), audit every ledger/key/lock path for the true inventory cell identity before adding services.
+
+### Raw pg bigint results are strings even when Drizzle columns use mode:number — 2026-06-22
+- **Context:** Drizzle `bigint(..., { mode: "number" })` maps selected table columns, but raw `tx.execute(sql\`...\`)` returns PostgreSQL `int8` values as strings through `pg`.
+- **Bug caught by real DB test:** AVCO's zeroing issue returned `cogsMinor: "101"` from a raw `avg_cost.total_value_minor` row, while other math paths implicitly coerced strings through arithmetic.
+- **Fix:** Commit 6 normalizes raw bigint fields at the service boundary (`asNumber`) before valuation arithmetic/returns; the DB-gated costing test now proves AVCO remainder carry and zero-value invariant with real Postgres.
+- **Rule:** do not trust raw SQL result types for money/quantity fields; explicitly normalize `int8` from `tx.execute` and cover at least one real-Postgres test for ledger arithmetic.

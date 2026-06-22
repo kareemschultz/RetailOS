@@ -64,6 +64,13 @@
       "when": 1782142315279,
       "tag": "0008_reflective_loki",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782142833345,
+      "tag": "0009_fancy_bedlam",
+      "breakpoints": true
     }
   ]
 }

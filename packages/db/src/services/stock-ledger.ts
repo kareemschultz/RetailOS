@@ -17,6 +17,7 @@ export interface StockMovementInput {
   refId?: string | null;
   refType?: string | null;
   serialId?: string | null;
+  skuId?: string | null;
   unitCostMinor?: number | null;
 }
 
@@ -32,17 +33,24 @@ export async function appendStockMovement(
   input: StockMovementInput
 ) {
   // Serialize appends for this stock cell within the transaction.
-  const lockKey = `${ctx.tenantId}:${input.locationId}:${input.productId}`;
+  const stockCellId = input.skuId ?? input.productId;
+  const lockKey = `${ctx.tenantId}:${input.locationId}:${stockCellId}`;
   await tx.execute(
     sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`
   );
 
   // RLS already scopes to the tenant; filter by the cell for the running sum.
-  const balanceResult = await tx.execute(sql`
-    SELECT COALESCE(SUM(qty_delta), 0)::bigint AS balance
-    FROM stock_ledger
-    WHERE location_id = ${input.locationId} AND product_id = ${input.productId}
-  `);
+  const balanceResult = input.skuId
+    ? await tx.execute(sql`
+        SELECT COALESCE(SUM(qty_delta), 0)::bigint AS balance
+        FROM stock_ledger
+        WHERE location_id = ${input.locationId} AND sku_id = ${input.skuId}
+      `)
+    : await tx.execute(sql`
+        SELECT COALESCE(SUM(qty_delta), 0)::bigint AS balance
+        FROM stock_ledger
+        WHERE location_id = ${input.locationId} AND product_id = ${input.productId}
+      `);
   const currentBalance = Number(
     (balanceResult.rows.at(0) as { balance?: number } | undefined)?.balance ?? 0
   );
@@ -54,6 +62,7 @@ export async function appendStockMovement(
       tenantId: ctx.tenantId,
       locationId: input.locationId,
       productId: input.productId,
+      skuId: input.skuId ?? null,
       lotId: input.lotId ?? null,
       serialId: input.serialId ?? null,
       movementType: input.movementType,
@@ -90,6 +99,22 @@ export async function stockOnHand(
         eq(stockLedger.locationId, locationId),
         eq(stockLedger.productId, productId)
       )
+    );
+  return Number(result.at(0)?.balance ?? 0);
+}
+
+export async function stockOnHandForSku(
+  tx: TenantTransaction,
+  locationId: string,
+  skuId: string
+): Promise<number> {
+  const result = await tx
+    .select({
+      balance: sql<number>`COALESCE(SUM(${stockLedger.qtyDelta}), 0)::bigint`,
+    })
+    .from(stockLedger)
+    .where(
+      and(eq(stockLedger.locationId, locationId), eq(stockLedger.skuId, skuId))
     );
   return Number(result.at(0)?.balance ?? 0);
 }

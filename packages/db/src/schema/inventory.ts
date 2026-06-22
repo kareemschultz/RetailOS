@@ -133,6 +133,7 @@ export const stockLedger = pgTable(
     productId: uuid("product_id")
       .notNull()
       .references(() => product.id),
+    skuId: uuid("sku_id").references(() => sku.id),
     lotId: uuid("lot_id").references(() => lot.id),
     serialId: uuid("serial_id").references(() => serial.id),
     movementType: text("movement_type").notNull(),
@@ -153,6 +154,7 @@ export const stockLedger = pgTable(
       table.locationId,
       table.productId
     ),
+    index("stock_ledger_location_sku_idx").on(table.locationId, table.skuId),
     index("stock_ledger_lotId_idx").on(table.lotId),
     index("stock_ledger_serialId_idx").on(table.serialId),
   ]
