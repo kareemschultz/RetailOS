@@ -17,10 +17,12 @@ import {
   sku,
   stockCount,
   stockCountLine,
+  stockLedger,
   unitOfMeasure,
   uomConversion,
   variant,
 } from "../schema";
+import { appendStockMovement, applyValuation } from "../services";
 import { withTenant } from "../tenant";
 
 type Database = ReturnType<typeof createDb>;
@@ -51,6 +53,36 @@ function required<T>(row: T | undefined, what: string): T {
     throw new Error(`seed: expected ${what} to be inserted`);
   }
   return row;
+}
+
+async function appendSeedMovement(
+  tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  tenant: ProvisionedTenant,
+  input: Parameters<typeof appendStockMovement>[2]
+) {
+  if (!input.idempotencyKey) {
+    throw new Error("seed movement requires an idempotency key");
+  }
+  const existing = await tx
+    .select()
+    .from(stockLedger)
+    .where(
+      and(
+        eq(stockLedger.tenantId, tenant.tenantId),
+        eq(stockLedger.idempotencyKey, input.idempotencyKey)
+      )
+    )
+    .limit(1);
+  const found = existing.at(0);
+  if (found) {
+    return { created: false, movement: found };
+  }
+  const movement = await appendStockMovement(
+    tx,
+    { tenantId: tenant.tenantId },
+    input
+  );
+  return { created: true, movement };
 }
 
 // Reusable VS#1 seed for dev / CI / Playwright / demos (charter §32). Domain
@@ -723,6 +755,22 @@ async function seedPhase2Tenant(
       ).at(0),
       "syrup lot"
     );
+    const riceLot = required(
+      (
+        await tx
+          .select()
+          .from(lot)
+          .where(
+            and(
+              eq(lot.tenantId, tenant.tenantId),
+              eq(lot.skuId, riceSku.id),
+              eq(lot.lotNumber, "RICE-NEAR-2026-07")
+            )
+          )
+          .limit(1)
+      ).at(0),
+      "rice lot"
+    );
 
     await tx
       .insert(serial)
@@ -735,6 +783,100 @@ async function seedPhase2Tenant(
         createdBy: tenant.adminUserId,
       })
       .onConflictDoNothing();
+
+    const valuationMovements = [
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        idempotencyKey: `seed:${tenant.tenantId}:rice:receipt:1`,
+        locationId: seededLocation.id,
+        lotId: riceLot.id,
+        movementType: "receipt" as const,
+        productId: riceProduct.id,
+        qtyDelta: 5,
+        refType: "seed",
+        skuId: riceSku.id,
+        unitCostMinor: 120,
+      },
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        idempotencyKey: `seed:${tenant.tenantId}:rice:receipt:2`,
+        locationId: seededLocation.id,
+        lotId: riceLot.id,
+        movementType: "receipt" as const,
+        productId: riceProduct.id,
+        qtyDelta: 2,
+        refType: "seed",
+        skuId: riceSku.id,
+        unitCostMinor: 121,
+      },
+      {
+        idempotencyKey: `seed:${tenant.tenantId}:rice:issue:1`,
+        locationId: seededLocation.id,
+        lotId: riceLot.id,
+        movementType: "sale" as const,
+        productId: riceProduct.id,
+        qtyDelta: -3,
+        refType: "seed",
+        skuId: riceSku.id,
+      },
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        idempotencyKey: `seed:${tenant.tenantId}:syrup:receipt:1`,
+        locationId: seededLocation.id,
+        lotId: syrupLot.id,
+        movementType: "receipt" as const,
+        productId: syrupProduct.id,
+        qtyDelta: 3,
+        refType: "seed",
+        skuId: syrupSku.id,
+        unitCostMinor: 500,
+      },
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        idempotencyKey: `seed:${tenant.tenantId}:syrup:receipt:2`,
+        locationId: seededLocation.id,
+        lotId: syrupLot.id,
+        movementType: "receipt" as const,
+        productId: syrupProduct.id,
+        qtyDelta: 2,
+        refType: "seed",
+        skuId: syrupSku.id,
+        unitCostMinor: 700,
+      },
+      {
+        idempotencyKey: `seed:${tenant.tenantId}:syrup:issue:1`,
+        locationId: seededLocation.id,
+        lotId: syrupLot.id,
+        movementType: "sale" as const,
+        productId: syrupProduct.id,
+        qtyDelta: -4,
+        refType: "seed",
+        skuId: syrupSku.id,
+      },
+      {
+        idempotencyKey: `seed:${tenant.tenantId}:banana:oversell:1`,
+        locationId: seededLocation.id,
+        movementType: "sale" as const,
+        productId: bananasProduct.id,
+        qtyDelta: -5,
+        refType: "seed-oversell",
+        skuId: bananaSku.id,
+      },
+    ];
+    for (const movementInput of valuationMovements) {
+      const { created, movement } = await appendSeedMovement(
+        tx,
+        tenant,
+        movementInput
+      );
+      if (created) {
+        await applyValuation(tx, { tenantId: tenant.tenantId }, movement);
+      }
+    }
 
     await tx
       .insert(reorderRule)
