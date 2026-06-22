@@ -4,6 +4,7 @@ export * from "./audit";
 export * from "./costing";
 export * from "./entitlements";
 export * from "./idempotency";
+export * from "./inventory";
 export * from "./money";
 export * from "./outbox";
 export * from "./stock-ledger";
