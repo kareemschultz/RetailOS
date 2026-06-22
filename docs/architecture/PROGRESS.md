@@ -16,15 +16,31 @@
 - **Mode:** unattended overnight. Branch **`vs1-phase1`** (never master; all work = PRs for review).
 - **Loop per commit:** implement-scope → gates (`check`/`check-types`/`test` + real-Postgres RLS where relevant) → codex adversarial review (CRITICAL/HIGH only) → fix → commit → push → update PR → lessons + PROGRESS.
 - **Order:** VS#1 Commits 2→7, then phase roadmap §31 (Phase 1→2→3…) with §41/§42/§45 gates before any new module.
-- **Current step:** VS#1 **COMPLETE** (all 7 commits, PR #1). Next: Phase 2 gating — §41 competitive + §42 requirements docs, then **HARD STOP** for the inventory-costing decision before implementing.
+- **Current step:** VS#1 **COMPLETE** (all 7 commits, PR #1). Phase 2 gating: §41 competitive + §42 requirements docs **done** (→ PR #2); owner decided D1 (costing) + D5 (oversell), rounding left open. **HARD STOP** — awaiting owner ruling on D2/D3/D4/D6/D7 + PR #1 review before any Phase-2 schema/costing code. **Tooling:** added mojibake pre-commit guard (`scripts/check-mojibake.mjs`).
 
-### ⛔ BLOCKERS awaiting your decision (none yet)
-*(When I hard-stop, the blocker + analysis + options go here.)*
+### ⛔ BLOCKERS awaiting your decision
+
+**HARD STOP before Phase 2 (Products & Inventory Ledger).** VS#1/Phase 1 is complete (PR #1). Phase 2 §41/§42 docs are done on branch `phase-2-inventory` (→ PR #2). Two of the foundational decisions are now **made by the owner (2026-06-22)**; the remaining ones still need a ruling before any Phase-2 schema/costing code.
+
+**✅ Owner decisions received (2026-06-22) — incorporated into `module-specs/inventory.md`:**
+1. **Inventory costing (D1)** — **AVCO is the default**; **FIFO available per tenant/category/product** (esp. pharmacy/expiry/batch/lot/regulated); **no LIFO** (not IFRS-aligned); **not hardcoded as the only method** — costing is a per-tenant/category/product strategy (AVCO running-average vs FIFO cost-layer resolved per movement).
+2. **Oversell (D5)** — **"Allow Oversell with Flagging" is the default**: ledger may go negative, emit `inventory.stock_discrepancy` for manager review/cycle count; **hard-block configurable per tenant/category/product** (serialized/controlled/regulated/high-risk). Ledger stays policy-neutral; policy applied above it.
+
+**⏳ Still awaiting your decision at the Phase-2 approval gate (detailed in `module-specs/inventory.md`):**
+- **D-money rounding mode** — **left OPEN per your directive**: do NOT assume banker's or half-up; pending verification of the Guyana/GRA VAT rounding rule + other target-country tax rules. (Not needed until Phase 5 tax/FX division.)
+- **D2** multi-UoM conversion model · **D3** serial/batch/lot scope for Phase 2 · **D4** expiry/FEFO enforcement strength · **D6** barcode symbologies + weight/price-embedded format · **D7** reorder automation (suggest vs auto-PO).
+
+**What I did instead of guessing:** finished the §41 competitive + §42 requirements docs, incorporated D1+D5, left rounding open. **STOPPED — no Phase-2 implementation code written** pending your ruling on D2/D3/D4/D6/D7 (+ rounding when Phase 5 nears) and your separate review of PR #1.
+
+### §45 phase reassessment (end of Phase 1 / VS#1)
+- Architecture held: fail-closed RLS + 3-role model + tenant-scoped `withTenant` is the load-bearing spine; every later module inherits it. No ADR changes needed. Codex found real HIGHs at the service/router layers (idempotency race, FK-bypasses-RLS, money int4) — all fixed + regression-tested; 0 CRITICAL across the whole slice.
+- Tech debt queued (non-blocking): deferred §43 gates (a11y/Trivy/dep-audit/SAST/bundle/VRT), §44 perf gate, distributed number allocator, accounting GL (Phase 5), read-models (Phase 12).
 
 ### 📋 Deferred-decisions log (business/product rules I refused to guess)
-1. **Monetary rounding mode** (half-up / half-even / half-away-from-zero) — charter §19 mandates "one rounding policy" but doesn't pick one. **Not needed for VS#1** (money math is exact integer add/multiply-by-quantity; no division yet). First needed at **division**: tax (Phase 5) and FX. Decide before Phase 5. *(No work blocked now.)*
-2. **Oversell policy** (charter §14: allow-with-backorder / hard-reservation / optimistic-with-correction) — **per tenant/location**. Codex flagged that `pos.createSale` can drive stock negative. By design `StockLedger.appendStockMovement` is **policy-neutral** (records the movement faithfully); enforcing no-negative here would be *choosing* a policy. **Deferred** — VS#1 ships the neutral ledger; the policy gate is applied upstream once you decide. *(No work blocked; behavior is the safe neutral default.)*
-- *Next expected:* Phase 2 inventory costing FIFO/LIFO/avg.
+1. **Monetary rounding mode** (half-up / half-even / half-away-from-zero) — charter §19 mandates "one rounding policy" but doesn't pick one. **STILL OPEN (owner directive 2026-06-22):** do NOT assume banker's or half-up — pending verification of the Guyana/GRA VAT rounding rule + other target-country tax rules. **Not needed for VS#1/Phase 2** (no division yet); first needed at **division**: tax (Phase 5) and FX. *(No work blocked now.)*
+2. ~~**Oversell policy**~~ → **RESOLVED 2026-06-22 (owner directive):** "Allow Oversell with Flagging" default (ledger may go negative, emit `inventory.stock_discrepancy` for manager review); hard-block configurable per tenant/category/product (serialized/controlled/regulated/high-risk). `StockLedger.append` stays **policy-neutral** (as VS#1 shipped); the oversell policy resolver sits ABOVE the ledger. Recorded in `module-specs/inventory.md` D5.
+3. **Inventory costing (D1)** → **RESOLVED 2026-06-22 (owner directive):** AVCO default, FIFO per tenant/category/product, no LIFO, not hardcoded (per-tenant/category/product strategy). Recorded in `module-specs/inventory.md` D1.
+- *Still open (Phase 2 approval gate):* D2 multi-UoM · D3 serial/batch/lot scope · D4 expiry/FEFO · D6 barcode/weight-embedded · D7 reorder automation. *Open (Phase 5):* monetary rounding mode.
 
 ### ✅ PRs opened
 - **PR #1** — `vs1-phase1` → master — **VS#1 COMPLETE** (all 7 commits: schema; fail-closed RLS + 3-role bootstrap; core services; request context + tenant guard; events/outbox; oRPC routers + minimal RBAC; §32 e2e tests + CI integration). All gates green; codex-reviewed each commit. Open for review; **DO NOT MERGE**.
