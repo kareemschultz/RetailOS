@@ -21,6 +21,7 @@ import { appendStockMovement } from "./stock-ledger";
 
 const url = process.env.RLS_TEST_DATABASE_URL;
 const TENANT = "costing_tenant";
+const FIFO_VALUE_ONLY_RE = /FIFO value-only adjustment not yet supported/;
 
 function required<T>(row: T | undefined, what: string): T {
   if (!row) {
@@ -357,6 +358,135 @@ describe.skipIf(!url)("Phase 2 costing services (tenant-scoped)", () => {
         .where(eq(valuationLayer.skuId, item.id))
         .orderBy(valuationLayer.seq);
       expect(layers.map((layer) => layer.qtyRemaining)).toEqual([0, 1]);
+    });
+  });
+
+  it("AVCO value-only adjustment (§2): qty unchanged, value changes", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const prod = required(
+        (
+          await tx
+            .insert(product)
+            .values({
+              tenantId: TENANT,
+              sku: "AVCO-VALONLY",
+              name: "AVCO ValueOnly",
+              baseUomId: uomId,
+              costingMethod: "avco",
+              priceMinor: 100,
+              currency: "USD",
+            })
+            .returning()
+        ).at(0),
+        "product"
+      );
+      const item = required(
+        (
+          await tx
+            .insert(sku)
+            .values({
+              tenantId: TENANT,
+              productId: prod.id,
+              code: "AVCO-VALONLY-EA",
+              baseUomId: uomId,
+            })
+            .returning()
+        ).at(0),
+        "sku"
+      );
+      const receipt = await appendStockMovement(
+        tx,
+        { tenantId: TENANT },
+        {
+          costCurrency: "USD",
+          costScale: 2,
+          locationId,
+          movementType: "receipt",
+          productId: prod.id,
+          qtyDelta: 2,
+          skuId: item.id,
+          unitCostMinor: 100,
+        }
+      );
+      await applyValuation(tx, { tenantId: TENANT }, receipt);
+
+      // Value-only adjustment: qty_delta = 0, value moves by +50.
+      const valueOnly = await appendStockMovement(
+        tx,
+        { tenantId: TENANT },
+        {
+          locationId,
+          movementType: "valuation_adjustment",
+          productId: prod.id,
+          qtyDelta: 0,
+          skuId: item.id,
+          valueDeltaMinor: 50,
+        }
+      );
+      expect(valueOnly.qtyDelta).toBe(0);
+      await expect(
+        applyValuation(tx, { tenantId: TENANT }, valueOnly)
+      ).resolves.toMatchObject({ cogsMinor: 0, method: "avco" });
+
+      const after = required(
+        (await tx.select().from(avgCost).where(eq(avgCost.skuId, item.id))).at(
+          0
+        ),
+        "avg cost"
+      );
+      expect(after.qtyOnHand).toBe(2); // quantity unchanged
+      expect(after.totalValueMinor).toBe(250); // 200 + 50 value-only
+    });
+  });
+
+  it("FIFO value-only adjustment (§6): REJECTS (OPEN decision)", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const prod = required(
+        (
+          await tx
+            .insert(product)
+            .values({
+              tenantId: TENANT,
+              sku: "FIFO-VALONLY",
+              name: "FIFO ValueOnly",
+              baseUomId: uomId,
+              costingMethod: "fifo",
+              priceMinor: 100,
+              currency: "USD",
+            })
+            .returning()
+        ).at(0),
+        "product"
+      );
+      const item = required(
+        (
+          await tx
+            .insert(sku)
+            .values({
+              tenantId: TENANT,
+              productId: prod.id,
+              code: "FIFO-VALONLY-EA",
+              baseUomId: uomId,
+            })
+            .returning()
+        ).at(0),
+        "sku"
+      );
+      const valueOnly = await appendStockMovement(
+        tx,
+        { tenantId: TENANT },
+        {
+          locationId,
+          movementType: "valuation_adjustment",
+          productId: prod.id,
+          qtyDelta: 0,
+          skuId: item.id,
+          valueDeltaMinor: 50,
+        }
+      );
+      await expect(
+        applyValuation(tx, { tenantId: TENANT }, valueOnly)
+      ).rejects.toThrow(FIFO_VALUE_ONLY_RE);
     });
   });
 });

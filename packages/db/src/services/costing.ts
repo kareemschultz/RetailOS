@@ -305,6 +305,53 @@ async function applyFifoIssue(
   };
 }
 
+// §2 value-only valuation adjustment (AVCO only): modify total_value_minor,
+// leave quantity unchanged. FIFO is rejected upstream (seam #6) because FIFO
+// landed-cost allocation is an OPEN decision.
+async function applyAvcoValueOnly(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  movement: StockMovementRow,
+  skuId: string
+): Promise<ValuationResult> {
+  const valueDelta = movement.valueDeltaMinor;
+  if (valueDelta == null) {
+    throw new Error(
+      "costing: valuation_adjustment requires value_delta_minor (the value-only delta)"
+    );
+  }
+  const existing = await tx.execute(sql`
+    SELECT total_value_minor, qty_on_hand, currency, scale
+    FROM avg_cost
+    WHERE tenant_id = ${ctx.tenantId}
+      AND sku_id = ${skuId}
+      AND location_id = ${movement.locationId}
+    FOR UPDATE
+  `);
+  const row = existing.rows.at(0) as AvcoRow | undefined;
+  if (!row) {
+    throw new Error(
+      "costing: value-only adjustment requires an existing AVCO balance for the SKU×location"
+    );
+  }
+  // Quantity is intentionally NOT touched — value moves, qty stays.
+  await tx.execute(sql`
+    UPDATE avg_cost
+    SET total_value_minor = total_value_minor + ${valueDelta},
+        updated_at = now()
+    WHERE tenant_id = ${ctx.tenantId}
+      AND sku_id = ${skuId}
+      AND location_id = ${movement.locationId}
+  `);
+  return {
+    cogsMinor: 0,
+    currency: row.currency,
+    method: "avco",
+    scale: row.scale,
+    unvaluedQty: 0,
+  };
+}
+
 export async function applyValuation(
   tx: TenantTransaction,
   ctx: ServiceContext,
@@ -315,6 +362,17 @@ export async function applyValuation(
     productId: movement.productId,
     skuId,
   });
+  // §2/§6 — value-only valuation adjustment: AVCO applies the value delta;
+  // FIFO REJECTS (value-only FIFO landed-cost allocation is an OPEN decision),
+  // so a FIFO product cannot silently mis-apply.
+  if (movement.movementType === "valuation_adjustment") {
+    if (method === "fifo") {
+      throw new Error(
+        "FIFO value-only adjustment not yet supported — see OPEN decision (FIFO landed-cost allocation)"
+      );
+    }
+    return applyAvcoValueOnly(tx, ctx, movement, skuId);
+  }
   if (movement.qtyDelta === 0) {
     return {
       cogsMinor: 0,

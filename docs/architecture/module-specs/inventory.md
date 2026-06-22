@@ -309,3 +309,22 @@ Give every RetailOS tenant a **single, ledger-true inventory engine** that the w
 | 8 | **Reporting read models / star schema** | Phase 12; Phase 2 uses direct queries for small catalogs. | §27 |
 | 9 | **Auto-draft PO from reorder** | Phase 6 Procurement (D7 suggest-only in Phase 2). | §18 |
 | 10 | **Standard-cost & manufacturing build/disassembly** | Deferred to a manufacturing phase (D1); BOM is catalog-modelling only here. | §18/§21 |
+
+## Schema-and-seams addendum (expand-only pass, 2026-06-22, migration 0010)
+
+Generous **schema/event seams**, stingy behavior. All additions are **nullable** columns / new enums / one event contract / one resolver — zero new tables, zero destructive change.
+
+- **Lot/serial-aware valuation (§1):** `valuation_layer.lot_id` (real FK → `lot`) + `valuation_layer.serial_id` (**bare uuid, NO FK** — serial capture deferred; FK added when serial tracking lands; intentionally asymmetric). Removal strategy is config (`removal_strategy` enum on product/category/location/tenant): **fifo | fefo | manual** — chooses the layer; not a new costing method. `TRACKING_MODES` extended: `none | lot | serial | expiry | mixed`.
+- **Value-only adjustments (§2):** movement type `valuation_adjustment` + `stock_ledger.value_delta_minor`; AVCO applies value-only (qty unchanged), **FIFO REJECTS** (OPEN). Implemented + DB-tested.
+- **Returns seam (§4):** `stock_ledger.source_movement_id` (bare uuid) + `original_unit_cost_minor`; `return_costing_policy` enum (link-strict | current-cost-fallback | block-if-source-missing). No returns workflow.
+- **UoM roles (§5):** `purchase_uom_id` / `sale_uom_id` / `reporting_uom_id` on product+sku (base already present); ledger stores normalized **base** quantities; conversion factors in `uom_conversion`.
+- **Quantity seam (§3):** `stock_ledger.qty_scale` (nullable; NULL ⇒ 0 / integer units). Fractional/weight UoM is a future scaled-quantity behavior (mirrors money minor units) — **representation reserved, behavior not built**.
+- **Financial-strategy stamp (seam #2):** `stock_ledger.costing_method_applied` records the method applied at write time so config changes never re-value history.
+- **Resolver (§6):** `services/settings-resolver.ts` — product→category→location→tenant→platform; financial settings shallow (category/tenant/platform), operational deep. See ADR 0008.
+
+### OPEN decisions from this pass
+1. **D1 vs depth rule (financial level):** D1 allows per-**product** costing; seam-#2/ADR-0008 restricts financial settings to **category max**. Owner must reconcile (relax depth to product, or amend D1). Resolver defaults to category-max; `costing.ts` unchanged (still product→category→tenant) until reconciled.
+2. **`cost_reconciliation` emit (§3):** event contract defined; the emit (neg→non-neg reconciliation behavior) is deferred.
+3. **Oversell/expiry policy columns:** enum types reserved (`OVERSELL_POLICIES`, `EXPIRY_POLICIES`); columns not added this pass.
+4. **FIFO value-only allocation:** rejected for now (OPEN).
+5. **D-money rounding mode** (unchanged) — value-only adjustments + cost-reconciliation true-ups grow `total_value_minor` without qty, **accelerating the issue-#6 2^53 precision exposure**.

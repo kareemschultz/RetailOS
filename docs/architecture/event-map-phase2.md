@@ -54,7 +54,17 @@
 - **Future consumers:** **P12 Analytics** (discrepancy/shrinkage, cashier-anomaly correlation, §27), **P5 Accounting** (if it resolves to a write-off), **P10 Edge Hub** (offline oversell surfaced on sync).
 - **Payload:** `{ skuId, locationId, expectedQtyBase, actualQtyBase, deltaBase, source (oversell|count|sync), saleId?, occurredAt }`.
 - **Required IDs:** skuId, locationId (+ saleId when oversell).
-- **Notes/risks:** the negative-on-hand carrying value uses last-known cost (D5); analytics correlates by cashier/terminal later — keep `source` + optional `saleId` so the chain is reconstructable.
+- **Notes/risks:** **actual behavior (D5 divergence, as-built):** the oversold/negative units are recorded **zero/unvalued** (NOT last-known-cost — see `module-specs/inventory.md` D5 divergence). Analytics correlates by cashier/terminal later — keep `source` + optional `saleId` so the chain is reconstructable.
+
+### `inventory.cost_reconciliation`
+- **Producer (§3):** the receipt path, when inventory moves **from negative to zero/non-negative** and a later receipt establishes the **actual** cost for previously-unvalued (oversold) units. **Emit wiring is DEFERRED behavior** (reconciliation logic); this entry locks the contract now so Phase-5 Accounting can consume it without a missing field.
+- **Phase-2 consumer:** none (contract seam only).
+- **Future consumers:** **P5 Accounting** (post the cost-basis correction / COGS true-up), **P12 Analytics** (oversell-cost exposure).
+- **Payload:** `{ tenantId, locationId, skuId, receiptId, priorNegativeQtyBase, receiptQtyBase, receiptUnitCostMinor, priorCostBasisMinor, reconciliationAmountMinor, occurredAt }`.
+- **`reconciliationAmountMinor`** is the **computed variance, rounded once at emission** (not raw inputs for Phase 5 to re-derive). Given the as-built zero/unvalued basis (D5 divergence), `priorCostBasisMinor = 0` and `reconciliationAmountMinor` ≈ the **full receipt cost of the previously-unvalued units** (`receiptUnitCostMinor × min(priorNegativeQtyBase, receiptQtyBase)`).
+- **`priorCostBasisMinor` reflects ACTUAL current behavior (zero/unvalued), not a hypothetical last-known-cost.** Do not claim last-known-cost here.
+- **Required IDs:** tenantId, locationId, skuId, receiptId (+ envelope `correlation_id`/`request_id`/`idempotency_key`).
+- **Notes/risks (M3 cross-ref):** value-only valuation adjustments and these reconciliation true-ups **grow `total_value_minor` without growing quantity**, which **accelerates the 2^53 precision exposure** tracked in issue #6 (`costing.ts` valuation math in JS `number`). Money fields are integer **minor units**; rounding mode is the still-open D-money decision.
 
 ### `inventory.lot_expiring`
 - **Producer:** scheduled/threshold evaluation (lot crosses the configurable near-expiry horizon, D4).
@@ -93,6 +103,7 @@
 | Event | P5 Accounting | P6 Procurement | P8 Ecommerce | P10 Edge Hub | P12 Analytics |
 |---|:--:|:--:|:--:|:--:|:--:|
 | inventory.received | ✅ | ✅ | | ✅ | ✅ |
+| inventory.cost_reconciliation | ✅ | | | | ✅ |
 | inventory.adjusted | ✅ | | | ✅ | ✅ |
 | inventory.count_started | | | | ✅ | ✅ |
 | inventory.count_posted | ✅ | | | ✅ | ✅ |

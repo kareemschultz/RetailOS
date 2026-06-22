@@ -11,7 +11,35 @@ import {
 import { actor, softDelete, tenantId, timestamps } from "./columns";
 
 export const COSTING_METHODS = ["avco", "fifo"] as const;
-export const TRACKING_MODES = ["none", "lot", "serial"] as const;
+// Structural tracking configuration (§1). `expiry` = lot + expiry enforcement;
+// `mixed` = combination (e.g. lot + serial). Determines whether lot/serial
+// fields on movements & valuation layers are populated. Extensible text enum.
+export const TRACKING_MODES = [
+  "none",
+  "lot",
+  "serial",
+  "expiry",
+  "mixed",
+] as const;
+// Removal strategy chooses WHICH valuation layer FIFO consumes (§1). Not a new
+// costing method — costing still follows the selected layer. Configurable.
+export const REMOVAL_STRATEGIES = ["fifo", "fefo", "manual"] as const;
+// How a return is costed (§4). link-strict = require source movement;
+// current-cost-fallback = use current cost when no source; block-if-source-missing
+// = reject when source absent. No-receipt returns are valid business cases.
+export const RETURN_COSTING_POLICIES = [
+  "link-strict",
+  "current-cost-fallback",
+  "block-if-source-missing",
+] as const;
+// Reserved operational-policy enums (text, never pgEnum — §8). Columns for these
+// resolve in a later pass; the type rule is fixed now so they land extensibly.
+export const OVERSELL_POLICIES = ["allow-with-flagging", "hard-block"] as const;
+export const EXPIRY_POLICIES = [
+  "warn-and-override",
+  "hard-block",
+  "advisory",
+] as const;
 export const UOM_KINDS = ["count", "weight", "volume", "length"] as const;
 export const UOM_ROLES = ["purchase", "stock", "sale", "reporting"] as const;
 export const BARCODE_SYMBOLOGIES = [
@@ -21,6 +49,14 @@ export const BARCODE_SYMBOLOGIES = [
   "code128",
   "gs1",
   "qr",
+] as const;
+// Reserved for the D6 data-driven barcode parser config (no column yet — live
+// parsing is deferred to Phase 4 per the conservative-build decision).
+export const BARCODE_PARSER_TYPES = [
+  "none",
+  "weight-embedded",
+  "price-embedded",
+  "gs1-ai",
 ] as const;
 
 export const category = pgTable(
@@ -33,6 +69,11 @@ export const category = pgTable(
     code: text("code"),
     costingMethod: text("costing_method", { enum: COSTING_METHODS }),
     trackingMode: text("tracking_mode", { enum: TRACKING_MODES }),
+    // Operational-setting overrides (resolver §6: deeper levels allowed).
+    removalStrategy: text("removal_strategy", { enum: REMOVAL_STRATEGIES }),
+    returnCostingPolicy: text("return_costing_policy", {
+      enum: RETURN_COSTING_POLICIES,
+    }),
     ...timestamps,
     ...actor,
     ...softDelete,
@@ -94,10 +135,20 @@ export const product = pgTable(
     categoryId: uuid("category_id").references(() => category.id),
     brandId: uuid("brand_id").references(() => brand.id),
     baseUomId: uuid("base_uom_id").references(() => unitOfMeasure.id),
+    // UoM normalization roles (§5). base = canonical/stock unit; ledger always
+    // stores normalized BASE quantities. These are the transaction-unit seams;
+    // conversion factors live in `uom_conversion` (per product/sku, auditable).
+    purchaseUomId: uuid("purchase_uom_id").references(() => unitOfMeasure.id),
+    saleUomId: uuid("sale_uom_id").references(() => unitOfMeasure.id),
+    reportingUomId: uuid("reporting_uom_id").references(() => unitOfMeasure.id),
     costingMethod: text("costing_method", { enum: COSTING_METHODS }),
     trackingMode: text("tracking_mode", { enum: TRACKING_MODES })
       .default("none")
       .notNull(),
+    removalStrategy: text("removal_strategy", { enum: REMOVAL_STRATEGIES }),
+    returnCostingPolicy: text("return_costing_policy", {
+      enum: RETURN_COSTING_POLICIES,
+    }),
     // Money minor units are int8 (bigint) — int4 caps at ~$21M, too small for an
     // enterprise/wholesale ERP. mode:"number" keeps a JS number (safe to 2^53).
     priceMinor: bigint("price_minor", { mode: "number" }).notNull(),
@@ -154,10 +205,17 @@ export const sku = pgTable(
     code: text("code").notNull(),
     name: text("name"),
     baseUomId: uuid("base_uom_id").references(() => unitOfMeasure.id),
+    purchaseUomId: uuid("purchase_uom_id").references(() => unitOfMeasure.id),
+    saleUomId: uuid("sale_uom_id").references(() => unitOfMeasure.id),
+    reportingUomId: uuid("reporting_uom_id").references(() => unitOfMeasure.id),
     costingMethod: text("costing_method", { enum: COSTING_METHODS }),
     trackingMode: text("tracking_mode", { enum: TRACKING_MODES })
       .default("none")
       .notNull(),
+    removalStrategy: text("removal_strategy", { enum: REMOVAL_STRATEGIES }),
+    returnCostingPolicy: text("return_costing_policy", {
+      enum: RETURN_COSTING_POLICIES,
+    }),
     isActive: boolean("is_active").default(true).notNull(),
     ...timestamps,
     ...actor,

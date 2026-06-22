@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { actor, softDelete, tenantId, timestamps } from "./columns";
 import { location } from "./company";
-import { product, sku } from "./product";
+import { COSTING_METHODS, product, sku } from "./product";
 
 export const LOT_STATUSES = [
   "available",
@@ -139,9 +139,33 @@ export const stockLedger = pgTable(
     movementType: text("movement_type").notNull(),
     qtyDelta: bigint("qty_delta", { mode: "number" }).notNull(),
     balanceAfter: bigint("balance_after", { mode: "number" }).notNull(),
+    // Quantity-representation seam (§3 / seam #3): base quantities are integer
+    // units at scale 0 today. Fractional/weight UoM (deli, produce, fabric,
+    // bulk) lands later as qty_delta interpreted at 10^-qty_scale — mirrors the
+    // money minor-units pattern. NULL ⇒ 0 (integer units); existing rows keep
+    // their exact stored meaning (no historical reinterpretation).
+    qtyScale: integer("qty_scale"),
     unitCostMinor: bigint("unit_cost_minor", { mode: "number" }),
     costCurrency: text("cost_currency"),
     costScale: integer("cost_scale"),
+    // Value-only valuation adjustment (§2): movement_type = 'valuation_adjustment'
+    // carries qty_delta = 0 and a value delta here (AVCO only; FIFO rejected).
+    valueDeltaMinor: bigint("value_delta_minor", { mode: "number" }),
+    // Write-time stamp of the resolved financial strategy (seam #2): the costing
+    // method actually applied to THIS movement, so a later tenant config change
+    // can never silently re-interpret historical movements. Append-only history
+    // is preserved by stamping, not by live re-resolution.
+    costingMethodApplied: text("costing_method_applied", {
+      enum: COSTING_METHODS,
+    }),
+    // Returns-at-original-cost seam (§4): link a return to the originating
+    // movement + carry its original unit cost. Optional — no-receipt returns are
+    // valid; return-costing policy decides link-strict vs fallback vs block.
+    // Bare uuid (no FK) to avoid a self-referential FK; validated at write time.
+    sourceMovementId: uuid("source_movement_id"),
+    originalUnitCostMinor: bigint("original_unit_cost_minor", {
+      mode: "number",
+    }),
     refType: text("ref_type"),
     refId: uuid("ref_id"),
     idempotencyKey: text("idempotency_key"),
@@ -157,6 +181,7 @@ export const stockLedger = pgTable(
     index("stock_ledger_location_sku_idx").on(table.locationId, table.skuId),
     index("stock_ledger_lotId_idx").on(table.lotId),
     index("stock_ledger_serialId_idx").on(table.serialId),
+    index("stock_ledger_sourceMovementId_idx").on(table.sourceMovementId),
   ]
 );
 
@@ -171,6 +196,15 @@ export const valuationLayer = pgTable(
     locationId: uuid("location_id")
       .notNull()
       .references(() => location.id),
+    // Lot-aware FIFO (§1): real FK to the existing lot entity (the one the H1
+    // tenant guards validate). Nullable — only populated when tracking_mode
+    // includes lot/expiry.
+    lotId: uuid("lot_id").references(() => lot.id),
+    // Serial-aware FIFO (§1): intentionally a BARE nullable column with NO
+    // foreign-key constraint — serial CAPTURE/tracking workflows are deferred.
+    // FK to `serial` added when serial tracking lands (asymmetric to lot_id by
+    // design). Populated only when tracking_mode includes serial.
+    serialId: uuid("serial_id"),
     receivedAt: timestamp("received_at").defaultNow().notNull(),
     seq: integer("seq").notNull(),
     qtyRemaining: bigint("qty_remaining", { mode: "number" }).notNull(),
@@ -195,6 +229,7 @@ export const valuationLayer = pgTable(
       table.receivedAt,
       table.seq
     ),
+    index("valuation_layer_lotId_idx").on(table.lotId),
   ]
 );
 
