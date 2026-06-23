@@ -1,63 +1,62 @@
 # Locations, Warehouses & Bonded Warehouses — Module Specification (Phase 3)
 
-- Status: **Draft (planning — no implementation)**. Entry criteria for Phase-3 build per §42; exit criteria = §35 Definition of Done.
-- Charter refs: §8 (platform/tenant/company/location model), §18 (warehouse/zone/bin, bonded warehouse, transfers, in-transit, procurement seams), §12 (Caribbean/dev-market: bonded warehouses, customs, landed cost), §9 (deployment/RLS), §25 (audit), §24 (events/outbox), §33/§35/§39 (engineering rules / DoD / AI safety).
-- Companion docs: `phase-3-implementation-plan.md` (build order), `phase-3-gap-analysis.md` (findings), `event-map-phase3.md` (event contracts), `competitive/locations-warehouses-bonds.md` (§41 parity).
-- Builds on (FROZEN Phase-2 spine): `module-specs/inventory.md`, ADR-0006 (RLS role model), ADR-0007 (costing), ADR-0008 (settings resolver). **Phase 3 extends the spine; it does not rebuild it and does not silently change frozen Phase-2 schema/costing.**
+- Status: **Draft (planning — no implementation)**. Entry criteria per §42; exit = §35 Definition of Done.
+- Charter refs: §8 (tenant/company/location), §18 (warehouse/zone/bin, bonded, transfers, in-transit, procurement seams), §12 (Caribbean: bonded/customs/landed cost), §9 (RLS), §24 (events), §25 (audit), §33/§35/§39.
+- Companions: `phase-3-implementation-plan.md`, `phase-3-gap-analysis.md`, `event-map-phase3.md`, `competitive/locations-warehouses-bonds.md`.
+- Builds on FROZEN Phase 2: `module-specs/inventory.md`, ADR-0006 (RLS), ADR-0007 (costing), ADR-0008 (settings/value-only seam). **Extends the spine; does not rebuild or silently change frozen schema/costing.**
 
-> **Scope:** company/location refinement, location typing (store / warehouse / bonded / DC / fulfillment), warehouse internal structure (zone → aisle → rack → shelf → bin), the stock-location model, transfer-out / transfer-in with **in-transit** inventory, **bonded vs released** separation, bond receiving, the bond-release **approval seam**, bond-to-store transfer, and the customs/landed-cost **reference seams** (NO landed-cost allocation behaviour). **Out of scope:** POS/offline (Phase 4), GL/accounting postings (Phase 5), procurement & landed-cost **allocation** (Phase 6), ecommerce (Phase 8), any UI. No POS, no GL, no ecommerce, no offline-queue work.
+> **Scope:** parked-debt paydown (#5 composite-FK, #7 set-once trigger); a **unified self-referential location tree** (Warehouse→Zone→Aisle→Bin via `parent_location_id`) with **behaviour flags** (`is_sellable/is_quarantine/is_bonded/is_transit`) and a **bin capacity seam** (`max_weight/max_volume`); typed locations (store/warehouse/bonded/DC/fulfillment/in_transit); **two-step intra-company transfers** (in-transit, qty+value conserved, date seams); **bonded vs released** separation; bond receiving; bond-release **approval seam**; **duty/tax on release via the existing value-only `valuation_adjustment` seam**; **generic** customs/landed-cost **reference** seams (no allocation). **Out of scope:** POS/offline (P4), GL (P5), procurement/landed-cost **allocation** (P6), ecommerce (P8), UI, inter-company transfers (need due-to/due-from GL — P5).
 
 ---
 
 ## 1. Vision & personas
-A multi-branch Caribbean retailer/wholesaler/importer runs stores, warehouses, distribution centres, and **customs-bonded warehouses**. They must move stock between locations without losing or double-counting quantity **or value**, hold imported goods in bond until duty is cleared, and release bonded stock to stores under control. RetailOS must make all of this a **ledger-true, tenant-isolated, audited** extension of the Phase-2 inventory engine.
-
-Personas: warehouse manager (transfers, putaway, counts), store manager (receives transfers), bond/customs officer (bond receiving, release requests), finance/compliance (bond-release approval, audit), platform/MSP (residency/health). Cashier/POS personas are **Phase 4** — not here.
+A multi-branch Caribbean retailer/wholesaler/importer runs stores, warehouses, DCs, and **customs-bonded warehouses**, moves stock between locations of the **same company** without losing/double-counting quantity **or value**, holds imports in bond until duty clears, and releases bonded stock under control with duty added to cost. RetailOS makes this a ledger-true, tenant-isolated, audited extension of the Phase-2 engine. Personas: warehouse manager, store manager, bond/customs officer, finance/compliance, platform/MSP. (Cashier/POS = Phase 4.)
 
 ## 2. User stories (P0 unless noted)
-- As a warehouse manager I can **transfer** stock from warehouse A to store B, and the system deducts from A and adds to B exactly once, moving the **cost basis** with it.
-- As a warehouse manager I can see stock that has **left A but not yet arrived at B** (in-transit) so I never over-promise.
-- As a bond officer I can **receive an import batch into a bonded location** so the goods are tracked but held as **bonded (not released)** stock.
-- As a bond officer I can **request release** of bonded stock; as finance I can **approve** it; on approval the stock becomes **released** (bond-to-store transfer).
-- As a warehouse manager I can model my warehouse's internal structure (**zones / aisles / racks / shelves / bins**) so locations within a warehouse are addressable.
-- As compliance I can attach **customs references/documents** to a bond receipt (reference seam — no OCR). (P1)
-- As finance I can see **landed-cost references** linked to a bond receipt, with allocation deferred to procurement. (P1, seam-only)
-- As any actor, every transfer, bond receipt, and bond release is **audited** and emits a **domain event**.
+- Transfer stock from warehouse A to store B **in the same company**, deducting from A and adding to B exactly once, moving the **cost basis** with it.
+- See stock that has **left A but not yet arrived at B** (in-transit) so I never over-promise.
+- Model a warehouse's internal structure as a **nested tree** (zones → aisles → bins, any depth).
+- Mark a location/bin **non-sellable** (quarantine/damaged/in-transit/bonded) so sales auto-exclude it.
+- **Receive an import batch into a bonded location** (tracked, held as bonded — not sellable).
+- **Request** bond release; **approve** it (finance); on approval the stock becomes **released** and **duty/tax is added to its cost basis**.
+- Attach **generic customs references/documents** to a bond receipt (P1; no OCR).
+- Every transfer / bond receipt / release is **audited** and emits a **domain event**.
 
 ## 3. Business rules & invariants (each names its OWNER service + the standing gate)
-> Per the recognized defect class (lessons-learned, "correct component but a write path routes around it" — Gap B / H1 / #8): for **every** invariant below, the **primary write path must INVOKE the owning service**, proven by a grep + a DB-gated test. A green service unit test is NOT evidence the write path uses it.
+> Recognized class (lessons-learned, "correct component but a write path routes around it" — Gap B / H1 / #8): for **every** invariant, the **primary write path must INVOKE the owning service**, proven by a grep + a DB-gated test. A green service unit test is NOT evidence the write path uses it.
 
 | # | Invariant | Owner service | Write path that MUST invoke it | Standing-gate proof |
 |---|---|---|---|---|
-| INV-1 | **Transfer quantity conservation** — a transfer of q moves exactly −q at source, +q at destination (and through in-transit); no qty created/destroyed. | `transfer.ts` (executes both legs through `appendStockMovement` in ONE tenant tx) | `transfer` router → `executeTransfer` | DB test: `SUM(qty_delta)` across A+in-transit+B unchanged; one deduction even on idempotent replay. |
-| INV-2 | **Transfer value conservation** — value released at source == value received at destination; total value across locations unchanged (no value created/destroyed in transit). | `transfer.ts` calling `applyValuation` (costing engine) on BOTH legs, injecting the **exact released integer value** into the receive leg. | `transfer` router → `executeTransfer` → `applyValuation` (both legs) | DB test: `ΔvalueA == −ΔvalueB == V`; total value conserved; **this is the #8-class check** — the transfer path must not skip `applyValuation` the way POS did. |
-| INV-3 | **Bonded ≠ released separation** — bonded stock is never counted as sellable/released; it lives in a `bonded` location and only becomes released via an approved bond-to-store transfer. | location-type model + `bond.ts` | bond-receipt + bond-release routers | DB test: bonded stock excluded from released/available views; release moves it out of the bonded location. |
-| INV-4 | **Bond-release authorization** — releasing bonded stock requires the `bond.release`/`bond.approve_release` entitlement (and, per owner decision, an approval seam). | `bond.ts` (release path) + entitlements | bond-release router → auth/approval seam | DB test: unauthorized release rejected; release is audited with actor. |
-| INV-5 | **Tenant-scoped FK safety (composite-FK)** — every Phase-3 FK carries `tenant_id`; a cross-tenant reference is impossible at the **DB layer**, not just guarded in the router. | DB constraints (composite FKs) + router `assert*Visible` (belt-and-braces) | all Phase-3 mutations | coverage: new tables use `FK (tenant_id, x_id) → x(tenant_id, id)`; referenced tables have `UNIQUE(tenant_id, id)`; H1 parameterized harness extended to Phase-3 inputs. |
-| INV-6 | **No hard deletes / soft-delete** for operational rows; **RLS fail-closed** on every new tenant-owned table (ENABLE+FORCE+`tenant_isolation`). | migrations + `withTenant` | all | `tenant-isolation-coverage` gate fails if any new table is uncovered; unset-GUC ⇒ zero rows. |
+| INV-1 | **Transfer qty conservation** — −q at source, +q at destination (through in-transit); no qty created/destroyed. | `transfer.ts::executeTransfer` (both legs via `appendStockMovement`, one tx) | `transfer` router | DB test: `Σ qty` over {src, in-transit, dest} unchanged; idempotent replay = one effect. |
+| INV-2 | **Transfer VALUE conservation** — value released at source == value received at destination; total value across locations unchanged (no value created/destroyed in transit). | `transfer.ts` calling `applyValuation` on BOTH legs + the exact-`V` mechanism (plan §C) | `transfer` router → valuation both legs | **#8-class grep** + value-conservation DB test (`Δvalue_A = −Δvalue_B = V`). |
+| INV-3 | **Bonded ≠ released / sellable separation** — bonded stock never counts as sellable; `is_sellable=false` for bonded/quarantine/transit; release moves it to a sellable node. | location-flag model + `bond.ts` | bond-receipt + release routers | DB test: bonded/non-sellable excluded from available; release moves stock out of the bonded node. |
+| INV-4 | **Bond-release authorization** — release requires `bond.release`/`bond.approve_release`. | `bond.ts` (release path) + entitlements | release router → auth/approval seam | DB test: unauthorized release rejected + audited. |
+| INV-5 | **Duty cost-basis add (intentional value-add, NOT conservation)** — on release, duty/tax is added to the released cost basis via the value-only `valuation_adjustment` seam (qty unchanged). | `bond.ts` invoking the existing value-only path | release router | DB test: released `total_value_minor` += exactly `duty+tax`; qty unchanged; qty=0⟺value=0 preserved. |
+| INV-6 | **Intra-company only** — a transfer's source & dest share `company_id`; inter-company blocked. | `transfer.ts` (+ DB CHECK where feasible) | `transfer` router | DB test: cross-company transfer rejected (`CONFLICT`). |
+| INV-7 | **Tenant-FK safety (composite-FK #5)** — cross-tenant references impossible at the DB layer. | DB composite FKs + router `assert*Visible` | all Phase-3 mutations | new tables use `FK (tenant_id, x_id)`; referenced tables have `UNIQUE(tenant_id, id)`; extended H1 harness. |
+| INV-8 | **Set-once costing method (DB backstop #7)** — `costing_method` immutable once ledger rows exist, at the DB layer. | DB trigger + app `assertCostingMethodSetOnce` | all costing-method writes | DB test: raw UPDATE rejected after a movement. |
+| INV-9 | **RLS fail-closed / soft-delete** on every new tenant table (ENABLE+FORCE+`tenant_isolation`). | migrations + `withTenant` | all | coverage gate; unset-GUC ⇒ zero rows. |
 
-## 4. Permissions (charter §7 — extends the entitlements model)
-New entitlements (RBAC): `warehouse.manage_structure` (zones/bins), `inventory.transfer` (create/dispatch transfers), `inventory.transfer_receive`, `bond.receive`, `bond.release`, `bond.approve_release`. Cashiers get none of these by default; warehouse roles get transfer/structure; bond/finance get bond.* per the approval seam. All enforced inside the tenant tx (same pattern as Phase 2).
+## 4. Permissions (charter §7)
+New entitlements: `warehouse.manage_structure`, `inventory.transfer`, `inventory.transfer_receive`, `bond.receive`, `bond.release`, `bond.approve_release`. Cashiers get none by default; warehouse roles get transfer/structure; bond/finance get bond.* per the approval seam. Enforced in-tx (Phase-2 pattern).
 
 ## 5. Tenant isolation, audit, events
-- Every new table is tenant-owned ⇒ `tenant_id` + ENABLE+FORCE+`tenant_isolation` RLS in the same migration (charter rule; coverage gate enforces).
-- Every mutation audited (`recordAudit`) and emits the relevant domain event (`event-map-phase3.md`) in the same tx (transactional outbox).
-- Server time authoritative; `occurredAt` injected by `emitEvent`.
+Every new table is tenant-owned ⇒ `tenant_id` + ENABLE+FORCE+`tenant_isolation` in the same migration (coverage gate enforces). Every mutation audited + emits its event (`event-map-phase3.md`) in the same tx. Server time authoritative; `occurredAt` injected by `emitEvent`.
 
 ## 6. Edge cases & error states
-- Transfer to the same location → reject. Transfer of more than on-hand at source → governed by the existing oversell policy (D5) at the source location (transfers are issues at source); recommend **hard-block for transfers** regardless of sale oversell policy (you cannot ship stock you do not have) — **owner decision**.
-- In-transit never received (lost/cancelled) → an explicit cancel/return-to-source path (audited); in-transit stock is visible until resolved.
-- Bond release of more than bonded qty → reject. Release without approval → reject (INV-4).
-- Bin referenced from another tenant / wrong warehouse → composite-FK + `assertVisible` reject (INV-5).
-- Value-conservation rounding: by moving the **exact integer released value** (not `unitCost × qty`), no division/rounding occurs, so #6 precision is **not** on the value-conservation path (documented in the plan).
+- Transfer to same location → reject. **Inter-company transfer → reject** (INV-6). Transfer > on-hand at source → recommend **hard-block** (you can't ship stock you don't have), regardless of D5 sale-oversell — **owner decision**.
+- In-transit never received → explicit cancel/return-to-source (audited); in-transit stock visible until resolved.
+- Bond release > bonded qty → reject. Release without approval → reject (INV-4). **Bonded FIFO SKU** → value-only duty add is AVCO-only today; restrict bonded to AVCO or implement FIFO value-only (owner decision).
+- Cross-tenant / wrong-parent location reference → composite-FK + `assertVisible` reject (INV-7); a node's `company_id` must match its parent's (CHECK).
+- Value-conservation rounding: AVCO transfers carry exact `V` via receipt + value-only remainder (no rounding); FIFO transfers use the additive layer-exact primitive (plan §C).
 
-## 7. Deferred / explicitly NOT Phase 3 (separated from scope)
-- Landed-cost **allocation** (freight/duty/insurance → unit cost) → **Phase 6**; Phase 3 reserves references only.
-- Customs-document **OCR / AI extraction** (§18 seam) → later, behind the provider interface.
-- **Bin-level stock balances / directed putaway / wave picking** → later refinement; Phase 3 ships the bin **structure model**, not bin-grained ledger/costing (which would change the frozen SKU×location costing grain).
-- Duty/VAT **estimation + clearance state machine** beyond bonded↔released → later (Phase 5 tax / Phase 6 procurement).
-- GL postings for transfers/bond moves → **Phase 5** (events are the seam).
-- POS/offline transfer entry, Tauri, mobile scanning → **Phase 4+**.
+## 7. Deferred / explicitly NOT Phase 3
+- Landed-cost **allocation** (freight/duty/insurance → unit cost apportionment) → **Phase 6**; Phase 3 reserves generic references only.
+- **Inter-company transfers** (due-to/due-from GL) → **Phase 5**.
+- Customs-document **OCR/AI** (§18 seam) → later, behind the provider interface.
+- **Bin-level stock balances / directed putaway / wave picking / WMS routing** (incl. the `max_weight/max_volume` capacity logic) → later refinement; Phase 3 ships the tree + capacity **seam**, not bin-grained ledger/costing.
+- Duty/VAT **estimation + clearance state machine** beyond bonded↔released + the duty cost add → later (P5 tax / P6 procurement).
+- GL postings → **Phase 5** (events are the seam). POS/offline/Tauri/mobile → **P4+**.
 
-## 8. Definition of Done (per §35) — Phase 3 exit criteria
-Types pass; `check`/`check-types`/`test` green; **DB-gated** RLS + service + transfer value/qty-conservation + bond separation/authorization tests pass against real Postgres as `retailos_app`; coverage gate green (all new tenant tables covered); H1 harness extended to all new FK inputs; audit + events verified emitted by the **write path** (not just the service); money in minor units; docs updated (this spec, ADR(s), event map, API contracts). Each §3 invariant has a passing write-path-invokes-service test.
+## 8. Definition of Done (§35) — Phase 3 exit
+Types pass; `check`/`check-types`/`test` green; **DB-gated** RLS + service + transfer qty/value-conservation + bonded separation + duty-add + intra-company + set-once-trigger tests pass against real Postgres as `retailos_app`; coverage gate green (all new tenant tables covered); H1 harness extended to all new FK inputs; audit + events verified emitted by the **write path** (not just the service); money in minor units; docs + ADRs updated. Each §3 invariant has a passing write-path-invokes-service test.

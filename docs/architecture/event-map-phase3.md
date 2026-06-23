@@ -10,16 +10,16 @@
 ## Event catalog
 
 ### `inventory.transfer_dispatched`
-- **Producer:** `transfer` router → `executeTransfer` (leg 1: source issue → in-transit).
+- **Producer:** `transfer` router → `executeTransfer` (leg 1: source issue → in-transit). **Intra-company only** — `sourceLocationId` & `destLocationId` share `companyId` (INV-6); inter-company transfers are blocked (need P5 due-to/due-from GL).
 - **Phase-3 consumer:** in-transit read model; audit. **Future:** P5 Accounting (in-transit asset move), P10 Edge Hub, P12 Analytics (transfer velocity).
-- **Payload:** `{ transferId, sourceLocationId, destLocationId, inTransitLocationId, lines:[{ skuId, productId, qtyBase, releasedValueMinor, currency, scale, costingMethod }], dispatchedBy, occurredAt }`.
-- **Required IDs:** transferId, sourceLocationId, destLocationId, per-line skuId. `releasedValueMinor` = the exact integer value `V` that left source (INV-2). `inTransitLocationId` null if single-step (no in-transit) — reserved.
+- **Payload:** `{ transferId, companyId, sourceLocationId, destLocationId, inTransitLocationId, shippedAt, expectedReceiptDate, lines:[{ skuId, productId, qtyBase, releasedValueMinor, currency, scale, costingMethod }], dispatchedBy, occurredAt }`.
+- **Required IDs:** transferId, companyId, sourceLocationId, destLocationId, per-line skuId. `releasedValueMinor` = the exact integer value `V` that left source (INV-2). `inTransitLocationId` null only if single-step. `expectedReceiptDate` reserved nullable (date seam).
 
 ### `inventory.transfer_received`
 - **Producer:** `transfer` router → `executeTransfer` (leg 2: in-transit → destination receipt).
 - **Phase-3 consumer:** destination valuation; audit. **Future:** P5 (inventory-asset at destination), P12.
-- **Payload:** `{ transferId, sourceLocationId, destLocationId, lines:[{ skuId, productId, qtyBase, receivedValueMinor, currency, scale, costingMethod, varianceQtyBase }], receivedBy, occurredAt }`.
-- **Required IDs:** transferId, destLocationId, per-line skuId. `receivedValueMinor` MUST equal the dispatched `releasedValueMinor` for the line (value conservation, INV-2). `varianceQtyBase` reserved (0 unless a receive-discrepancy is recorded — P1).
+- **Payload:** `{ transferId, sourceLocationId, destLocationId, actualReceiptDate, lines:[{ skuId, productId, qtyBase, receivedValueMinor, currency, scale, costingMethod, varianceQtyBase }], receivedBy, occurredAt }`.
+- **Required IDs:** transferId, destLocationId, per-line skuId. `receivedValueMinor` MUST equal the dispatched `releasedValueMinor` for the line (value conservation, INV-2). `actualReceiptDate` = receipt date seam. `varianceQtyBase` reserved (0 unless a receive-discrepancy is recorded — P1).
 
 ### `inventory.transfer_cancelled`
 - **Producer:** transfer cancel/return-to-source path (in-transit never received).
@@ -43,10 +43,10 @@
 - **Notes:** authorization event (INV-4); the actual stock move is `bond_released` (executed as a transfer).
 
 ### `inventory.bond_released`
-- **Producer:** `bond` router → release execution (bonded → released **transfer**).
+- **Producer:** `bond` router → release execution (bonded → released **transfer**, then a value-only duty adjustment).
 - **Phase-3 consumer:** released stock read model; audit. **Future:** P5 (duty/landed-cost posting seam), P6, P12.
-- **Payload:** `{ bondReleaseId, bondReceiptId, transferId, sourceLocationId (bonded), destLocationId, lines:[{ skuId, qtyBase, releasedValueMinor, currency, scale }], releasedBy, occurredAt }`.
-- **Notes:** carries `transferId` because release IS a transfer (reuses INV-1/INV-2 conservation + events). Duty/VAT clearance state beyond bonded↔released is deferred (Phase 5/6).
+- **Payload:** `{ bondReleaseId, bondReceiptId, transferId, sourceLocationId (bonded), destLocationId, lines:[{ skuId, qtyBase, releasedValueMinor, dutyMinor, taxMinor, currency, scale }], releasedBy, occurredAt }`.
+- **Notes:** carries `transferId` because release IS a transfer (reuses INV-1/INV-2 conservation). The **duty/tax cost-basis add is an intentional value-add, NOT conservation** (INV-5): after the transfer lands the stock, a value-only `valuation_adjustment` (`qty_delta=0`, `value_delta = dutyMinor + taxMinor`) raises the released cost basis — this **reuses the existing AVCO value-only seam** and itself emits `inventory.valuation_updated`. `dutyMinor`/`taxMinor` are the amounts added per line (reserved `0` if none). FIFO bonded SKUs need the FIFO value-only path (owner decision). Duty/VAT clearance state beyond this is deferred (P5/P6).
 
 ### Reused Phase-2 events (emitted by transfer legs)
 - **`inventory.valuation_updated`** — each transfer/bond leg that changes a SKU×location projection emits it (existing contract). The reserved `totalValueMinor`/`qtyOnHandBase` fields stay reserved-null until the Phase-5 `ValuationResult` extension.
