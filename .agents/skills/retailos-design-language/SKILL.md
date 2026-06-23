@@ -52,6 +52,15 @@ Not "Create Product / Save" — a wizard: General → Pricing → Inventory → 
 ## Progressive disclosure (role-aware)
 A warehouse worker sees Receive / Move / Count / Ship — NOT valuation layers, landed cost, FIFO consumption (manager-tier). Reveal complexity gradually; the right default view is the one that matches the role's job.
 
+## Onboarding & activation (get to the "aha moment" fast)
+Onboarding length is **not** a fixed rule — it's set by the surface. The goal is always the same: remove friction and get the user to **value** as fast as possible. The right shape differs per RetailOS wizard (§5 lists them):
+- **Sell the outcome, not the feature list.** "Your stock is now live across all 3 stores" beats "Inventory module enabled." Show the result the user came for.
+- **Personalize by role/intent.** A tenant-setup flow tailored to "I run a pharmacy" vs "I run a hardware store" converts and configures better than one generic path (ties to role-aware disclosure + the costing/expiry defaults).
+- **Teach in context, not up front.** Don't dump every feature in an opening modal — sequence it with **tooltips, microcopy, and checklists** that appear as the user reaches each step. People learn by doing.
+- **Time permission/hardware requests after teasing the value.** Ask to pair a receipt printer / enable notifications *at the moment it pays off*, not on first launch — acceptance rises when the benefit is already visible.
+- **Humanize where it fits** (tenant/admin/storefront onboarding): a short founder note or conversational copy builds trust; reserve it for back-office/marketing surfaces, never the POS path.
+- **Match effort to surface:** a **POS terminal / cashier login is minimal and fast** (PIN, go — §19 fast switching), the **tenant/company/store setup is a richer guided wizard** (multi-step, autosave, review). Delight (smooth step transitions, progress, an engaging loading state) is welcome on the *setup/marketing* surfaces but stays inside the motion budget — **never** gamify the checkout path.
+
 ## Multi-view per module (a real edge over Odoo/NetSuite/Dynamics)
 Where applicable each module supports **Table · Card · Detail · Timeline** — and where it fits, **Calendar · Kanban · Map · Hierarchy**.
 - **Warehousing gets a HIERARCHY view:** Warehouse → Zone → Aisle → Rack → Bin (ties directly to the Phase-3 self-referential location tree).
@@ -61,7 +70,10 @@ Where applicable each module supports **Table · Card · Detail · Timeline** �
 Sync state is **always visible, never hidden**: Online (green) · Syncing (blue) · Queued (amber) · Conflict/Failed (red) — icon + text, not color-only. A cashier mid-outage must know at a glance whether a sale is safe.
 
 ## Dashboards
-Answer three questions: what needs attention? what changed? what should I do next? — exceptions / KPIs / insights, NOT 50 random charts. Charts sparingly: line / bar / area / donut. No radar / 3D / pie-explosions.
+Answer three questions: what needs attention? what changed? what should I do next? — exceptions / KPIs / insights, NOT 50 random charts. **Consolidate redundant KPIs** — don't show the same number three ways; one clear card beats three near-duplicates. Charts sparingly: line / bar / area / donut, plus **heat maps where the data is genuinely 2-D** (e.g. sales-by-hour-by-day, stock-by-zone) — pick the viz the data calls for, not a default bar chart. No radar / 3D / pie-explosions.
+
+## Let the data drive the component (not the other way round)
+The shape of the data should dictate the UI element, not a uniform grid of cards: **categorical → chips**, **numeric → right-aligned tabular**, **time-series → timeline or chart**, **status → semantic chip**, **2-D → heat map**. Don't force everything into a plain table because it's the default. Use **color to mark urgency / exceptions** (a low-stock row, a failed sync, an overdue invoice), not for decoration.
 
 ## Motion
 Purposeful only — page/drawer transitions, toast, number ticker, chart entry. **Forbidden:** floating particles, bouncing buttons, spinning dashboards, animated tables — **especially on POS**, where motion is latency the cashier feels. Honor `prefers-reduced-motion`.
@@ -83,5 +95,17 @@ Command-K / Raycast-feel — one place searches products, customers, suppliers, 
 ## Empty states
 Never "No Data" — explain what goes here, show the next step, provide a CTA.
 
-## Golden rule (the governor over everything, including the screenshots)
-Would a cashier understand this? Would a warehouse worker use it one-handed? Would a CFO trust this? Would a CEO get it in 5 seconds? If not — simplify.
+## Professionalism — never ship "vibe-coded" UI
+The tells of AI-generated, unfinished UI; avoid them so RetailOS reads as enterprise-grade:
+- **No emoji as an interface affordance.** Emojis are not icons — use Phosphor/Lucide. (Emoji are fine in user *content*, never as buttons/status/nav.)
+- **Don't let the tool invent colors or layouts.** Colors come from the token palette (blue + semantic); layouts follow the Header→Context→Actions→Metrics→Work-area structure — not whatever a generator emitted.
+- **Consolidate, don't duplicate.** Merge redundant KPI cards; remove placeholder/unused cards; a generic avatar circle becomes a functional **account card** (name, role, tenant, actions).
+- **Use modals/sheets for input-heavy actions**, not a sparse dedicated page with three fields floating in white space.
+- **Organize dense pages with logical tabs** (e.g. Settings → Billing · Usage · Members), not one endless scroll.
+
+## Marketing & SaaS surfaces (Phase 8 storefront / Phase 11 billing)
+- **Landing/marketing pages build trust with real, high-quality visuals** — styled screenshots of the actual RetailOS app, not generic stock icons. Showing the product *is* the value proposition.
+- **Pricing/billing:** a clear plan hierarchy, readable prices + discounts, current-plan emphasis; Billing and Usage as distinct tabs. (These surfaces may use the fuller Magic UI motion palette — they're not the POS path.)
+
+## Golden rule (the governor over everything, including the screenshots and these videos)
+Would a cashier understand this? Would a warehouse worker use it one-handed? Would a CFO trust this? Would a CEO get it in 5 seconds? If not — simplify. Borrowed SaaS tactics (delight, gamification, long personalized onboarding) serve this rule — they never override it, and never reach the POS/checkout path.
