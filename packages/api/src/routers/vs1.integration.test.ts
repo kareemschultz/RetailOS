@@ -1063,6 +1063,94 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).rejects.toThrow();
   });
 
+  // Phase-3 commit 1 — the self-referential location tree. The parent FK is
+  // composite on (tenant_id, company_id, parent_location_id) → the
+  // (tenant_id, company_id, id) target from commit 0, so the DB enforces that a
+  // child node shares BOTH tenant AND company with its parent (a CHECK can't
+  // read the parent row — the Codex-F3 lesson). The write path here is location
+  // creation; the invariant's owner is the DB constraint, proven by raw insert.
+  it("parent composite FK enforces same-tenant + same-company nesting (commit 1)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const coA = await call(appRouter.company.create, { name: "C1-CoA" }, admin);
+    const coA2 = await call(
+      appRouter.company.create,
+      { name: "C1-CoA2" },
+      admin
+    );
+    const coB = await call(
+      appRouter.company.create,
+      { name: "C1-CoB" },
+      adminB
+    );
+
+    // Top-level warehouse under coA.
+    const wh = await call(
+      appRouter.location.create,
+      { companyId: coA.id, name: "C1-WH", type: "warehouse" },
+      admin
+    );
+    // A top-level location in tenant B (for the cross-tenant parent attempt).
+    const whB = await call(
+      appRouter.location.create,
+      { companyId: coB.id, name: "C1-WH-B", type: "warehouse" },
+      adminB
+    );
+
+    const insertChild = (
+      tenant: string,
+      companyId: string,
+      parentId: string,
+      name: string
+    ) =>
+      withTenant(db, tenant, (tx) =>
+        tx
+          .insert(schema.location)
+          .values({
+            tenantId: tenant,
+            companyId,
+            parentLocationId: parentId,
+            name,
+            type: "zone",
+          })
+          .returning()
+      );
+
+    // Valid child (same tenant + same company as parent) → succeeds.
+    const zone = await insertChild(ORG, coA.id, wh.id, "C1-Zone");
+    expect(zone.at(0)?.id).toBeTruthy();
+
+    // Same tenant, DIFFERENT company than the parent → rejected (composite FK:
+    // parent must have company=coA2, but wh has company=coA).
+    await expect(
+      insertChild(ORG, coA2.id, wh.id, "C1-BadCompany")
+    ).rejects.toThrow();
+
+    // Cross-tenant parent (parent lives in tenant B) → rejected.
+    await expect(
+      insertChild(ORG, coA.id, whB.id, "C1-BadTenant")
+    ).rejects.toThrow();
+
+    // New columns carry their defaults on an existing-style insert.
+    const top = await withTenant(db, ORG, (tx) =>
+      tx
+        .select({
+          isSellable: schema.location.isSellable,
+          isQuarantine: schema.location.isQuarantine,
+          isBonded: schema.location.isBonded,
+          isTransit: schema.location.isTransit,
+        })
+        .from(schema.location)
+        .where(eq(schema.location.id, wh.id))
+    );
+    expect(top.at(0)).toEqual({
+      isSellable: true,
+      isQuarantine: false,
+      isBonded: false,
+      isTransit: false,
+    });
+  });
+
   // H2 regression — D5 allow-oversell-with-flagging: the ledger is NOT
   // hard-blocked, but an oversell emits inventory.stock_discrepancy for review.
   it("emits inventory.stock_discrepancy only on oversell, correlated to the sale (H2)", async () => {

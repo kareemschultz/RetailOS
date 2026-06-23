@@ -8,6 +8,7 @@ import {
   bundle,
   category,
   company,
+  type LOCATION_TYPES,
   location,
   lot,
   organization,
@@ -173,7 +174,7 @@ function ensureLocation(
   tenant: ProvisionedTenant,
   companyId: string,
   name: string,
-  type: string
+  type: (typeof LOCATION_TYPES)[number]
 ) {
   return withTenant(deps.database, tenant.tenantId, async (tx) => {
     const existing = await tx
@@ -211,7 +212,7 @@ async function seedPhase2Tenant(
   input: {
     companyName: string;
     locationName: string;
-    locationType: string;
+    locationType: (typeof LOCATION_TYPES)[number];
     costingMethod: "avco" | "fifo";
     includeMixedOverrides?: boolean;
   }
