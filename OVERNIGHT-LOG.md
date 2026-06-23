@@ -11,7 +11,7 @@
 | Commit 4 — bonded receiving + INV-3 | ✅ committed + Codex BLOCK review resolved (5 HIGH fixed) | `897f5fe` + `c9e552f` (fix) | db **55/55**, api **19/19**, zero skips; HARD GATE intact (frozen `costing.rls.test.ts` 0-diff vs master; fix touched no frozen file) |
 | Commit 5 — bond release + duty (INV-4/5) | ✅ implemented + Codex review (2 HIGH + 1 MEDIUM fixed); committed | `f013e85` | db **65/65**, api **21/21**, zero skips; fresh PG18 0000→0016; HARD GATE intact (`costing.ts`/`costing.rls.test.ts` untouched by commit 5) |
 | Commit 6 — RBAC + seed + contracts | ✅ implemented + Codex review (0 findings); committed | `9f35415` | db **70/70**, api **21/21**, zero skips; HARD GATE intact (costing untouched) |
-| Commit 7 — §45 + ADRs | ✅ docs-only (reassessment + ADR 0009); committed | `<pending-commit-7>` | no code → no gate/Codex; mojibake clean. Phase 3 implementation COMPLETE on branch |
+| Commit 7 — §45 + ADRs | ✅ docs-only (reassessment + ADR 0009); committed | `2c7ce61` | no code → no gate/Codex; mojibake clean. Phase 3 implementation COMPLETE on branch |
 | Phase 4 plan docs | pending | — | — |
 | Phase 5 plan docs | pending | — | — |
 | Phase 6+ plan docs | pending | — | — |
@@ -88,7 +88,7 @@
 
 ---
 
-### Commit 7 — Phase 3 §45 reassessment + ADR 0009 (`<pending-commit-7>`)
+### Commit 7 — Phase 3 §45 reassessment + ADR 0009 (`2c7ce61`)
 - **Scope (docs-only — no code, no gate, no Codex):** `phase-3-reassessment.md` (charter §45 end-of-phase review) + ADR 0009 (Phase-3 module decisions) + ADR README index + roadmap Phase-3 status update.
 - **§45 reassessment:** delivered-vs-plan table (commits 0–6 all ✅); lessons harvest (the recurring "a guarantee is only real where the write path exercises it" theme, now ≥5 instances, + the durable defenses: composite FKs, lock-before-read, gate-uses-same-resolver, read-the-generated-SQL, confirm-the-gate-ran); tech-debt ledger (paid #5/#7; parked #6/#8/valuation-enrichment; NEW TD-P3-1..4); perf/security/usability/competitive notes; recommended ADRs + the 2 owner decisions.
 - **ADR 0009 — Phase 3: locations / transfers / bonds.** Five decisions: (1) unified self-referential location tree + 3-col composite parent FK; (2) two-step intra-company value-conserving transfers (per-transfer in-transit node, FOR-UPDATE transitions); (3) bonded receiving + INV-3 separation (AVCO-only, F5 stamp, positive cost); (4) bond release = approved transfer + value-only duty add (RBAC-immediate; F1 stamp/live consistency; F2 TOCTOU lock; F3 deterministic attribution); (5) durable cross-tenant/company defenses (#5 composite FKs, #7 set-once trigger). Consequences enumerate TD-P3-1..4 + the 2 pending owner decisions.
