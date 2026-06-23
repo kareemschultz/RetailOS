@@ -1,7 +1,7 @@
 // @vitest-environment node
 // Node env (not happy-dom): @t3-oss/env-core blocks server env vars when a
 // `window` global is present, which happy-dom provides.
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Context } from "../context";
 
@@ -959,6 +959,108 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       admin
     );
     expect(ok.id).toBeTruthy();
+  });
+
+  // Phase-3 commit 0 / #5 — the composite FK makes a cross-tenant
+  // location→company reference impossible at the DB LAYER, not just the router.
+  // This is the durable kill of the H1 class: even a raw insert that bypasses
+  // the router's assertCompanyVisible guard is rejected by Postgres.
+  it("composite FK rejects a cross-tenant location→company reference at the DB layer (#5)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const coA = await call(appRouter.company.create, { name: "C0-CoA" }, admin);
+    const coB = await call(
+      appRouter.company.create,
+      { name: "C0-CoB" },
+      adminB
+    );
+
+    // RAW insert in tenant A referencing tenant B's company → DB rejects it
+    // (location_company_composite_fk), with no router guard in the path.
+    await expect(
+      withTenant(db, ORG, (tx) =>
+        tx.insert(schema.location).values({
+          tenantId: ORG,
+          companyId: coB.id,
+          name: "cross-tenant",
+          type: "store",
+        })
+      )
+    ).rejects.toThrow();
+
+    // Positive control: same-tenant raw insert succeeds.
+    const okLoc = await withTenant(db, ORG, (tx) =>
+      tx
+        .insert(schema.location)
+        .values({
+          tenantId: ORG,
+          companyId: coA.id,
+          name: "in-tenant",
+          type: "store",
+        })
+        .returning()
+    );
+    expect(okLoc.at(0)?.id).toBeTruthy();
+  });
+
+  // Phase-3 commit 0 / #7 (F4) — the set-once DB trigger rejects a RAW
+  // costing_method UPDATE once movements exist, even when the app-layer guard
+  // (assertCostingMethodSetOnce) is bypassed. F4: a PRODUCT-LEVEL movement
+  // (sku_id NULL) also locks the SKU's method.
+  it("set-once DB-trigger rejects a raw costing_method UPDATE after movements (#7, F4)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "C0-SO-Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "C0-SO-Loc", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { sku: "C0-SO-P", name: "SO Prod", priceMinor: 100, currency: "USD" },
+      admin
+    );
+
+    // Before any movement: a raw method change is allowed (NULL → fifo).
+    await withTenant(db, ORG, (tx) =>
+      tx.execute(
+        sql`UPDATE product SET costing_method = 'fifo' WHERE id = ${product.id} AND tenant_id = ${ORG}`
+      )
+    );
+
+    // Product-level receipt (no skuId → sku_id NULL): a movement now exists.
+    await call(
+      appRouter.inventory.receive,
+      { locationId: location.id, productId: product.id, qty: 5 },
+      admin
+    );
+
+    // After a movement: a RAW UPDATE (bypassing the app guard) is rejected.
+    await expect(
+      withTenant(db, ORG, (tx) =>
+        tx.execute(
+          sql`UPDATE product SET costing_method = 'avco' WHERE id = ${product.id} AND tenant_id = ${ORG}`
+        )
+      )
+    ).rejects.toThrow();
+
+    // F4: a SKU of that product is also locked by the product-level movement.
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { productId: product.id, code: "C0-SO-SKU" },
+      admin
+    );
+    await expect(
+      withTenant(db, ORG, (tx) =>
+        tx.execute(
+          sql`UPDATE sku SET costing_method = 'fifo' WHERE id = ${sku.id} AND tenant_id = ${ORG}`
+        )
+      )
+    ).rejects.toThrow();
   });
 
   // H2 regression — D5 allow-oversell-with-flagging: the ledger is NOT
