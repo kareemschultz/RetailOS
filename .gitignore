@@ -58,3 +58,6 @@ coverage
 .cache
 tmp
 temp
+
+# Local design-reference uploads (binaries — see docs/architecture/ui-inventory/design-references.md)
+uploaded reference designs*
