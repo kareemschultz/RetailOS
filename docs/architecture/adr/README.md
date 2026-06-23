@@ -18,3 +18,4 @@ Per charter §34: every architectural decision is recorded as an ADR; **no major
 | 0006 | RLS role model & fail-closed tenant isolation (owner/migrator/app; ENABLE+FORCE) | Proposed |
 | 0007 | Inventory costing strategy (AVCO default, FIFO per tenant/category/product, mixed catalogs, no LIFO) | Accepted |
 | 0008 | Settings resolution model (product→category→location→tenant) + currency seam | Accepted |
+| 0009 | Phase 3: locations (unified tree), transfers (two-step intra-company, value-conserving), bonds (receive + release = transfer + value-only duty) | Accepted (branch; not merged) |
