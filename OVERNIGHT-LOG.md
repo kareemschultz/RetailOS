@@ -12,9 +12,9 @@
 | Commit 5 — bond release + duty (INV-4/5) | ✅ implemented + Codex review (2 HIGH + 1 MEDIUM fixed); committed | `f013e85` | db **65/65**, api **21/21**, zero skips; fresh PG18 0000→0016; HARD GATE intact (`costing.ts`/`costing.rls.test.ts` untouched by commit 5) |
 | Commit 6 — RBAC + seed + contracts | ✅ implemented + Codex review (0 findings); committed | `9f35415` | db **70/70**, api **21/21**, zero skips; HARD GATE intact (costing untouched) |
 | Commit 7 — §45 + ADRs | ✅ docs-only (reassessment + ADR 0009); committed | `2c7ce61` | no code → no gate/Codex; mojibake clean. Phase 3 implementation COMPLETE on branch |
-| Phase 4 plan docs | pending | — | — |
-| Phase 5 plan docs | pending | — | — |
-| Phase 6+ plan docs | pending | — | — |
+| Phase 4 plan docs | ✅ DEEP plan (codebase+charter-grounded); competitive/GRA marked LIVE-RESEARCH-PENDING | `<pending-partb>` | `phase-4-implementation-plan.md` — POS/payments/shift/offline/numbering/fiscal-seam; 7 🔒 decisions |
+| Phase 5 plan docs | ✅ SKELETON (charter §20-grounded) | `<pending-partb>` | `phase-5-implementation-plan.md` — accounting as event-consumer; #6 hard-blocker; 5 🔒 decisions |
+| Phase 6+ plan docs | ✅ SKELETON (charter §18-grounded) | `<pending-partb>` | `phase-6-implementation-plan.md` — unify GRN+bond-receipt; FIFO landed-cost = Phase-2 OPEN decision; 5 🔒 decisions |
 
 ## ⚠️ MORNING REVIEW + 🔒 DECISIONS NEEDING KAREEM (master list)
 
@@ -22,6 +22,7 @@
 
 - **🔒 DECISION (commit 5, F1) — bonded release blocks on a tenant/category costing flip.** Bonded stock is AVCO-only in Phase 3. The release now re-resolves the LIVE costing method per SKU and **rejects** if it has drifted to `fifo` since receipt (e.g. a tenant flipped `organization.costing_method` avco→fifo). This is the SAFE behavior (the alternative is silent zero-value moves — see F1 detail), but it means a tenant costing flip will **block all pending bonded releases** for affected SKUs until reconciled. **Two open questions for you:** (1) Is "reject + reconcile" the desired UX, or do you want the release to PROCEED as AVCO from the receipt stamp regardless of live setting (the stamp's original "durable guarantee" intent)? The latter needs a costing-method override threaded through the frozen transfer/`costing.ts` engine — a change-request against frozen code, deliberately NOT done autonomously. (2) Should `organization`/`category` `costing_method` get a set-once-after-movements guard like the #7 product/sku trigger? Today only product/sku are protected, so a tenant CAN flip costing while holding valued stock.
 - **NOTE (commit 5):** the `inventory.bond_release_requested` / `inventory.bond_release_approved` events remain RESERVED contract shapes (NOT in `DomainEventType`) — release is RBAC-immediate (one `bond.release` mutation needing both `bond.release`+`bond.approve_release`). The §22 request→approve workflow is deferred; when you build it, those events + the `requested_by`/`approved_by` columns bind additively.
+- **⚠️ PART B (Phase 4/5/6 plans) — LIVE WEB RESEARCH WAS BLOCKED.** Mid-run the Anthropic API hit a transient rate-limit then a hard **session limit (resets 2pm America/Guyana)**, so the dispatched research agents returned no output. Per charter §40 I did NOT fabricate competitor citations. The Phase-4 plan is grounded in the **two sources I could verify**: the actual codebase (existing `sale`/`saleLine`/`invoice`/`number_block`/`idempotency`/`outbox` seams) and the **charter** (§17 fiscal/numbering, §19 POS/money/commission/X-Z/blind-close, §13/§14 offline levels + conflict policy). Sections needing external/competitive/Guyana-GRA verification are marked **"LIVE RESEARCH PENDING"** with the exact agenda to run after reset. **Re-run the competitive + GRA research before locking any Phase-4 decision.** Phase 5/6 are lighter skeletons for the same reason.
 
 ---
 
@@ -95,3 +96,9 @@
 - **Roadmap:** Phase 3 row → "🟡 IMPLEMENTED on branch, NOT merged" with the full commit/doc list.
 
 > **Phase 3 implementation is COMPLETE on `phase-3-overnight`** (commits 0–7). Master stays frozen; nothing merged. Next: PART B — Phase 4/5/6 PLANNING docs only (no code).
+
+### PART B — Phase 4/5/6 planning docs (`<pending-partb>`)
+- **Phase 4 (DEEP, HIGH confidence on the grounded parts):** `phase-4-implementation-plan.md` — codebase grounding table (extend `sale`/`sale_line`/`number_block`; build `payment`/`tender`/`shift`/`cash_movement`/offline-sync); 8-commit build order; offline conflict policy (reuse D5 + §13/§14); numbering reservation; shift/cash + blind-close/X-Z; money/FX; fiscalization SEAM (provider interface, "none" provider for Guyana-today); RBAC perms; 6 value-integrity invariants (INV-P4-1..6) with the write-path gate; testing strategy; **7 🔒 owner decisions**.
+- **Phase 5 (SKELETON):** `phase-5-implementation-plan.md` — accounting as an EVENT CONSUMER of the Phase 2/3/4 outbox (decoupled from OLTP); double-entry core; #6 BigInt `mulDivRound` = HARD blocker; INV-P5-1..6 (balance, immutable close, server-time, currency-explicit, inventory↔GL recon, auditor package); 5 🔒 decisions.
+- **Phase 6 (SKELETON):** `phase-6-implementation-plan.md` — reuse the valued-receipt engine (GRN = valued stock receipt; **unify with bond receipt**); landed-cost allocation = same shape as bond-release duty add; **FIFO landed cost forces the Phase-2 OPEN allocation decision** (currently `applyValuation` throws for FIFO value-only); INV-P6-1..5; 5 🔒 decisions.
+- **⚠️ Codex PLAN-review was BLOCKED** by the same session limit — not performed. Plans were self-reviewed for codebase accuracy (every "exists/doesn't exist" claim verified by grep) and charter alignment. **Re-run a Codex adversarial plan-review + the competitive/GRA web research after the session resets, before locking any decision.**
