@@ -12,8 +12,9 @@
 
 ## Current state (2026-06-22)
 
-- **Phase 1 / VS#1 done** — PR #1 merged to master (tenant-isolation spine: fail-closed RLS, 3-role model, `withTenant`, audit/outbox/idempotency, money=bigint minor units).
-- **Phase 2 (Inventory) backend review-ready** on branch `phase-2-implementation` — plan approved; D1–D7 locked (ADR-0007 + `module-specs/inventory.md`); schema/RLS/seed/services/inventory routers/catalog CRUD/product Phase-2 create+list/update/archive fields/variant lifecycle/lot lifecycle/reorder-rule CRUD/discrepancy review/revaluation/import preview/mixed-catalog router e2e are implemented. **No P0 backend gaps remain for approved scope.** Docs: `phase-2-implementation-plan.md`, `event-map-phase2.md`, `inventory-screen-map.md`, `phase-2-api-contracts.md`, `phase-2-gap-analysis.md`, `phase-2-closeout-audit.md`.
+- **Phase 1 / VS#1 done** — PR #1 merged (tenant-isolation spine: fail-closed RLS, 3-role model, `withTenant`, audit/outbox/idempotency, money=bigint minor units).
+- **Phase 2 (Inventory) ✅ COMPLETE / 🔒 FROZEN** — schema (PR #4 `d39428d`) + behavior pass (PR #9 `72b2100`) merged to master; CI 4/4 green. Narrative archived in `phase-2-complete.md`. D1–D7 locked (ADR-0007/0008 + `module-specs/inventory.md`). "Frozen" = further Phase-2 work is a change request. **Parked → later phases:** #8 POS↔costing + `cost_reconciliation` (Phase 4); #6 precision/`mulDivRound` + `valuation_updated` enrichment (Phase 5); #7 set-once DB-trigger + #5 composite-FK (Phase 3).
+- **Phase 3 (Locations / Warehouses / Bonds) — PLANNING.** Packet drafted (`phase-3-implementation-plan.md`, `phase-3-gap-analysis.md`, `module-specs/locations-warehouses-bonds.md`, `event-map-phase3.md`, `competitive/locations-warehouses-bonds.md`). **#5 composite-FK is IN SCOPE here** (new tables born with `FK (tenant_id, x_id)`; referenced tables get `UNIQUE(tenant_id, id)`). **No Phase-3 schema/code until owner answers the open decisions** (in-transit modelling, bond-release mechanics, bins scope, FIFO transfer cost basis, frozen-costing additive touch, transfer oversell) — see the plan §I.
 - Active reviewer loop: **Codex adversarial review** per commit (CRITICAL/HIGH only). Do NOT trigger other reviewers or a review gate unless asked.
 
 ## Non-negotiable rules (charter §33/§39/§40)
