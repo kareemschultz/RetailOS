@@ -1,6 +1,6 @@
 # ADR 0009 — Phase 3: locations, transfers, and bonds
 
-- **Status:** Accepted (Phase-3 build, `phase-3-overnight` commits 0–6, 2026-06-23). NOT yet merged to master — recorded for owner review.
+- **Status:** Accepted (merged to master 2026-06-23, commits 0–7, `67e6120`).
 - **Context:** charter §18 (inventory/warehouse/bond engine), §12 (Caribbean/import — bonded warehouses, customs, duty, landed cost), §8 (tenant/company/location hierarchy), §7 (entitlements). Relates: ADR 0006 (RLS role model), ADR 0007 (costing), ADR 0008 (settings resolver), `module-specs/locations-warehouses-bonds.md`, `event-map-phase3.md`, `phase-3-implementation-plan.md` §I (owner-locked decisions).
 - **Scope:** the load-bearing architectural decisions for the Locations/Warehouses/Bonds module. Costing internals are ADR 0007/0008; this ADR covers the structural model and the bond/transfer mechanics built on top.
 

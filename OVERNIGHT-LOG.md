@@ -1,8 +1,7 @@
 # RetailOS — Overnight Run Log
 
 > **Kareem: read this first.** Every decision, gate result, Codex finding, and ⚠️ MORNING REVIEW flag is here.
-> Branch: `phase-3-overnight` (off `phase-3-commit-3` HEAD `fe11d67`). PR #17 NOT merged.
-> Master is frozen. This branch accumulates all work for your morning review before any merge.
+> **✅ GRADUATED TO MASTER 2026-06-23** — the `phase-3-overnight` branch was vetted and merged via PRs **#18** (turbo CI fix) → **#17** (commit 3) → **#19** (commits 4–7); master HEAD `67e6120`, CI green (db 70/70 + api 21/21, zero skips). The 🔒 decisions are now LOCKED (TD-P3-1 = reject+reconcile; TD-P3-2 = defer to Phase 5). The ⚠️ PART B research-pending flags below remain **live** (re-run after the session reset before locking any Phase 4/5/6 decision).
 
 ## Summary (fill as run progresses)
 
