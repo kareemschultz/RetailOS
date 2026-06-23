@@ -1,25 +1,47 @@
 import { count, eq, sql } from "drizzle-orm";
 import { location, stockTransfer, stockTransferLine } from "../schema";
 import type { TenantTransaction } from "../tenant";
+import type { CostingMethod } from "./costing";
+import { applyTransferInValuation, applyValuation } from "./costing";
 import { appendStockMovement } from "./stock-ledger";
 import type { ServiceContext } from "./types";
 
-// Phase 3 commit 2 — stock transfers, QUANTITY conservation only (value
-// conservation = commit 3). Two-step: ship (source → per-transfer in-transit
+// Phase 3 — stock transfers. Two-step: ship (source → per-transfer in-transit
 // node) then receive (node → destination), every leg through the sole ledger
-// mutator `appendStockMovement`, so qty is conserved at each step and the ledger
-// is never bypassed (the standing #8 write-path discipline).
+// mutator `appendStockMovement`, so QUANTITY is conserved at each step and the
+// ledger is never bypassed (the standing #8 write-path discipline).
 //
-// NOTE (commit 2 → commit 3): these legs move LEDGER QUANTITY only — they do NOT
-// call applyValuation, so avg_cost/valuation_layer intentionally lag until
-// commit 3 wires value conservation. There is no UI/consumer yet; the two
-// commits land before the feature is usable.
+// Commit 3 — VALUE conservation: each SKU-level leg also moves value. `moveLine`
+// issues out of the source node (`applyValuation` → V, the exact integer value
+// that left) and lands EXACTLY V at the destination node
+// (`applyTransferInValuation`). So value flows source → in-transit → destination,
+// conserved at every step. Product-level lines have no SKU×location costing cell
+// (valuation requires a skuId) and move quantity only — exactly as
+// `inventory.receive` valuates only when a skuId is present.
 
 export interface TransferLineInput {
   lotId?: string | null;
   productId: string;
   qty: number;
   skuId?: string | null;
+}
+
+// Per-line value moved by a transfer leg (for value-conservation events).
+// `valueMinor`/`currency`/`scale`/`method` are null for product-level (unvalued)
+// lines and for SKU lines whose source had no valuation basis (nothing to move).
+export interface TransferLineValue {
+  currency: string | null;
+  method: CostingMethod | null;
+  productId: string;
+  qtyBase: number;
+  scale: number | null;
+  skuId: string | null;
+  valueMinor: number | null;
+}
+
+export interface TransferLegResult {
+  lineValues: TransferLineValue[];
+  transfer: TransferRow;
 }
 
 export interface CreateTransferInput {
@@ -40,12 +62,19 @@ async function loadTransfer(
   tx: TenantTransaction,
   transferId: string
 ): Promise<{ transfer: TransferRow; lines: TransferLineRow[] }> {
+  // FOR UPDATE locks the transfer row so concurrent ship/receive/cancel calls
+  // SERIALIZE: a second caller blocks here until the first commits, then re-reads
+  // the now-advanced status and fails its guard. Without this, two callers could
+  // both pass a stale `status` check and append duplicate valued legs (a
+  // pre-existing commit-2 race that commit 3 amplifies — it would now duplicate
+  // VALUE, not just quantity, stranding stock+value in the in-transit node).
   const transfer = (
     await tx
       .select()
       .from(stockTransfer)
       .where(eq(stockTransfer.id, transferId))
       .limit(1)
+      .for("update")
   ).at(0);
   if (!transfer) {
     fail("transfer: not found in this tenant");
@@ -58,7 +87,9 @@ async function loadTransfer(
 }
 
 // Moves a line's qty OUT of one node and INTO another, conserving total quantity
-// (−qty at `from`, +qty at `to`). Both legs go through appendStockMovement.
+// (−qty at `from`, +qty at `to`) AND, for SKU-level lines, total value: the
+// exact integer V that leaves the source lands at the destination. Both legs go
+// through appendStockMovement (qty) + the costing engine (value).
 async function moveLine(
   tx: TenantTransaction,
   ctx: ServiceContext,
@@ -68,7 +99,7 @@ async function moveLine(
     toLocationId: string;
     transferId: string;
   }
-) {
+): Promise<TransferLineValue> {
   const base = {
     productId: opts.line.productId,
     skuId: opts.line.skuId,
@@ -76,18 +107,68 @@ async function moveLine(
     refType: "stock_transfer" as const,
     refId: opts.transferId,
   };
-  await appendStockMovement(tx, ctx, {
+  const outRow = await appendStockMovement(tx, ctx, {
     ...base,
     locationId: opts.fromLocationId,
     movementType: "transfer_out",
     qtyDelta: -opts.line.qty,
   });
-  await appendStockMovement(tx, ctx, {
+  // Product-level lines have no SKU×location valuation cell — move quantity only.
+  if (!opts.line.skuId) {
+    await appendStockMovement(tx, ctx, {
+      ...base,
+      locationId: opts.toLocationId,
+      movementType: "transfer_in",
+      qtyDelta: opts.line.qty,
+    });
+    return {
+      currency: null,
+      method: null,
+      productId: opts.line.productId,
+      qtyBase: opts.line.qty,
+      scale: null,
+      skuId: null,
+      valueMinor: null,
+    };
+  }
+  // VALUE conservation, SKU-level: issue out of the source node (V = exact value
+  // that left), then land EXACTLY V at the destination node.
+  const out = await applyValuation(tx, ctx, outRow);
+  const inRow = await appendStockMovement(tx, ctx, {
     ...base,
     locationId: opts.toLocationId,
     movementType: "transfer_in",
     qtyDelta: opts.line.qty,
   });
+  // A null currency means the source had no valuation basis (e.g. transferring
+  // stock that was never valued) — V is 0 and there is nothing to land.
+  if (out.currency == null || out.scale == null) {
+    return {
+      currency: null,
+      method: out.method,
+      productId: opts.line.productId,
+      qtyBase: opts.line.qty,
+      scale: null,
+      skuId: opts.line.skuId,
+      valueMinor: out.cogsMinor,
+    };
+  }
+  await applyTransferInValuation(tx, ctx, inRow, {
+    currency: out.currency,
+    method: out.method,
+    remainderAnchorMovementId: outRow.id,
+    scale: out.scale,
+    valueMinor: out.cogsMinor,
+  });
+  return {
+    currency: out.currency,
+    method: out.method,
+    productId: opts.line.productId,
+    qtyBase: opts.line.qty,
+    scale: out.scale,
+    skuId: opts.line.skuId,
+    valueMinor: out.cogsMinor,
+  };
 }
 
 export async function createTransfer(
@@ -189,20 +270,23 @@ export async function shipTransfer(
   tx: TenantTransaction,
   ctx: ServiceContext,
   transferId: string
-): Promise<TransferRow> {
+): Promise<TransferLegResult> {
   const { transfer, lines } = await loadTransfer(tx, transferId);
   if (transfer.status !== "draft") {
     fail(
       `transfer: only a draft transfer can be shipped (is '${transfer.status}')`
     );
   }
+  const lineValues: TransferLineValue[] = [];
   for (const line of lines) {
-    await moveLine(tx, ctx, {
-      line,
-      fromLocationId: transfer.sourceLocationId,
-      toLocationId: transfer.inTransitLocationId,
-      transferId,
-    });
+    lineValues.push(
+      await moveLine(tx, ctx, {
+        line,
+        fromLocationId: transfer.sourceLocationId,
+        toLocationId: transfer.inTransitLocationId,
+        transferId,
+      })
+    );
   }
   const updated = (
     await tx
@@ -211,14 +295,17 @@ export async function shipTransfer(
       .where(eq(stockTransfer.id, transferId))
       .returning()
   ).at(0);
-  return updated ?? fail("transfer: ship update failed");
+  return {
+    lineValues,
+    transfer: updated ?? fail("transfer: ship update failed"),
+  };
 }
 
 export async function receiveTransfer(
   tx: TenantTransaction,
   ctx: ServiceContext,
   transferId: string
-): Promise<TransferRow> {
+): Promise<TransferLegResult> {
   const { transfer, lines } = await loadTransfer(tx, transferId);
   if (transfer.status !== "shipped") {
     fail(
@@ -226,16 +313,21 @@ export async function receiveTransfer(
     );
   }
   // Receive moves exactly what is in the per-transfer in-transit node (the
-  // shipped qty) → destination. There is no received-qty parameter, so you
-  // cannot receive MORE than shipped; partial/discrepancy receipt is a
-  // deliberately deferred design (commit 2 receives in full).
+  // shipped qty + its value) → destination. There is no received-qty parameter,
+  // so you cannot receive MORE than shipped; partial/discrepancy receipt is a
+  // deliberately deferred design (receives in full). Because the node holds
+  // exactly the shipped value V, the issue out of it returns exactly V → the
+  // destination receives exactly V (received value == released value).
+  const lineValues: TransferLineValue[] = [];
   for (const line of lines) {
-    await moveLine(tx, ctx, {
-      line,
-      fromLocationId: transfer.inTransitLocationId,
-      toLocationId: transfer.destLocationId,
-      transferId,
-    });
+    lineValues.push(
+      await moveLine(tx, ctx, {
+        line,
+        fromLocationId: transfer.inTransitLocationId,
+        toLocationId: transfer.destLocationId,
+        transferId,
+      })
+    );
   }
   const updated = (
     await tx
@@ -244,14 +336,17 @@ export async function receiveTransfer(
       .where(eq(stockTransfer.id, transferId))
       .returning()
   ).at(0);
-  return updated ?? fail("transfer: receive update failed");
+  return {
+    lineValues,
+    transfer: updated ?? fail("transfer: receive update failed"),
+  };
 }
 
 export async function cancelTransfer(
   tx: TenantTransaction,
   ctx: ServiceContext,
   transferId: string
-): Promise<TransferRow> {
+): Promise<TransferLegResult> {
   const { transfer, lines } = await loadTransfer(tx, transferId);
   if (transfer.status === "received") {
     fail("transfer: a received transfer cannot be cancelled");
@@ -259,15 +354,21 @@ export async function cancelTransfer(
   if (transfer.status === "cancelled") {
     fail("transfer: transfer is already cancelled");
   }
-  // If already shipped, return the in-transit stock to source (qty conserved).
+  // If already shipped, return the in-transit stock (qty AND value) to source —
+  // otherwise the value shipped into the per-transfer node would be orphaned
+  // there (qty 0 but value != 0, breaking the qty==0 ⟺ value==0 invariant for
+  // the node). A draft cancel has moved nothing, so there is no value to return.
+  const lineValues: TransferLineValue[] = [];
   if (transfer.status === "shipped") {
     for (const line of lines) {
-      await moveLine(tx, ctx, {
-        line,
-        fromLocationId: transfer.inTransitLocationId,
-        toLocationId: transfer.sourceLocationId,
-        transferId,
-      });
+      lineValues.push(
+        await moveLine(tx, ctx, {
+          line,
+          fromLocationId: transfer.inTransitLocationId,
+          toLocationId: transfer.sourceLocationId,
+          transferId,
+        })
+      );
     }
   }
   const updated = (
@@ -277,7 +378,10 @@ export async function cancelTransfer(
       .where(eq(stockTransfer.id, transferId))
       .returning()
   ).at(0);
-  return updated ?? fail("transfer: cancel update failed");
+  return {
+    lineValues,
+    transfer: updated ?? fail("transfer: cancel update failed"),
+  };
 }
 
 // In-transit on-hand for a transfer's node (used by tests / read models to

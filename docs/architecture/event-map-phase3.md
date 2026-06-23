@@ -15,7 +15,7 @@
 - **Payload (as-built, commit 2):** `{ transferId, companyId, number, sourceLocationId, destLocationId, inTransitLocationId, expectedReceiptDate, lines:[{ skuId, productId, qtyBase }], createdBy, occurredAt }`.
 - **Notes:** no stock moves yet (draft). Value is established at ship time.
 
-> **Commit-2 status (2026-06-22):** `transfer_created`/`transfer_dispatched`/`transfer_received`/`transfer_cancelled` are EMITTED for the quantity lifecycle. The **value fields** on dispatched/received (`releasedValueMinor`/`receivedValueMinor`/`currency`/`scale`) are **RESERVED `null`** until commit 3 wires value conservation (same present-but-null reserved-field discipline as Phase 2).
+> **Commit-3 status (2026-06-22):** value conservation is WIRED. `transfer_dispatched`/`transfer_received`/`transfer_cancelled` now carry **per-line** value (`releasedValueMinor`/`receivedValueMinor`/`returnedValueMinor` + `currency`/`scale`/`costingMethod`) AND a **top-level aggregate** (`releasedValueMinor`/`receivedValueMinor`/`currency`/`scale`, defined only when all valued lines share one currency, else `null`). Per-line value is `null` for product-level (unvalued) lines. `receivedValueMinor == releasedValueMinor` per line (exact integer conservation, INV-2). The earlier commit-2 top-level reserved-`null` placeholders are now populated.
 
 ### `inventory.transfer_dispatched`
 - **Producer:** `transfer` router → `executeTransfer` (leg 1: source issue → in-transit). **Intra-company only** — `sourceLocationId` & `destLocationId` share `companyId` (INV-6); inter-company transfers are blocked (need P5 due-to/due-from GL).

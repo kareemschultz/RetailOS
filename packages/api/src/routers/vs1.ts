@@ -2972,9 +2972,45 @@ export const reportsRouter = {
     }),
 };
 
-// Phase 3 commit 2 — stock transfers (quantity conservation; value = commit 3).
+// Phase 3 — stock transfers (quantity + value conservation, commits 2/3).
 // Two-step intra-company transfer through the per-transfer in-transit node.
-// Value fields on the events are RESERVED null here and bound in commit 3.
+
+// Aggregate the per-line transfer value into a single top-level (value, currency,
+// scale) — defined only when every valued line shares one currency/scale (a
+// transfer is single-currency in practice; summing minor units across currencies
+// is meaningless, §12). Returns nulls when there is no valued line or currencies
+// differ. The per-line value is always carried losslessly on the event's `lines`.
+function aggregateTransferValue(
+  lineValues: {
+    currency: string | null;
+    scale: number | null;
+    valueMinor: number | null;
+  }[]
+): {
+  valueMinor: number | null;
+  currency: string | null;
+  scale: number | null;
+} {
+  const valued = lineValues.filter(
+    (line) => line.currency != null && line.valueMinor != null
+  );
+  const first = valued.at(0);
+  if (!first) {
+    return { currency: null, scale: null, valueMinor: null };
+  }
+  const uniform = valued.every(
+    (line) => line.currency === first.currency && line.scale === first.scale
+  );
+  if (!uniform) {
+    return { currency: null, scale: null, valueMinor: null };
+  }
+  return {
+    currency: first.currency,
+    scale: first.scale,
+    valueMinor: valued.reduce((sum, line) => sum + (line.valueMinor ?? 0), 0),
+  };
+}
+
 export const transferRouter = {
   create: tenantProcedure
     .input(
@@ -3005,7 +3041,11 @@ export const transferRouter = {
         for (const line of input.lines) {
           await assertProductVisible(tx, line.productId);
           if (line.skuId) {
-            await assertSkuVisible(tx, line.skuId);
+            // Not just visible — the SKU must belong to the line's product, or
+            // the ledger would store productId=A while costing resolves from
+            // SKU=B's cell (cross-cell value corruption). Mirrors
+            // inventory.receive's assertSkuBelongsToProduct.
+            await assertSkuBelongsToProduct(tx, line.skuId, line.productId);
           }
           if (line.lotId) {
             await assertLotVisible(tx, line.lotId);
@@ -3050,7 +3090,12 @@ export const transferRouter = {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "inventory.transfer");
-        const transfer = await services.shipTransfer(tx, ctx, input.transferId);
+        const { transfer, lineValues } = await services.shipTransfer(
+          tx,
+          ctx,
+          input.transferId
+        );
+        const released = aggregateTransferValue(lineValues);
         await services.emitEvent(tx, ctx, {
           type: services.DomainEventType.InventoryTransferDispatched,
           payload: {
@@ -3060,10 +3105,22 @@ export const transferRouter = {
             destLocationId: transfer.destLocationId,
             inTransitLocationId: transfer.inTransitLocationId,
             shippedAt: transfer.shippedAt,
-            // RESERVED null — exact released value V is bound in commit 3.
-            releasedValueMinor: null,
-            currency: null,
-            scale: null,
+            expectedReceiptDate: transfer.expectedReceiptDate,
+            // Per-line exact released value V (the integer value that left
+            // source) — value conservation contract (event-map INV-2).
+            lines: lineValues.map((line) => ({
+              skuId: line.skuId,
+              productId: line.productId,
+              qtyBase: line.qtyBase,
+              releasedValueMinor: line.valueMinor,
+              currency: line.currency,
+              scale: line.scale,
+              costingMethod: line.method,
+            })),
+            // Top-level aggregate (single-currency convenience; null if mixed).
+            releasedValueMinor: released.valueMinor,
+            currency: released.currency,
+            scale: released.scale,
             dispatchedBy: ctx.actorUserId,
           },
         });
@@ -3082,11 +3139,12 @@ export const transferRouter = {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "inventory.transfer_receive");
-        const transfer = await services.receiveTransfer(
+        const { transfer, lineValues } = await services.receiveTransfer(
           tx,
           ctx,
           input.transferId
         );
+        const received = aggregateTransferValue(lineValues);
         await services.emitEvent(tx, ctx, {
           type: services.DomainEventType.InventoryTransferReceived,
           payload: {
@@ -3095,10 +3153,22 @@ export const transferRouter = {
             sourceLocationId: transfer.sourceLocationId,
             destLocationId: transfer.destLocationId,
             actualReceiptDate: transfer.actualReceiptDate,
-            // RESERVED null — received value (== released) is bound in commit 3.
-            receivedValueMinor: null,
-            currency: null,
-            scale: null,
+            // Per-line received value — MUST equal the dispatched releasedValue
+            // per line (value conservation, event-map INV-2). varianceQtyBase is
+            // reserved 0 (full-receive; receive-discrepancy is a deferred P1).
+            lines: lineValues.map((line) => ({
+              skuId: line.skuId,
+              productId: line.productId,
+              qtyBase: line.qtyBase,
+              receivedValueMinor: line.valueMinor,
+              currency: line.currency,
+              scale: line.scale,
+              costingMethod: line.method,
+              varianceQtyBase: 0,
+            })),
+            receivedValueMinor: received.valueMinor,
+            currency: received.currency,
+            scale: received.scale,
             receivedBy: ctx.actorUserId,
           },
         });
@@ -3122,7 +3192,7 @@ export const transferRouter = {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "inventory.transfer");
-        const transfer = await services.cancelTransfer(
+        const { transfer, lineValues } = await services.cancelTransfer(
           tx,
           ctx,
           input.transferId
@@ -3134,6 +3204,16 @@ export const transferRouter = {
             companyId: transfer.companyId,
             sourceLocationId: transfer.sourceLocationId,
             inTransitLocationId: transfer.inTransitLocationId,
+            // Value returned to source when cancelling a SHIPPED transfer (empty
+            // for a draft cancel, which moved nothing).
+            lines: lineValues.map((line) => ({
+              skuId: line.skuId,
+              productId: line.productId,
+              qtyBase: line.qtyBase,
+              returnedValueMinor: line.valueMinor,
+              currency: line.currency,
+              scale: line.scale,
+            })),
             reason: input.reason ?? null,
             cancelledBy: ctx.actorUserId,
           },

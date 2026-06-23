@@ -424,3 +424,210 @@ export async function applyValuation(
     ? applyFifoReceipt(tx, ctx, movement, skuId)
     : applyFifoIssue(tx, ctx, movement, skuId);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3 commit 3 — transfer VALUE conservation (ADDITIVE).
+//
+// `applyTransferInValuation` lands EXACTLY `input.valueMinor` (V — the integer
+// value that left the source, i.e. the issue leg's `cogsMinor`) with the
+// movement's quantity at the destination node — the RECEIVING leg of a stock
+// transfer. It is the only costing touch a plain transfer needs and it is purely
+// additive: it does NOT modify `applyValuation` or any existing
+// receipt/issue/value-only function (the existing Phase-2 costing suites prove
+// that by passing UNCHANGED).
+//   • AVCO — REUSES the frozen receipt + value-only seams: a receipt at
+//     `floor(V/q)` adds `floor(V/q)·q`, then a value-only adjustment adds the
+//     remainder `r = V − floor(V/q)·q`. Net exactly +V. Zero new AVCO code.
+//   • FIFO — a value-EXACT integer layer set (Codex F1): `(q − r)` units at
+//     `floor(V/q)` and `r` units at `ceil(V/q)`. Total exactly V, qty exactly q.
+//     Aggregate, NOT source-layer-preserving (age lives on the lot dimension);
+//     the layers are dated at the transfer_in `server_ts` (newest in the dest
+//     FIFO queue, as freshly-arrived stock).
+//
+// Because we carry the EXACT integer V, value-conservation does not depend on the
+// deferred #6 rounding decision.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface TransferInValuationInput {
+  currency: string;
+  // The costing method resolved on the OUT leg. Method resolves
+  // product→category→tenant (never by location), so source and destination
+  // (same product) always resolve identically — this is why transfer value
+  // conservation is well-defined. Passed in to avoid a redundant resolve and to
+  // guarantee both legs use the same method.
+  method: CostingMethod;
+  // A second, DISTINCT, real ledger-movement id used to anchor the FIFO
+  // remainder layer. The value-exact split needs up to two `valuation_layer`
+  // rows, but `UNIQUE(tenant_id, source_movement_id)` — the FIFO-receipt replay
+  // guard — forbids two rows sharing one movement id. A transfer leg always has
+  // two real movements (the transfer_in and its paired transfer_out); we anchor
+  // the base layer to this transfer_in movement and the remainder layer to the
+  // paired transfer_out, preserving that UNIQUE invariant with no schema change.
+  // Unused for AVCO and single-layer FIFO (`r == 0`).
+  remainderAnchorMovementId?: string | null;
+  scale: number;
+  // V — the exact integer value that left the source (issue leg's cogsMinor).
+  valueMinor: number;
+}
+
+export async function applyTransferInValuation(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  movement: StockMovementRow,
+  input: TransferInValuationInput
+): Promise<ValuationResult> {
+  const skuId = requireSkuId(movement);
+  // Stamp the resolved method on the receiving movement (Gap B / seam #2): every
+  // valued movement records which costing method valued it, so committed history
+  // can never be silently re-valued by a later method change.
+  await tx.execute(sql`
+    UPDATE stock_ledger
+    SET costing_method_applied = ${input.method}
+    WHERE id = ${movement.id}
+      AND tenant_id = ${ctx.tenantId}
+  `);
+  if (input.method === "avco") {
+    return applyAvcoTransferIn(tx, ctx, movement, skuId, input);
+  }
+  return applyFifoTransferIn(tx, ctx, movement, skuId, input);
+}
+
+// AVCO destination receipt: reuse the frozen receipt + value-only seams so the
+// destination AVCO cell gains EXACTLY V with quantity q. No new AVCO arithmetic.
+async function applyAvcoTransferIn(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  movement: StockMovementRow,
+  skuId: string,
+  input: TransferInValuationInput
+): Promise<ValuationResult> {
+  const qty = movement.qtyDelta; // > 0 (a receiving leg)
+  // V >= 0 (an issue's cogs is non-negative), qty > 0 ⇒ trunc == floor.
+  const base = Math.trunc(input.valueMinor / qty);
+  const remainder = input.valueMinor - base * qty; // in [0, qty)
+  // Receipt at floor(V/q) — adds base·q (frozen AVCO receipt seam).
+  await applyAvcoReceipt(
+    tx,
+    ctx,
+    {
+      ...movement,
+      unitCostMinor: base,
+      costCurrency: input.currency,
+      costScale: input.scale,
+    },
+    skuId
+  );
+  // Remainder via the frozen value-only seam — qty unchanged, value += r. After
+  // the receipt the cell holds qty >= q > 0, so the value-only qty>0 guard holds.
+  if (remainder > 0) {
+    await applyAvcoValueOnly(
+      tx,
+      ctx,
+      {
+        ...movement,
+        movementType: "valuation_adjustment",
+        qtyDelta: 0,
+        valueDeltaMinor: remainder,
+      },
+      skuId
+    );
+  }
+  return {
+    cogsMinor: 0,
+    currency: input.currency,
+    method: "avco",
+    scale: input.scale,
+    unvaluedQty: 0,
+  };
+}
+
+// FIFO destination receipt: a value-EXACT integer layer set (Codex F1).
+async function applyFifoTransferIn(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  movement: StockMovementRow,
+  skuId: string,
+  input: TransferInValuationInput
+): Promise<ValuationResult> {
+  const qty = movement.qtyDelta; // > 0
+  const base = Math.trunc(input.valueMinor / qty);
+  const remainder = input.valueMinor - base * qty; // r in [0, qty)
+  const seqResult = await tx.execute(sql`
+    SELECT COALESCE(MAX(seq) + 1, 0)::integer AS next_seq
+    FROM valuation_layer
+    WHERE tenant_id = ${ctx.tenantId}
+      AND sku_id = ${skuId}
+      AND location_id = ${movement.locationId}
+  `);
+  let nextSeq = asNumber(
+    (seqResult.rows.at(0) as { next_seq?: number | string } | undefined)
+      ?.next_seq ?? 0
+  );
+  // (q − r) units at floor(V/q). qty − remainder is always >= 1 (remainder < qty),
+  // so the base layer always exists and anchors to this transfer_in movement.
+  await insertTransferLayer(tx, ctx, {
+    currency: input.currency,
+    movement,
+    qty: qty - remainder,
+    scale: input.scale,
+    seq: nextSeq,
+    skuId,
+    sourceMovementId: movement.id,
+    unitCostMinor: base,
+  });
+  // r units at ceil(V/q) = base + 1, anchored to the paired transfer_out movement
+  // (a distinct real id) so the UNIQUE(source_movement_id) invariant is preserved.
+  if (remainder > 0) {
+    const anchor = input.remainderAnchorMovementId;
+    if (!anchor) {
+      throw new Error(
+        "costing: FIFO transfer-in remainder layer requires a distinct anchor movement id"
+      );
+    }
+    nextSeq += 1;
+    await insertTransferLayer(tx, ctx, {
+      currency: input.currency,
+      movement,
+      qty: remainder,
+      scale: input.scale,
+      seq: nextSeq,
+      skuId,
+      sourceMovementId: anchor,
+      unitCostMinor: base + 1,
+    });
+  }
+  return {
+    cogsMinor: 0,
+    currency: input.currency,
+    method: "fifo",
+    scale: input.scale,
+    unvaluedQty: 0,
+  };
+}
+
+async function insertTransferLayer(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  opts: {
+    currency: string;
+    movement: StockMovementRow;
+    qty: number;
+    scale: number;
+    seq: number;
+    skuId: string;
+    sourceMovementId: string;
+    unitCostMinor: number;
+  }
+): Promise<void> {
+  await tx.execute(sql`
+    INSERT INTO valuation_layer (
+      tenant_id, sku_id, location_id, received_at, seq, qty_remaining,
+      unit_cost_minor, currency, scale, source_movement_id, created_at, updated_at
+    )
+    VALUES (
+      ${ctx.tenantId}, ${opts.skuId}, ${opts.movement.locationId},
+      ${opts.movement.serverTs}, ${opts.seq}, ${opts.qty}, ${opts.unitCostMinor},
+      ${opts.currency}, ${opts.scale}, ${opts.sourceMovementId}, now(), now()
+    )
+    ON CONFLICT (tenant_id, source_movement_id) DO NOTHING
+  `);
+}
