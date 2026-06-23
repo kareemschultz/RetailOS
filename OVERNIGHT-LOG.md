@@ -12,9 +12,9 @@
 | Commit 5 — bond release + duty (INV-4/5) | ✅ implemented + Codex review (2 HIGH + 1 MEDIUM fixed); committed | `f013e85` | db **65/65**, api **21/21**, zero skips; fresh PG18 0000→0016; HARD GATE intact (`costing.ts`/`costing.rls.test.ts` untouched by commit 5) |
 | Commit 6 — RBAC + seed + contracts | ✅ implemented + Codex review (0 findings); committed | `9f35415` | db **70/70**, api **21/21**, zero skips; HARD GATE intact (costing untouched) |
 | Commit 7 — §45 + ADRs | ✅ docs-only (reassessment + ADR 0009); committed | `2c7ce61` | no code → no gate/Codex; mojibake clean. Phase 3 implementation COMPLETE on branch |
-| Phase 4 plan docs | ✅ DEEP plan (codebase+charter-grounded); competitive/GRA marked LIVE-RESEARCH-PENDING | `<pending-partb>` | `phase-4-implementation-plan.md` — POS/payments/shift/offline/numbering/fiscal-seam; 7 🔒 decisions |
-| Phase 5 plan docs | ✅ SKELETON (charter §20-grounded) | `<pending-partb>` | `phase-5-implementation-plan.md` — accounting as event-consumer; #6 hard-blocker; 5 🔒 decisions |
-| Phase 6+ plan docs | ✅ SKELETON (charter §18-grounded) | `<pending-partb>` | `phase-6-implementation-plan.md` — unify GRN+bond-receipt; FIFO landed-cost = Phase-2 OPEN decision; 5 🔒 decisions |
+| Phase 4 plan docs | ✅ DEEP plan (codebase+charter-grounded); competitive/GRA marked LIVE-RESEARCH-PENDING | `4e91082` | `phase-4-implementation-plan.md` — POS/payments/shift/offline/numbering/fiscal-seam; 7 🔒 decisions |
+| Phase 5 plan docs | ✅ SKELETON (charter §20-grounded) | `4e91082` | `phase-5-implementation-plan.md` — accounting as event-consumer; #6 hard-blocker; 5 🔒 decisions |
+| Phase 6+ plan docs | ✅ SKELETON (charter §18-grounded) | `4e91082` | `phase-6-implementation-plan.md` — unify GRN+bond-receipt; FIFO landed-cost = Phase-2 OPEN decision; 5 🔒 decisions |
 
 ## ⚠️ MORNING REVIEW + 🔒 DECISIONS NEEDING KAREEM (master list)
 
@@ -97,7 +97,7 @@
 
 > **Phase 3 implementation is COMPLETE on `phase-3-overnight`** (commits 0–7). Master stays frozen; nothing merged. Next: PART B — Phase 4/5/6 PLANNING docs only (no code).
 
-### PART B — Phase 4/5/6 planning docs (`<pending-partb>`)
+### PART B — Phase 4/5/6 planning docs (`4e91082`)
 - **Phase 4 (DEEP, HIGH confidence on the grounded parts):** `phase-4-implementation-plan.md` — codebase grounding table (extend `sale`/`sale_line`/`number_block`; build `payment`/`tender`/`shift`/`cash_movement`/offline-sync); 8-commit build order; offline conflict policy (reuse D5 + §13/§14); numbering reservation; shift/cash + blind-close/X-Z; money/FX; fiscalization SEAM (provider interface, "none" provider for Guyana-today); RBAC perms; 6 value-integrity invariants (INV-P4-1..6) with the write-path gate; testing strategy; **7 🔒 owner decisions**.
 - **Phase 5 (SKELETON):** `phase-5-implementation-plan.md` — accounting as an EVENT CONSUMER of the Phase 2/3/4 outbox (decoupled from OLTP); double-entry core; #6 BigInt `mulDivRound` = HARD blocker; INV-P5-1..6 (balance, immutable close, server-time, currency-explicit, inventory↔GL recon, auditor package); 5 🔒 decisions.
 - **Phase 6 (SKELETON):** `phase-6-implementation-plan.md` — reuse the valued-receipt engine (GRN = valued stock receipt; **unify with bond receipt**); landed-cost allocation = same shape as bond-release duty add; **FIFO landed cost forces the Phase-2 OPEN allocation decision** (currently `applyValuation` throws for FIFO value-only); INV-P6-1..5; 5 🔒 decisions.
