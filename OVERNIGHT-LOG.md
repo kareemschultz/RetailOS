@@ -9,7 +9,7 @@
 | Item | Status | SHA | Notes |
 |------|--------|-----|-------|
 | Commit 4 — bonded receiving + INV-3 | ✅ committed + Codex BLOCK review resolved (5 HIGH fixed) | `897f5fe` + `c9e552f` (fix) | db **55/55**, api **19/19**, zero skips; HARD GATE intact (frozen `costing.rls.test.ts` 0-diff vs master; fix touched no frozen file) |
-| Commit 5 — bond release + duty (INV-4/5) | ✅ implemented + Codex review (2 HIGH + 1 MEDIUM fixed); committed | `<pending-commit>` | db **65/65**, api **21/21**, zero skips; fresh PG18 0000→0016; HARD GATE intact (`costing.ts`/`costing.rls.test.ts` untouched by commit 5) |
+| Commit 5 — bond release + duty (INV-4/5) | ✅ implemented + Codex review (2 HIGH + 1 MEDIUM fixed); committed | `f013e85` | db **65/65**, api **21/21**, zero skips; fresh PG18 0000→0016; HARD GATE intact (`costing.ts`/`costing.rls.test.ts` untouched by commit 5) |
 | Commit 6 — RBAC + seed + contracts | pending | — | — |
 | Commit 7 — §45 + ADRs | pending | — | — |
 | Phase 4 plan docs | pending | — | — |
@@ -61,7 +61,7 @@
 
 ---
 
-### Commit 5 — bond release + duty (INV-4/5) (`<pending-commit>`)
+### Commit 5 — bond release + duty (INV-4/5) (`f013e85`)
 - **Scope:** `bond_release` + `bond_release_line` tables (`schema/bond_release.ts`); `unique(tenant_id, id)` added to `bond_receipt_line` (composite-FK target); `executeBondRelease` service; `bond.release` router; migration `0016_bond_release.sql` (DDL + hand-appended fail-closed RLS, FK targets ordered before dependent FKs); `InventoryBondReleased` added to `DomainEventType`; `tenant_admin` granted `bond.receive/release/approve_release`; DB-gated + router tests.
 - **Design (locked-plan compliant):** a release = an approved bonded→released `stock_transfer` (reuses commit-2/3 `createTransfer`→`shipTransfer`→`receiveTransfer`; qty+value conserved, INV-2) + a per-line value-only duty/tax `valuation_adjustment` (qtyDelta=0, valueDeltaMinor=duty+tax) through the EXISTING AVCO value-only seam (`applyValuation`). The duty add is an INTENTIONAL value-ADD (raises released cost basis, INV-5), not conservation. **Zero new costing machinery.**
 - **F4-class:** `bond_release` denormalizes `company_id`; source+dest are 3-col composite FKs `(tenant,company,location)→location` (a same-tenant Company-A release can't target Company-B's location). F5: each line enforced against the `bond_receipt_line.costing_method_applied` stamp (AVCO-only).
