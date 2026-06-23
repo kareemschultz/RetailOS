@@ -62,12 +62,19 @@ async function loadTransfer(
   tx: TenantTransaction,
   transferId: string
 ): Promise<{ transfer: TransferRow; lines: TransferLineRow[] }> {
+  // FOR UPDATE locks the transfer row so concurrent ship/receive/cancel calls
+  // SERIALIZE: a second caller blocks here until the first commits, then re-reads
+  // the now-advanced status and fails its guard. Without this, two callers could
+  // both pass a stale `status` check and append duplicate valued legs (a
+  // pre-existing commit-2 race that commit 3 amplifies — it would now duplicate
+  // VALUE, not just quantity, stranding stock+value in the in-transit node).
   const transfer = (
     await tx
       .select()
       .from(stockTransfer)
       .where(eq(stockTransfer.id, transferId))
       .limit(1)
+      .for("update")
   ).at(0);
   if (!transfer) {
     fail("transfer: not found in this tenant");

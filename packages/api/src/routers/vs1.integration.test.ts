@@ -1427,6 +1427,127 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).toBe(201);
   });
 
+  // Codex HIGH-1 regression — transfer-row serialization. Two concurrent ships
+  // on the same draft must NOT both pass the stale status guard; `loadTransfer`'s
+  // FOR UPDATE serializes them so exactly one wins (the other re-reads 'shipped'
+  // and is rejected), and the source is debited exactly once.
+  it("serializes concurrent transfer transitions — only one ship wins", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "C3R-Co" },
+      admin
+    );
+    const source = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "C3R-WH", type: "warehouse" },
+      admin
+    );
+    const dest = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "C3R-Store", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { sku: "C3R-P", name: "C3R", priceMinor: 100, currency: "USD" },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      { locationId: source.id, productId: product.id, qty: 10 },
+      admin
+    );
+    const created = await call(
+      appRouter.transfer.create,
+      {
+        sourceLocationId: source.id,
+        destLocationId: dest.id,
+        lines: [{ productId: product.id, qty: 4 }],
+      },
+      admin
+    );
+    const transferId = created.transfer.id;
+
+    const results = await Promise.allSettled([
+      call(appRouter.transfer.ship, { transferId }, admin),
+      call(appRouter.transfer.ship, { transferId }, admin),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+
+    // Source debited exactly ONCE (10 − 4 = 6), not twice (= 2).
+    const onHand = await withTenant(db, ORG, (tx) =>
+      services.stockOnHand(tx, source.id, product.id)
+    );
+    expect(onHand).toBe(6);
+  });
+
+  // Codex MEDIUM regression — a transfer line's SKU must belong to its product,
+  // else the ledger stores productId=A while costing resolves from SKU=B's cell.
+  it("rejects a transfer line whose SKU does not belong to its product", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "C3X-Co" },
+      admin
+    );
+    const source = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "C3X-WH", type: "warehouse" },
+      admin
+    );
+    const dest = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "C3X-Store", type: "store" },
+      admin
+    );
+    const each = await call(
+      appRouter.catalog.uomCreate,
+      { code: "C3X-EA", name: "C3X Each" },
+      admin
+    );
+    const prodA = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        currency: "USD",
+        name: "A",
+        priceMinor: 100,
+        sku: "C3X-A",
+      },
+      admin
+    );
+    const prodB = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        currency: "USD",
+        name: "B",
+        priceMinor: 100,
+        sku: "C3X-B",
+      },
+      admin
+    );
+    const skuB = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: "C3X-B-EA", productId: prodB.id },
+      admin
+    );
+    // productId=A but skuId belongs to B → rejected.
+    await expect(
+      call(
+        appRouter.transfer.create,
+        {
+          sourceLocationId: source.id,
+          destLocationId: dest.id,
+          lines: [{ productId: prodA.id, skuId: skuB.id, qty: 1 }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
   // Phase-3 commit 2 — INTRA-COMPANY only + cross-tenant rejection.
   it("rejects inter-company and cross-tenant transfers (commit 2)", async () => {
     const admin = { context: makeCtx(ADMIN, ORG) };

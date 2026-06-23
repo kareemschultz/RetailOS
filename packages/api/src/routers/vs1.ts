@@ -3041,7 +3041,11 @@ export const transferRouter = {
         for (const line of input.lines) {
           await assertProductVisible(tx, line.productId);
           if (line.skuId) {
-            await assertSkuVisible(tx, line.skuId);
+            // Not just visible — the SKU must belong to the line's product, or
+            // the ledger would store productId=A while costing resolves from
+            // SKU=B's cell (cross-cell value corruption). Mirrors
+            // inventory.receive's assertSkuBelongsToProduct.
+            await assertSkuBelongsToProduct(tx, line.skuId, line.productId);
           }
           if (line.lotId) {
             await assertLotVisible(tx, line.lotId);
