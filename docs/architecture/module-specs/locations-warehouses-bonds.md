@@ -44,11 +44,11 @@ New entitlements: `warehouse.manage_structure`, `inventory.transfer`, `inventory
 Every new table is tenant-owned ⇒ `tenant_id` + ENABLE+FORCE+`tenant_isolation` in the same migration (coverage gate enforces). Every mutation audited + emits its event (`event-map-phase3.md`) in the same tx. Server time authoritative; `occurredAt` injected by `emitEvent`.
 
 ## 6. Edge cases & error states
-- Transfer to same location → reject. **Inter-company transfer → reject** (INV-6). Transfer > on-hand at source → recommend **hard-block** (you can't ship stock you don't have), regardless of D5 sale-oversell — **owner decision**.
+- Transfer to same location → reject. **Inter-company transfer → reject** (INV-6). Transfer > on-hand at source → **HARD-BLOCK** (LOCKED 2026-06-22 — you can't ship internal stock you don't have; D5 sale-oversell does not apply to internal transfers).
 - In-transit never received → explicit cancel/return-to-source (audited); in-transit stock visible until resolved.
-- Bond release > bonded qty → reject. Release without approval → reject (INV-4). **Bonded FIFO SKU** → value-only duty add is AVCO-only today; restrict bonded to AVCO or implement FIFO value-only (owner decision).
+- Bond release > bonded qty → reject. Release without approval → reject (INV-4). **Bonded stock is AVCO-only (LOCKED 2026-06-22):** bond-receipt rejects a SKU whose resolved costing method is FIFO — duty-on-release uses the existing AVCO value-only seam; no speculative FIFO value-only path. A FIFO-bonded need later is a clean change-request.
 - Cross-tenant / wrong-parent location reference → composite-FK + `assertVisible` reject (INV-7); a node's `company_id` must match its parent's (CHECK).
-- Value-conservation rounding: AVCO transfers carry exact `V` via receipt + value-only remainder (no rounding); FIFO transfers use the additive layer-exact primitive (plan §C).
+- Value-conservation rounding: AVCO transfers carry exact `V` via receipt + value-only remainder (no rounding); FIFO transfers use the additive **aggregate-layer** primitive carrying exact `V` (plan §C).
 
 ## 7. Deferred / explicitly NOT Phase 3
 - Landed-cost **allocation** (freight/duty/insurance → unit cost apportionment) → **Phase 6**; Phase 3 reserves generic references only.

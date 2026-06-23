@@ -41,12 +41,13 @@ No bonded concept today. **Gap:** model bonded as a **location flag/type** (sepa
 - **#6 precision:** not on the value path (we carry exact integers).
 - **Stock grain:** keeping stock at the stock-holding node (not bin) preserves the frozen SKU×location costing grain; bin-grained stock would be a frozen-touching enlargement (open decision).
 
-## D. What must be BLOCKED until owner approval
-1. Stock grain (stock-holding-node vs bin-grained).
-2. FIFO transfer primitive: Phase-3 additive vs Phase-2 change-request; layer-preserving vs aggregate.
-3. In-transit modelling (value flows through the virtual node vs escrow on the transfer line).
-4. Bond-release mechanics (immediate-RBAC vs request→approve) and bonded-FIFO handling (restrict to AVCO vs FIFO value-only).
-5. Bins: structure+capacity seam only vs bin-level balances now.
-6. Transfer oversell (hard-block at source vs honour D5).
+## D. Decisions LOCKED (owner directive, 2026-06-22)
+All six approved (recommended defaults + explicit bonded-FIFO call); see `phase-3-implementation-plan.md` §I:
+1. **Stock grain → stock-holding-node** (SKU×location; no bin grain).
+2. **FIFO transfer → Phase-3 additive, AGGREGATE layer** (lot carries age, not the layer); existing costing suites must pass UNCHANGED (additivity proof).
+3. **In-transit → value flows through the virtual `is_transit` node** (no escrow-on-line).
+4. **Bond-release → RBAC-immediate** with reserved nullable approval fields; **bonded restricted to AVCO** (no speculative FIFO value-only).
+5. **Bins → structure + capacity seam only** (no bin-level balances).
+6. **Transfer oversell → hard-block at source** (D5 does not apply to internal transfers).
 
-**No Phase-3 schema or code until these are answered.**
+**Remaining gate before implementation:** Codex plan review on PR #11 (transfer value-conservation §C + the commit-0 composite-FK/set-once approach). Commit 0 is held until that review is in and any CRITICAL/HIGH addressed.
