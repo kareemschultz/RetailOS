@@ -1,6 +1,8 @@
 // Core domain services (charter §18/§19/§23/§25). All operate on a tenant-scoped
 // transaction (see withTenant) so they run under fail-closed RLS.
 export * from "./audit";
+export * from "./bond";
+export * from "./bond_release";
 export * from "./costing";
 export * from "./entitlements";
 export * from "./idempotency";

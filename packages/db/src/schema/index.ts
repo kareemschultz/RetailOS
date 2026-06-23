@@ -3,6 +3,8 @@
 // re-exported here.
 export * from "./audit";
 export * from "./auth";
+export * from "./bond";
+export * from "./bond_release";
 export * from "./company";
 export * from "./idempotency";
 export * from "./inventory";

@@ -23,6 +23,13 @@ export const DomainEventType = {
   InventoryTransferDispatched: "inventory.transfer_dispatched",
   InventoryTransferReceived: "inventory.transfer_received",
   InventoryTransferCancelled: "inventory.transfer_cancelled",
+  // Phase 3 — bond lifecycle (contracts in event-map-phase3.md). Commit 4 emits
+  // the receipt event; commit 5 emits the released event. release_requested /
+  // release_approved are RESERVED contracts for the deferred §22 approval
+  // workflow (release is RBAC-immediate in Phase 3) — mapped but not emitted,
+  // so they are intentionally NOT enumerated here (nothing produces them yet).
+  InventoryBondReceived: "inventory.bond_received",
+  InventoryBondReleased: "inventory.bond_released",
   SaleCreated: "sale.created",
 } as const;
 

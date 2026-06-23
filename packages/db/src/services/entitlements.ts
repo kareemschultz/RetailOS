@@ -17,6 +17,13 @@ export const ROLE_PERMISSIONS = {
     "inventory.reorder",
     "inventory.transfer",
     "inventory.transfer_receive",
+    // Bond receiving (commit 4) + release/approve (commit 5). Release is
+    // RBAC-immediate: an actor holding BOTH bond.release and bond.approve_release
+    // performs the clearance in one call. tenant_admin holds everything; the
+    // dedicated bond_officer role below is the separation-of-duties option.
+    "bond.receive",
+    "bond.release",
+    "bond.approve_release",
     "pos.create_sale",
     "reports.view",
   ],
@@ -29,6 +36,27 @@ export const ROLE_PERMISSIONS = {
     "inventory.transfer",
     "inventory.transfer_receive",
     "pos.create_sale",
+    "reports.view",
+  ],
+  // Phase 3 (commit 6) — operational separation of duties. A warehouse operator
+  // moves stock (receive/transfer/count) but has NO bond clearance and NO POS
+  // sale rights; a bond officer performs customs clearance (RBAC-immediate, so
+  // they hold BOTH bond.release + bond.approve_release) and the transfers a
+  // release composes, but NOT general POS/catalog rights.
+  warehouse: [
+    "inventory.receive",
+    "inventory.adjust",
+    "inventory.count",
+    "inventory.transfer",
+    "inventory.transfer_receive",
+    "reports.view",
+  ],
+  bond_officer: [
+    "bond.receive",
+    "bond.release",
+    "bond.approve_release",
+    "inventory.transfer",
+    "inventory.transfer_receive",
     "reports.view",
   ],
   cashier: ["pos.create_sale"],

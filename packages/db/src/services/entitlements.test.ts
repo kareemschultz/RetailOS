@@ -26,4 +26,26 @@ describe("entitlements (minimal VS#1 RBAC)", () => {
     expect(roleHasPermission(null, "pos.create_sale")).toBe(false);
     expect(roleHasPermission("ghost", "pos.create_sale")).toBe(false);
   });
+
+  // Phase 3 (commit 6) — operational separation of duties.
+  it("warehouse moves stock but has no bond clearance or POS rights", () => {
+    expect(roleHasPermission("warehouse", "inventory.transfer")).toBe(true);
+    expect(roleHasPermission("warehouse", "inventory.transfer_receive")).toBe(
+      true
+    );
+    expect(roleHasPermission("warehouse", "inventory.receive")).toBe(true);
+    expect(roleHasPermission("warehouse", "bond.release")).toBe(false);
+    expect(roleHasPermission("warehouse", "pos.create_sale")).toBe(false);
+  });
+
+  it("bond_officer holds BOTH bond perms (RBAC-immediate) but not POS/catalog", () => {
+    // RBAC-immediate release needs both in one role to clear in a single call.
+    expect(roleHasPermission("bond_officer", "bond.release")).toBe(true);
+    expect(roleHasPermission("bond_officer", "bond.approve_release")).toBe(
+      true
+    );
+    expect(roleHasPermission("bond_officer", "bond.receive")).toBe(true);
+    expect(roleHasPermission("bond_officer", "products.create")).toBe(false);
+    expect(roleHasPermission("bond_officer", "pos.create_sale")).toBe(false);
+  });
 });
