@@ -10,6 +10,7 @@ import {
   bondReceiptLine,
   company,
   location,
+  lot,
   organization,
   product,
   sku,
@@ -33,6 +34,11 @@ const TENANT = "bond_rls_tenant";
 const RE_BONDED_LOCATION = /bonded location/;
 const RE_AVCO_ONLY = /AVCO-only/i;
 const RE_BND_PREFIX = /^BND-/;
+// Codex review regressions (F2/F3/F4/F5).
+const RE_POSITIVE_COST = /unit cost must be positive/i;
+const RE_CROSS_SKU_LOT = /does not belong to SKU/i;
+const RE_CROSS_COMPANY = /does not belong to the receipt's company/i;
+const RE_LOCATION_COMPOSITE_FK = /bond_receipt_location_composite_fk/;
 
 function required<T>(v: T | undefined, what: string): T {
   if (v === undefined || v === null) {
@@ -51,6 +57,10 @@ describe.skipIf(!url)("Phase 3 bond receiving + INV-3 separation", () => {
   let fifoSkuId: string;
   let fifoProductId: string;
   let companyId: string;
+  // Codex F3/F4 fixtures: a second company's bonded location, and a lot that
+  // belongs to the FIFO sku (used to attach to the AVCO sku's line).
+  let companyBBondedLocationId: string;
+  let fifoLotId: string;
 
   const ctx = { tenantId: TENANT };
 
@@ -63,6 +73,7 @@ describe.skipIf(!url)("Phase 3 bond receiving + INV-3 separation", () => {
       await tx.delete(valuationLayer);
       await tx.delete(avgCost);
       await tx.delete(stockLedger);
+      await tx.delete(lot);
       await tx.delete(sku);
       await tx.delete(product);
       await tx.delete(location);
@@ -187,6 +198,48 @@ describe.skipIf(!url)("Phase 3 bond receiving + INV-3 separation", () => {
         ).at(0),
         "fifo sku"
       );
+      // Codex F4 fixture: a SECOND company with its own bonded location. Used to
+      // prove a company-A receipt cannot target company-B's bonded location.
+      const coB = required(
+        (
+          await tx
+            .insert(company)
+            .values({ tenantId: TENANT, name: "Bond Co B" })
+            .returning()
+        ).at(0),
+        "company B"
+      );
+      const coBBondedLoc = required(
+        (
+          await tx
+            .insert(location)
+            .values({
+              tenantId: TENANT,
+              companyId: coB.id,
+              name: "Bonded WH B",
+              type: "bonded",
+              isBonded: true,
+              isSellable: false,
+            })
+            .returning()
+        ).at(0),
+        "company B bonded location"
+      );
+      // Codex F3 fixture: a lot that belongs to the FIFO sku. Attaching it to an
+      // AVCO sku's line must be rejected (cross-sku lot).
+      const fifoLotRow = required(
+        (
+          await tx
+            .insert(lot)
+            .values({
+              tenantId: TENANT,
+              skuId: fifoS.id,
+              lotNumber: "LOT-FIFO-001",
+            })
+            .returning()
+        ).at(0),
+        "fifo lot"
+      );
       return {
         companyId: co.id,
         bondedLocationId: bondedLoc.id,
@@ -195,6 +248,8 @@ describe.skipIf(!url)("Phase 3 bond receiving + INV-3 separation", () => {
         avcoSkuId: avcoS.id,
         fifoProductId: fifoP.id,
         fifoSkuId: fifoS.id,
+        companyBBondedLocationId: coBBondedLoc.id,
+        fifoLotId: fifoLotRow.id,
       };
     });
     companyId = ids.companyId;
@@ -204,6 +259,8 @@ describe.skipIf(!url)("Phase 3 bond receiving + INV-3 separation", () => {
     avcoSkuId = ids.avcoSkuId;
     fifoProductId = ids.fifoProductId;
     fifoSkuId = ids.fifoSkuId;
+    companyBBondedLocationId = ids.companyBBondedLocationId;
+    fifoLotId = ids.fifoLotId;
   });
 
   afterAll(async () => {
@@ -318,5 +375,100 @@ describe.skipIf(!url)("Phase 3 bond receiving + INV-3 separation", () => {
         .then((rows) => rows.at(0))
     );
     expect(storeCell).toBeUndefined();
+  });
+
+  // ── Codex review regressions (F2/F3/F4/F5) ──────────────────────────────
+
+  it("F5: rejects a bond receipt line with a non-positive unit cost", async () => {
+    await expect(
+      withTenant(db, TENANT, (tx) =>
+        createBondReceipt(tx, ctx, {
+          companyId,
+          locationId: bondedLocationId,
+          lines: [
+            {
+              productId: avcoProductId,
+              skuId: avcoSkuId,
+              qty: 10,
+              unitCostMinor: 0,
+              costCurrency: "USD",
+              costScale: 2,
+            },
+          ],
+        })
+      )
+    ).rejects.toThrow(RE_POSITIVE_COST);
+  });
+
+  it("F3: rejects a lot that belongs to a different SKU (cross-sku lot)", async () => {
+    await expect(
+      withTenant(db, TENANT, (tx) =>
+        createBondReceipt(tx, ctx, {
+          companyId,
+          locationId: bondedLocationId,
+          lines: [
+            {
+              productId: avcoProductId,
+              skuId: avcoSkuId,
+              // fifoLotId belongs to the FIFO sku, not avcoSkuId.
+              lotId: fifoLotId,
+              qty: 10,
+              unitCostMinor: 1500,
+              costCurrency: "USD",
+              costScale: 2,
+            },
+          ],
+        })
+      )
+    ).rejects.toThrow(RE_CROSS_SKU_LOT);
+  });
+
+  it("F4 (service): rejects a receipt into another company's bonded location", async () => {
+    await expect(
+      withTenant(db, TENANT, (tx) =>
+        createBondReceipt(tx, ctx, {
+          companyId, // company A
+          locationId: companyBBondedLocationId, // company B's bonded WH
+          lines: [
+            {
+              productId: avcoProductId,
+              skuId: avcoSkuId,
+              qty: 10,
+              unitCostMinor: 1500,
+              costCurrency: "USD",
+              costScale: 2,
+            },
+          ],
+        })
+      )
+    ).rejects.toThrow(RE_CROSS_COMPANY);
+  });
+
+  it("F4 (DB): the (tenant,company,location) composite FK blocks a cross-company receipt even via a raw insert that bypasses the service guard", async () => {
+    // Bypass the service entirely — prove the DB layer kills the cross-company
+    // hole for ANY caller (the H1/F4 durable backstop), not just the guarded
+    // service/router. (tenant, companyA, companyB_loc) is not a row in location.
+    // drizzle wraps the pg error, so the constraint name + 23503 code live on
+    // the `cause`, not the top-level "Failed query" message.
+    let caught: unknown;
+    try {
+      await withTenant(db, TENANT, (tx) =>
+        tx.insert(bondReceipt).values({
+          tenantId: TENANT,
+          companyId, // company A
+          locationId: companyBBondedLocationId, // company B's location
+          number: "BND-RAW-001",
+          status: "open",
+        })
+      );
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeDefined();
+    const cause = (caught as { cause?: { code?: string; constraint?: string } })
+      .cause;
+    // 23503 = foreign_key_violation; constraint = the 3-col composite FK.
+    expect(cause?.code).toBe("23503");
+    expect(cause?.constraint).toMatch(RE_LOCATION_COMPOSITE_FK);
   });
 });

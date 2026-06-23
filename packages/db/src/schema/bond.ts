@@ -66,10 +66,14 @@ export const bondReceipt = pgTable(
       foreignColumns: [company.tenantId, company.id],
       name: "bond_receipt_company_composite_fk",
     }),
-    // Composite FK: bonded location must be in the same tenant.
+    // Composite FK (Codex F4): the bonded location must be in the same tenant
+    // AND the same company as the receipt. The 3-col target prevents a
+    // same-tenant Company-A receipt from targeting Company-B's bonded location
+    // (a 2-col tenant-only FK would let it through). Kills the cross-company
+    // hole at the DB layer for ANY caller, not just the guarded router.
     foreignKey({
-      columns: [table.tenantId, table.locationId],
-      foreignColumns: [location.tenantId, location.id],
+      columns: [table.tenantId, table.companyId, table.locationId],
+      foreignColumns: [location.tenantId, location.companyId, location.id],
       name: "bond_receipt_location_composite_fk",
     }),
   ]
@@ -133,12 +137,18 @@ export const bondReceiptLine = pgTable(
       foreignColumns: [sku.tenantId, sku.id],
       name: "bond_receipt_line_sku_composite_fk",
     }),
-    // Plain FK: lot (nullable; composite FK not needed — lot already has
-    // (tenant_id, id) unique from commit 0).
+    // Composite FK (Codex F3): lot is nullable, but when present it must belong
+    // to THIS tenant. A single-column (lot_id)→lot(id) FK references the global
+    // UUID PK and would accept another tenant's lot id (FK checks bypass RLS).
+    // The (tenant_id, lot_id) composite target (lot's commit-0 (tenant_id, id)
+    // unique) closes that cross-tenant hole at the DB layer. The lot↔sku
+    // relationship is enforced by a router/service guard (lot has no
+    // (tenant_id, sku_id, id) unique to FK against — mirrors
+    // assertSkuBelongsToProduct).
     foreignKey({
-      columns: [table.lotId],
-      foreignColumns: [lot.id],
-      name: "bond_receipt_line_lot_fk",
+      columns: [table.tenantId, table.lotId],
+      foreignColumns: [lot.tenantId, lot.id],
+      name: "bond_receipt_line_lot_composite_fk",
     }),
     // Plain FK: movement (stock_ledger row; not composite — movement already
     // has global UUID PK and is always tenant-scoped by RLS).
@@ -147,11 +157,12 @@ export const bondReceiptLine = pgTable(
       foreignColumns: [stockLedger.id],
       name: "bond_receipt_line_movement_fk",
     }),
-    // Cost must be non-negative.
-    check(
-      "bond_receipt_line_cost_nonneg_chk",
-      sql`${table.unitCostMinor} >= 0`
-    ),
+    // Cost must be POSITIVE (Codex F5). Bonded stock is dutiable imported goods
+    // with a declared landed cost; a zero unit cost would create qty>0 with
+    // value=0 (avg cost 0) and zero the duty-on-release basis (commit 5). The
+    // qty=0⟺value=0 DB invariant (`qty_on_hand<>0 OR value=0`) does NOT catch
+    // qty>0&value=0, so this is enforced explicitly for bonded receipts.
+    check("bond_receipt_line_cost_pos_chk", sql`${table.unitCostMinor} > 0`),
     check("bond_receipt_line_qty_pos_chk", sql`${table.qty} > 0`),
   ]
 );

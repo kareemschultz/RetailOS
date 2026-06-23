@@ -1,5 +1,5 @@
 {
-  "id": "e6ee53b3-1c60-4ab4-b8a1-ea963074a483",
+  "id": "493b4774-43e0-4203-959e-6af01ef9556f",
   "prevId": "be12ed7f-ae61-4341-982b-8d3cdb9ab132",
   "version": "7",
   "dialect": "postgresql",
@@ -659,8 +659,8 @@
           "name": "bond_receipt_location_composite_fk",
           "tableFrom": "bond_receipt",
           "tableTo": "location",
-          "columnsFrom": ["tenant_id", "location_id"],
-          "columnsTo": ["tenant_id", "id"],
+          "columnsFrom": ["tenant_id", "company_id", "location_id"],
+          "columnsTo": ["tenant_id", "company_id", "id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -856,12 +856,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "bond_receipt_line_lot_fk": {
-          "name": "bond_receipt_line_lot_fk",
+        "bond_receipt_line_lot_composite_fk": {
+          "name": "bond_receipt_line_lot_composite_fk",
           "tableFrom": "bond_receipt_line",
           "tableTo": "lot",
-          "columnsFrom": ["lot_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": ["tenant_id", "lot_id"],
+          "columnsTo": ["tenant_id", "id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -885,9 +885,9 @@
       },
       "policies": {},
       "checkConstraints": {
-        "bond_receipt_line_cost_nonneg_chk": {
-          "name": "bond_receipt_line_cost_nonneg_chk",
-          "value": "\"bond_receipt_line\".\"unit_cost_minor\" >= 0"
+        "bond_receipt_line_cost_pos_chk": {
+          "name": "bond_receipt_line_cost_pos_chk",
+          "value": "\"bond_receipt_line\".\"unit_cost_minor\" > 0"
         },
         "bond_receipt_line_qty_pos_chk": {
           "name": "bond_receipt_line_qty_pos_chk",

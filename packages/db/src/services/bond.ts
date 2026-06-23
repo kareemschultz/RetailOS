@@ -3,6 +3,7 @@ import {
   bondReceipt,
   bondReceiptLine,
   location as locationTable,
+  lot as lotTable,
 } from "../schema";
 import type { TenantTransaction } from "../tenant";
 import { applyValuation, resolveCostingMethod } from "./costing";
@@ -50,6 +51,80 @@ function fail(msg: string): never {
   throw new Error(msg);
 }
 
+// Verify the target is a BONDED location (is_bonded=true) in the stated company.
+// The router guards these too, but createBondReceipt is exported, so this is the
+// service-level backstop (Codex F1) for any future direct caller. The
+// (tenant_id, company_id, location_id) composite FK on bond_receipt is the
+// ultimate DB-layer guarantee; this gives a clean error before the insert.
+async function assertBondedLocation(
+  tx: TenantTransaction,
+  locationId: string,
+  companyId: string
+): Promise<void> {
+  const loc = (
+    await tx
+      .select({
+        isBonded: locationTable.isBonded,
+        name: locationTable.name,
+        companyId: locationTable.companyId,
+      })
+      .from(locationTable)
+      .where(eq(locationTable.id, locationId))
+      .limit(1)
+  ).at(0);
+  if (!loc) {
+    fail("bond: location not found in this tenant");
+  }
+  if (loc.companyId !== companyId) {
+    fail(
+      "bond: bonded location does not belong to the receipt's company (cross-company receipt rejected)"
+    );
+  }
+  if (!loc.isBonded) {
+    fail(
+      "bond: bond receipts can only be received into a bonded location (is_bonded=true)"
+    );
+  }
+}
+
+// Per-line cross-entity validation (Codex F3/F5), defense-in-depth over the
+// router guards for direct callers of the exported service.
+async function validateBondLine(
+  tx: TenantTransaction,
+  lineInput: BondReceiptLineInput
+): Promise<void> {
+  // F5: bonded dutiable goods must be valued at a POSITIVE unit cost. A zero
+  // cost creates qty>0 with value=0 and zeroes the duty-on-release basis
+  // (commit 5). Enforced by the DB CHECK too; this is the clean error.
+  if (lineInput.unitCostMinor <= 0) {
+    fail(
+      `bond: unit cost must be positive for bonded stock (SKU ${lineInput.skuId}); got ${lineInput.unitCostMinor}`
+    );
+  }
+  // F3: when a lot is supplied it must BELONG to this line's sku. The
+  // (tenant_id, lot_id) composite FK only proves the lot is in this tenant; lot
+  // has no (tenant_id, sku_id, id) unique to FK against, so the lot↔sku
+  // relationship is checked here (the only cross-entity tie the composite FKs
+  // can't enforce). Router guards this too; this is the exported-caller backstop.
+  if (lineInput.lotId) {
+    const lotRow = (
+      await tx
+        .select({ skuId: lotTable.skuId })
+        .from(lotTable)
+        .where(eq(lotTable.id, lineInput.lotId))
+        .limit(1)
+    ).at(0);
+    if (!lotRow) {
+      fail(`bond: lot ${lineInput.lotId} not found in this tenant`);
+    }
+    if (lotRow.skuId !== lineInput.skuId) {
+      fail(
+        `bond: lot ${lineInput.lotId} does not belong to SKU ${lineInput.skuId} (cross-SKU lot rejected)`
+      );
+    }
+  }
+}
+
 export async function createBondReceipt(
   tx: TenantTransaction,
   ctx: ServiceContext,
@@ -58,22 +133,7 @@ export async function createBondReceipt(
   if (input.lines.length === 0) {
     fail("bond: at least one line is required");
   }
-  // Verify the target is a BONDED location (is_bonded=true).
-  const loc = (
-    await tx
-      .select({ isBonded: locationTable.isBonded, name: locationTable.name })
-      .from(locationTable)
-      .where(eq(locationTable.id, input.locationId))
-      .limit(1)
-  ).at(0);
-  if (!loc) {
-    fail("bond: location not found in this tenant");
-  }
-  if (!loc.isBonded) {
-    fail(
-      "bond: bond receipts can only be received into a bonded location (is_bonded=true)"
-    );
-  }
+  await assertBondedLocation(tx, input.locationId, input.companyId);
 
   // Gapless per-tenant bond receipt number (advisory-locked).
   await tx.execute(
@@ -106,6 +166,7 @@ export async function createBondReceipt(
 
   const lines: BondReceiptLineRow[] = [];
   for (const lineInput of input.lines) {
+    await validateBondLine(tx, lineInput);
     // Resolve costing method and enforce AVCO-only for bonded stock (§I.4/F5).
     const method = await resolveCostingMethod(tx, ctx, {
       productId: lineInput.productId,

@@ -1520,6 +1520,29 @@ async function assertLocationVisible(
   }
 }
 
+// Codex F2: a router that accepts a caller-supplied companyId must validate it
+// with an RLS-scoped read before passing it to a service/insert. The DB-level
+// composite company FK already rejects a cross-TENANT company id, but this
+// surfaces a clean NOT_FOUND instead of a raw FK violation (and matches the
+// belt-and-braces guard pattern used across this router).
+async function assertCompanyVisible(
+  tx: TenantTransaction,
+  companyId: string
+): Promise<void> {
+  const row = (
+    await tx
+      .select({ id: schema.company.id })
+      .from(schema.company)
+      .where(eq(schema.company.id, companyId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Company not found in this tenant",
+    });
+  }
+}
+
 async function assertCategoryVisible(
   tx: TenantTransaction,
   categoryId: string
@@ -1804,6 +1827,31 @@ async function assertSkuBelongsToProduct(
   if (!item) {
     throw new ORPCError("NOT_FOUND", {
       message: "SKU not found in this tenant/product",
+    });
+  }
+}
+
+// Codex F3: a line that carries both a skuId and a lotId must prove the lot
+// BELONGS to that sku — otherwise a same-tenant lot from a different sku could
+// be attached, corrupting which sku's costing the lot is tied to. Lot has no
+// (tenant_id, sku_id, id) unique to FK against, so this is a guard (mirrors
+// assertSkuBelongsToProduct). The (tenant_id, lot_id) composite FK separately
+// guarantees the lot is in this tenant.
+async function assertLotBelongsToSku(
+  tx: TenantTransaction,
+  lotId: string,
+  skuId: string
+): Promise<void> {
+  const item = (
+    await tx
+      .select({ id: schema.lot.id })
+      .from(schema.lot)
+      .where(and(eq(schema.lot.id, lotId), eq(schema.lot.skuId, skuId)))
+      .limit(1)
+  ).at(0);
+  if (!item) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Lot not found in this tenant/SKU",
     });
   }
 }
@@ -3248,7 +3296,9 @@ export const bondRouter = {
               skuId: z.string().uuid(),
               lotId: z.string().uuid().optional(),
               qty: z.number().int().positive(),
-              unitCostMinor: z.number().int().min(0),
+              // Codex F5: bonded dutiable goods must carry a POSITIVE unit cost
+              // (a 0 would create qty>0 with value=0 and zero the duty basis).
+              unitCostMinor: z.number().int().positive(),
               costCurrency: z.string().length(3),
               costScale: z.number().int().min(0),
               customsReference: z.string().max(500).optional(),
@@ -3262,13 +3312,15 @@ export const bondRouter = {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "bond.receive");
-        // Belt-and-braces guards over DB composite FKs.
+        // Belt-and-braces guards over DB composite FKs (H1 cross-tenant class).
+        await assertCompanyVisible(tx, input.companyId); // F2
         await assertLocationVisible(tx, input.locationId);
         for (const line of input.lines) {
           await assertProductVisible(tx, line.productId);
           await assertSkuBelongsToProduct(tx, line.skuId, line.productId);
           if (line.lotId) {
-            await assertLotVisible(tx, line.lotId);
+            // F3: lot must belong to this line's sku, not merely be visible.
+            await assertLotBelongsToSku(tx, line.lotId, line.skuId);
           }
         }
         const { receipt, lines } = await services.createBondReceipt(tx, ctx, {
