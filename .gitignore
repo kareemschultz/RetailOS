@@ -58,3 +58,6 @@ coverage
 .cache
 tmp
 temp
+
+# Local design-reference uploads (not part of the repo)
+uploaded reference designs*
