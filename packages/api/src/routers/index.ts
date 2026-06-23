@@ -10,6 +10,7 @@ import {
   productRouter,
   reportsRouter,
   tenantRouter,
+  transferRouter,
 } from "./vs1";
 
 export const appRouter = {
@@ -25,6 +26,7 @@ export const appRouter = {
   location: locationRouter,
   product: productRouter,
   inventory: inventoryRouter,
+  transfer: transferRouter,
   pos: posRouter,
   reports: reportsRouter,
 };

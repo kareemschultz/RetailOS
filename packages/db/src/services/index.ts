@@ -8,4 +8,5 @@ export * from "./inventory";
 export * from "./money";
 export * from "./outbox";
 export * from "./stock-ledger";
+export * from "./transfer";
 export * from "./types";
