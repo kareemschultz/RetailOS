@@ -9,6 +9,14 @@
 
 ## Event catalog
 
+### `inventory.transfer_created`
+- **Producer:** `transfer.create` router (draft transfer + lines + the per-transfer in-transit node). **Intra-company only.**
+- **Phase-3 consumer:** transfer worklist; audit. **Future:** P12 Analytics.
+- **Payload (as-built, commit 2):** `{ transferId, companyId, number, sourceLocationId, destLocationId, inTransitLocationId, expectedReceiptDate, lines:[{ skuId, productId, qtyBase }], createdBy, occurredAt }`.
+- **Notes:** no stock moves yet (draft). Value is established at ship time.
+
+> **Commit-2 status (2026-06-22):** `transfer_created`/`transfer_dispatched`/`transfer_received`/`transfer_cancelled` are EMITTED for the quantity lifecycle. The **value fields** on dispatched/received (`releasedValueMinor`/`receivedValueMinor`/`currency`/`scale`) are **RESERVED `null`** until commit 3 wires value conservation (same present-but-null reserved-field discipline as Phase 2).
+
 ### `inventory.transfer_dispatched`
 - **Producer:** `transfer` router → `executeTransfer` (leg 1: source issue → in-transit). **Intra-company only** — `sourceLocationId` & `destLocationId` share `companyId` (INV-6); inter-company transfers are blocked (need P5 due-to/due-from GL).
 - **Phase-3 consumer:** in-transit read model; audit. **Future:** P5 Accounting (in-transit asset move), P10 Edge Hub, P12 Analytics (transfer velocity).

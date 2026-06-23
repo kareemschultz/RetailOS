@@ -2971,3 +2971,180 @@ export const reportsRouter = {
       });
     }),
 };
+
+// Phase 3 commit 2 — stock transfers (quantity conservation; value = commit 3).
+// Two-step intra-company transfer through the per-transfer in-transit node.
+// Value fields on the events are RESERVED null here and bound in commit 3.
+export const transferRouter = {
+  create: tenantProcedure
+    .input(
+      z.object({
+        sourceLocationId: z.string().uuid(),
+        destLocationId: z.string().uuid(),
+        expectedReceiptDate: z.string().optional(),
+        lines: z
+          .array(
+            z.object({
+              productId: z.string().uuid(),
+              skuId: z.string().uuid().optional(),
+              lotId: z.string().uuid().optional(),
+              qty: z.number().int().positive(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer");
+        // Belt-and-braces over the DB composite FKs (which already make a
+        // cross-tenant / inter-company reference impossible).
+        await assertLocationVisible(tx, input.sourceLocationId);
+        await assertLocationVisible(tx, input.destLocationId);
+        for (const line of input.lines) {
+          await assertProductVisible(tx, line.productId);
+          if (line.skuId) {
+            await assertSkuVisible(tx, line.skuId);
+          }
+          if (line.lotId) {
+            await assertLotVisible(tx, line.lotId);
+          }
+        }
+        const { transfer, lines } = await services.createTransfer(tx, ctx, {
+          sourceLocationId: input.sourceLocationId,
+          destLocationId: input.destLocationId,
+          expectedReceiptDate: input.expectedReceiptDate ?? null,
+          lines: input.lines,
+        });
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryTransferCreated,
+          payload: {
+            transferId: transfer.id,
+            companyId: transfer.companyId,
+            number: transfer.number,
+            sourceLocationId: transfer.sourceLocationId,
+            destLocationId: transfer.destLocationId,
+            inTransitLocationId: transfer.inTransitLocationId,
+            expectedReceiptDate: transfer.expectedReceiptDate,
+            lines: lines.map((l) => ({
+              skuId: l.skuId,
+              productId: l.productId,
+              qtyBase: l.qty,
+            })),
+            createdBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.transfer.create",
+          entityType: "stock_transfer",
+          entityId: transfer.id,
+          after: { transfer, lines },
+        });
+        return { transfer, lines };
+      });
+    }),
+  ship: tenantProcedure
+    .input(z.object({ transferId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer");
+        const transfer = await services.shipTransfer(tx, ctx, input.transferId);
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryTransferDispatched,
+          payload: {
+            transferId: transfer.id,
+            companyId: transfer.companyId,
+            sourceLocationId: transfer.sourceLocationId,
+            destLocationId: transfer.destLocationId,
+            inTransitLocationId: transfer.inTransitLocationId,
+            shippedAt: transfer.shippedAt,
+            // RESERVED null — exact released value V is bound in commit 3.
+            releasedValueMinor: null,
+            currency: null,
+            scale: null,
+            dispatchedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.transfer.ship",
+          entityType: "stock_transfer",
+          entityId: transfer.id,
+          after: transfer,
+        });
+        return transfer;
+      });
+    }),
+  receive: tenantProcedure
+    .input(z.object({ transferId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer_receive");
+        const transfer = await services.receiveTransfer(
+          tx,
+          ctx,
+          input.transferId
+        );
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryTransferReceived,
+          payload: {
+            transferId: transfer.id,
+            companyId: transfer.companyId,
+            sourceLocationId: transfer.sourceLocationId,
+            destLocationId: transfer.destLocationId,
+            actualReceiptDate: transfer.actualReceiptDate,
+            // RESERVED null — received value (== released) is bound in commit 3.
+            receivedValueMinor: null,
+            currency: null,
+            scale: null,
+            receivedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.transfer.receive",
+          entityType: "stock_transfer",
+          entityId: transfer.id,
+          after: transfer,
+        });
+        return transfer;
+      });
+    }),
+  cancel: tenantProcedure
+    .input(
+      z.object({
+        transferId: z.string().uuid(),
+        reason: z.string().max(2000).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer");
+        const transfer = await services.cancelTransfer(
+          tx,
+          ctx,
+          input.transferId
+        );
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryTransferCancelled,
+          payload: {
+            transferId: transfer.id,
+            companyId: transfer.companyId,
+            sourceLocationId: transfer.sourceLocationId,
+            inTransitLocationId: transfer.inTransitLocationId,
+            reason: input.reason ?? null,
+            cancelledBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.transfer.cancel",
+          entityType: "stock_transfer",
+          entityId: transfer.id,
+          after: transfer,
+        });
+        return transfer;
+      });
+    }),
+};

@@ -17,6 +17,12 @@ export const DomainEventType = {
   InventoryStockDiscrepancyReviewed: "inventory.stock_discrepancy_reviewed",
   InventoryStockDiscrepancy: "inventory.stock_discrepancy",
   InventoryValuationUpdated: "inventory.valuation_updated",
+  // Phase 3 — transfer lifecycle (contracts in event-map-phase3.md). Commit 2
+  // emits these for quantity movements; value fields arrive with commit 3.
+  InventoryTransferCreated: "inventory.transfer_created",
+  InventoryTransferDispatched: "inventory.transfer_dispatched",
+  InventoryTransferReceived: "inventory.transfer_received",
+  InventoryTransferCancelled: "inventory.transfer_cancelled",
   SaleCreated: "sale.created",
 } as const;
 

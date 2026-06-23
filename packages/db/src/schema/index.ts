@@ -12,3 +12,4 @@ export * from "./organization";
 export * from "./outbox";
 export * from "./product";
 export * from "./sales";
+export * from "./transfer";

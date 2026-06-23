@@ -64,6 +64,8 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.stockCount);
         await tx.delete(schema.avgCost);
         await tx.delete(schema.valuationLayer);
+        await tx.delete(schema.stockTransferLine);
+        await tx.delete(schema.stockTransfer);
         await tx.delete(schema.stockLedger);
         await tx.delete(schema.reorderRule);
         await tx.delete(schema.bomLine);
@@ -1149,6 +1151,162 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       isBonded: false,
       isTransit: false,
     });
+  });
+
+  // Phase-3 commit 2 — two-step transfer, QUANTITY conservation. The write path
+  // (transfer router) invokes transfer.ts, which moves every leg through the
+  // sole ledger mutator → qty conserved across {source, in-transit, dest} at
+  // each step (the standing #8 write-path discipline).
+  it("two-step transfer conserves quantity through a per-transfer in-transit node (commit 2)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "C2-Co" },
+      admin
+    );
+    const source = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "C2-WH", type: "warehouse" },
+      admin
+    );
+    const dest = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "C2-Store", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { sku: "C2-P", name: "C2 Prod", priceMinor: 100, currency: "USD" },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      { locationId: source.id, productId: product.id, qty: 10 },
+      admin
+    );
+
+    const created = await call(
+      appRouter.transfer.create,
+      {
+        sourceLocationId: source.id,
+        destLocationId: dest.id,
+        lines: [{ productId: product.id, qty: 4 }],
+      },
+      admin
+    );
+    const transferId = created.transfer.id;
+    const transitId = created.transfer.inTransitLocationId;
+    expect(created.transfer.status).toBe("draft");
+
+    const onHand = (loc: string) =>
+      withTenant(db, ORG, (tx) => services.stockOnHand(tx, loc, product.id));
+    const transit = () =>
+      withTenant(db, ORG, (tx) =>
+        services.transitBalance(tx, transitId, product.id)
+      );
+
+    // Before ship: all 10 at source.
+    expect(await onHand(source.id)).toBe(10);
+
+    await call(appRouter.transfer.ship, { transferId }, admin);
+    // After ship: source 6, in-transit 4, dest 0 → Σ = 10 (conserved).
+    expect(await onHand(source.id)).toBe(6);
+    expect(await transit()).toBe(4);
+    expect(await onHand(dest.id)).toBe(0);
+
+    await call(appRouter.transfer.receive, { transferId }, admin);
+    // After receive: source 6, in-transit 0, dest 4 → Σ = 10 (conserved).
+    expect(await onHand(source.id)).toBe(6);
+    expect(await transit()).toBe(0);
+    expect(await onHand(dest.id)).toBe(4);
+
+    // Cannot receive again (already received) — no over-receive.
+    await expect(
+      call(appRouter.transfer.receive, { transferId }, admin)
+    ).rejects.toThrow();
+    // Cannot cancel after received.
+    await expect(
+      call(appRouter.transfer.cancel, { transferId }, admin)
+    ).rejects.toThrow();
+  });
+
+  // Phase-3 commit 2 — INTRA-COMPANY only + cross-tenant rejection.
+  it("rejects inter-company and cross-tenant transfers (commit 2)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const coA = await call(appRouter.company.create, { name: "C2-CoA" }, admin);
+    const coA2 = await call(
+      appRouter.company.create,
+      { name: "C2-CoA2" },
+      admin
+    );
+    const locA = await call(
+      appRouter.location.create,
+      { companyId: coA.id, name: "C2-LocA", type: "warehouse" },
+      admin
+    );
+    const locA2 = await call(
+      appRouter.location.create,
+      { companyId: coA2.id, name: "C2-LocA2", type: "store" },
+      admin
+    );
+    const prod = await call(
+      appRouter.product.create,
+      { sku: "C2-IP", name: "IC", priceMinor: 1, currency: "USD" },
+      admin
+    );
+
+    // Inter-company (locA in coA, locA2 in coA2, same tenant) → service rejects.
+    await expect(
+      call(
+        appRouter.transfer.create,
+        {
+          sourceLocationId: locA.id,
+          destLocationId: locA2.id,
+          lines: [{ productId: prod.id, qty: 1 }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // Cross-tenant: tenant B location as dest → router assertLocationVisible.
+    const coB = await call(
+      appRouter.company.create,
+      { name: "C2-CoB" },
+      adminB
+    );
+    const locB = await call(
+      appRouter.location.create,
+      { companyId: coB.id, name: "C2-LocB", type: "store" },
+      adminB
+    );
+    await expect(
+      call(
+        appRouter.transfer.create,
+        {
+          sourceLocationId: locA.id,
+          destLocationId: locB.id,
+          lines: [{ productId: prod.id, qty: 1 }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // DB-layer backstop: a RAW stock_transfer in tenant A referencing tenant B's
+    // location (bypassing the router) is rejected by the dest composite FK.
+    await expect(
+      withTenant(db, ORG, (tx) =>
+        tx.insert(schema.stockTransfer).values({
+          tenantId: ORG,
+          companyId: coA.id,
+          number: "C2-RAW-1",
+          sourceLocationId: locA.id,
+          destLocationId: locB.id,
+          inTransitLocationId: locA.id,
+          status: "draft",
+        })
+      )
+    ).rejects.toThrow();
   });
 
   // H2 regression — D5 allow-oversell-with-flagging: the ledger is NOT
