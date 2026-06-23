@@ -87,6 +87,8 @@ export const lot = pgTable(
     index("lot_tenantId_idx").on(table.tenantId),
     index("lot_skuId_idx").on(table.skuId),
     index("lot_expiryDate_idx").on(table.expiryDate),
+    // Composite-FK target (Phase 3 #5).
+    unique("lot_tenant_id_uq").on(table.tenantId, table.id),
   ]
 );
 

@@ -168,6 +168,8 @@ export const product = pgTable(
     index("product_categoryId_idx").on(table.categoryId),
     index("product_brandId_idx").on(table.brandId),
     index("product_baseUomId_idx").on(table.baseUomId),
+    // Composite-FK target (Phase 3 #5).
+    unique("product_tenant_id_uq").on(table.tenantId, table.id),
   ]
 );
 
@@ -230,6 +232,8 @@ export const sku = pgTable(
     index("sku_tenantId_idx").on(table.tenantId),
     index("sku_productId_idx").on(table.productId),
     index("sku_baseUomId_idx").on(table.baseUomId),
+    // Composite-FK target (Phase 3 #5).
+    unique("sku_tenant_id_uq").on(table.tenantId, table.id),
   ]
 );
 
