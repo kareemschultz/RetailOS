@@ -8,7 +8,7 @@
 
 | Item | Status | SHA | Notes |
 |------|--------|-----|-------|
-| Commit 4 — bonded receiving + INV-3 | ✅ committed + Codex BLOCK review resolved (5 HIGH fixed) | `897f5fe` + fix | db **55/55**, api **19/19**, zero skips; HARD GATE intact (frozen `costing.rls.test.ts` 0-diff vs master; fix touched no frozen file) |
+| Commit 4 — bonded receiving + INV-3 | ✅ committed + Codex BLOCK review resolved (5 HIGH fixed) | `897f5fe` + `c9e552f` (fix) | db **55/55**, api **19/19**, zero skips; HARD GATE intact (frozen `costing.rls.test.ts` 0-diff vs master; fix touched no frozen file) |
 | Commit 5 — bond release + duty (INV-4/5) | ⏳ WIP set aside (schema+service drafted) | — | resumes after commit-4 review processed |
 | Commit 6 — RBAC + seed + contracts | pending | — | — |
 | Commit 7 — §45 + ADRs | pending | — | — |
