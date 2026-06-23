@@ -1230,6 +1230,203 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).rejects.toThrow();
   });
 
+  // Phase-3 commit 3 — VALUE conservation through the PRIMARY WRITE PATH. The
+  // transfer ROUTER (create → ship → receive) must invoke valuation on BOTH legs
+  // so avg_cost/valuation_layer actually MOVE source → in-transit → dest — the
+  // #8-class "does the write path invoke the service?" gate — for an AVCO and a
+  // FIFO SKU. Also asserts the dispatched/received events carry the value fields.
+  it("transfer router conserves VALUE on both legs for AVCO + FIFO SKUs (commit 3)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "C3-Co" },
+      admin
+    );
+    const source = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "C3-WH", type: "warehouse" },
+      admin
+    );
+    const dest = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "C3-Store", type: "store" },
+      admin
+    );
+    const each = await call(
+      appRouter.catalog.uomCreate,
+      { code: "C3-EA", name: "C3 Each" },
+      admin
+    );
+    const fifoCategory = await call(
+      appRouter.catalog.categoryCreate,
+      { costingMethod: "fifo", name: "C3-Pharma" },
+      admin
+    );
+    const avcoProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        currency: "USD",
+        name: "C3 AVCO",
+        priceMinor: 100,
+        sku: "C3-AVCO",
+      },
+      admin
+    );
+    const fifoProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        categoryId: fifoCategory.id,
+        currency: "USD",
+        name: "C3 FIFO",
+        priceMinor: 100,
+        sku: "C3-FIFO",
+      },
+      admin
+    );
+    const avcoSku = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: "C3-AVCO-EA", productId: avcoProduct.id },
+      admin
+    );
+    const fifoSku = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: "C3-FIFO-EA", productId: fifoProduct.id },
+      admin
+    );
+
+    // Valued receipts at source: AVCO 5 @ 200 = 1000; FIFO 1@100 + 1@101 = 201.
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: source.id,
+        productId: avcoProduct.id,
+        qty: 5,
+        skuId: avcoSku.id,
+        unitCostMinor: 200,
+      },
+      admin
+    );
+    for (const unitCostMinor of [100, 101]) {
+      await call(
+        appRouter.inventory.receive,
+        {
+          costCurrency: "USD",
+          costScale: 2,
+          locationId: source.id,
+          productId: fifoProduct.id,
+          qty: 1,
+          skuId: fifoSku.id,
+          unitCostMinor,
+        },
+        admin
+      );
+    }
+
+    const avcoVal = (loc: string) =>
+      withTenant(db, ORG, async (tx) => {
+        const r = await tx.execute(
+          sql`SELECT COALESCE(total_value_minor, 0)::bigint AS v FROM avg_cost WHERE sku_id = ${avcoSku.id} AND location_id = ${loc}`
+        );
+        return Number((r.rows.at(0) as { v?: number } | undefined)?.v ?? 0);
+      });
+    const fifoVal = (loc: string) =>
+      withTenant(db, ORG, async (tx) => {
+        const r = await tx.execute(
+          sql`SELECT COALESCE(SUM(qty_remaining * unit_cost_minor), 0)::bigint AS v FROM valuation_layer WHERE sku_id = ${fifoSku.id} AND location_id = ${loc}`
+        );
+        return Number((r.rows.at(0) as { v?: number } | undefined)?.v ?? 0);
+      });
+
+    expect(await avcoVal(source.id)).toBe(1000);
+    expect(await fifoVal(source.id)).toBe(201);
+
+    const created = await call(
+      appRouter.transfer.create,
+      {
+        sourceLocationId: source.id,
+        destLocationId: dest.id,
+        lines: [
+          { productId: avcoProduct.id, skuId: avcoSku.id, qty: 3 },
+          { productId: fifoProduct.id, skuId: fifoSku.id, qty: 2 },
+        ],
+      },
+      admin
+    );
+    const transitId = created.transfer.inTransitLocationId;
+
+    await call(
+      appRouter.transfer.ship,
+      { transferId: created.transfer.id },
+      admin
+    );
+    // Both legs valued: source DOWN, in-transit UP (the #8 write-path proof —
+    // were valuation not invoked, the in-transit cells would stay empty).
+    expect(await avcoVal(source.id)).toBe(400); // 1000 − 600
+    expect(await avcoVal(transitId)).toBe(600);
+    expect(await fifoVal(source.id)).toBe(0);
+    expect(await fifoVal(transitId)).toBe(201);
+    expect(await avcoVal(dest.id)).toBe(0);
+    expect(await fifoVal(dest.id)).toBe(0);
+
+    await call(
+      appRouter.transfer.receive,
+      { transferId: created.transfer.id },
+      admin
+    );
+    expect(await avcoVal(transitId)).toBe(0);
+    expect(await fifoVal(transitId)).toBe(0);
+    expect(await avcoVal(dest.id)).toBe(600);
+    expect(await fifoVal(dest.id)).toBe(201);
+
+    // Dispatched event carries per-line + top-level released value (event-map
+    // INV-2). Filter by transferId — other tests emit transfer events too.
+    const dispatched = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(eq(schema.outboxEvent.type, "inventory.transfer_dispatched"))
+    );
+    const dispatchPayload = dispatched
+      .map((ev) => ev.payload as Record<string, unknown>)
+      .find((p) => p.transferId === created.transfer.id);
+    expect(dispatchPayload?.releasedValueMinor).toBe(801); // 600 + 201
+    expect(dispatchPayload?.currency).toBe("USD");
+    expect(typeof dispatchPayload?.occurredAt).toBe("string");
+    const dispatchLines = (dispatchPayload?.lines ?? []) as Record<
+      string,
+      unknown
+    >[];
+    expect(
+      dispatchLines.find((l) => l.skuId === avcoSku.id)?.releasedValueMinor
+    ).toBe(600);
+    expect(
+      dispatchLines.find((l) => l.skuId === fifoSku.id)?.releasedValueMinor
+    ).toBe(201);
+
+    // Received value MUST equal released value, per line (value conservation).
+    const receivedEv = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(eq(schema.outboxEvent.type, "inventory.transfer_received"))
+    );
+    const recvPayload = receivedEv
+      .map((ev) => ev.payload as Record<string, unknown>)
+      .find((p) => p.transferId === created.transfer.id);
+    expect(recvPayload?.receivedValueMinor).toBe(801);
+    const recvLines = (recvPayload?.lines ?? []) as Record<string, unknown>[];
+    expect(
+      recvLines.find((l) => l.skuId === avcoSku.id)?.receivedValueMinor
+    ).toBe(600);
+    expect(
+      recvLines.find((l) => l.skuId === fifoSku.id)?.receivedValueMinor
+    ).toBe(201);
+  });
+
   // Phase-3 commit 2 — INTRA-COMPANY only + cross-tenant rejection.
   it("rejects inter-company and cross-tenant transfers (commit 2)", async () => {
     const admin = { context: makeCtx(ADMIN, ORG) };
