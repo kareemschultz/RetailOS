@@ -3361,4 +3361,83 @@ export const bondRouter = {
         return { receipt, lines };
       });
     }),
+
+  // Phase 3 commit 5 — bond release + duty (INV-4/5). Release is RBAC-immediate:
+  // it requires BOTH bond.release AND bond.approve_release (the deferred §22
+  // request→approve workflow binds requestedBy/approvedBy additively later). The
+  // release executes a bonded→released transfer (qty + value conserved, INV-2)
+  // then a value-only duty/tax adjustment (intentional value-ADD, INV-5).
+  release: tenantProcedure
+    .input(
+      z.object({
+        bondReceiptId: z.string().uuid(),
+        destLocationId: z.string().uuid(),
+        lines: z
+          .array(
+            z.object({
+              bondReceiptLineId: z.string().uuid(),
+              qty: z.number().int().positive(),
+              dutyMinor: z.number().int().min(0).optional(),
+              taxMinor: z.number().int().min(0).optional(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        // RBAC-immediate: both permissions required for a one-call clearance.
+        await assertPermission(tx, ctx, "bond.release");
+        await assertPermission(tx, ctx, "bond.approve_release");
+        // H1 cross-tenant class: validate every FK input with a tenant-scoped
+        // read before the service inserts (FK checks bypass RLS). The composite
+        // FKs on bond_release are the durable DB backstop; these give a clean
+        // NOT_FOUND. bondReceiptId/bondReceiptLineId visibility is enforced by
+        // the service's RLS-scoped loads + belong-to checks.
+        await assertLocationVisible(tx, input.destLocationId);
+        const { release, releaseLines, eventLines, transferId } =
+          await services.executeBondRelease(tx, ctx, {
+            bondReceiptId: input.bondReceiptId,
+            destLocationId: input.destLocationId,
+            lines: input.lines.map((l) => ({
+              bondReceiptLineId: l.bondReceiptLineId,
+              qty: l.qty,
+              dutyMinor: l.dutyMinor ?? 0,
+              taxMinor: l.taxMinor ?? 0,
+            })),
+          });
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryBondReleased,
+          payload: {
+            bondReleaseId: release.id,
+            bondReceiptId: release.bondReceiptId,
+            transferId,
+            sourceLocationId: release.sourceLocationId,
+            destLocationId: release.destLocationId,
+            lines: eventLines.map((l) => ({
+              skuId: l.skuId,
+              qtyBase: l.qtyBase,
+              releasedValueMinor: l.releasedValueMinor,
+              dutyMinor: l.dutyMinor,
+              taxMinor: l.taxMinor,
+              currency: l.currency,
+              scale: l.scale,
+            })),
+            releasedBy: ctx.actorUserId,
+            // RBAC-immediate: requestedBy/approvedBy default to the actor; the
+            // §22 workflow binds distinct values additively later.
+            requestedBy: ctx.actorUserId,
+            approvedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "bond.release",
+          entityType: "bond_release",
+          entityId: release.id,
+          after: { release, releaseLines },
+        });
+        return { release, releaseLines, transferId };
+      });
+    }),
 };

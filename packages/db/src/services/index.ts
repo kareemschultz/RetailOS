@@ -2,6 +2,7 @@
 // transaction (see withTenant) so they run under fail-closed RLS.
 export * from "./audit";
 export * from "./bond";
+export * from "./bond_release";
 export * from "./costing";
 export * from "./entitlements";
 export * from "./idempotency";

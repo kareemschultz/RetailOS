@@ -1,7 +1,7 @@
 // @vitest-environment node
 // Node env (not happy-dom): @t3-oss/env-core blocks server env vars when a
 // `window` global is present, which happy-dom provides.
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Context } from "../context";
 
@@ -57,6 +57,12 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.idempotencyKey);
         await tx.delete(schema.outboxEvent);
         await tx.delete(schema.auditLog);
+        // Bond release/receipt FIRST — they reference transfers, ledger rows,
+        // locations, companies, products, SKUs and lots (FK-safe order).
+        await tx.delete(schema.bondReleaseLine);
+        await tx.delete(schema.bondRelease);
+        await tx.delete(schema.bondReceiptLine);
+        await tx.delete(schema.bondReceipt);
         await tx.delete(schema.saleLine);
         await tx.delete(schema.invoice);
         await tx.delete(schema.sale);
@@ -1769,5 +1775,187 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       admin
     );
     expect(noop.costingMethod).toBe("fifo");
+  });
+
+  // Phase-3 commit 5 — bond release write-path proof (#8 class). The bond.release
+  // ROUTER must INVOKE valuation on both transfer legs (value conserved out of
+  // the bonded cell into the store) AND apply the duty/tax value-only ADD, then
+  // emit inventory.bond_released (full per-line contract) and audit. A green
+  // service suite is not evidence the router path uses the service — this drives
+  // the router end-to-end and asserts the avg_cost cells actually moved.
+  it("bond.release ROUTER conserves value bonded→store, ADDS duty+tax, emits bond_released + audits (commit 5)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "BondRelCo" },
+      admin
+    );
+    const bonded = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "BondWH", type: "bonded" },
+      admin
+    );
+    // location.create does not expose the bonded flag; set it directly (fixture).
+    await withTenant(db, ORG, (tx) =>
+      tx
+        .update(schema.location)
+        .set({ isBonded: true, isSellable: false })
+        .where(eq(schema.location.id, bonded.id))
+    );
+    const store = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "RelStore", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      {
+        sku: "BR-ROUTER-P",
+        name: "Bond Release Router Prod",
+        priceMinor: 5000,
+        currency: "USD",
+        costingMethod: "avco",
+      },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { productId: product.id, code: "BR-ROUTER-SKU" },
+      admin
+    );
+
+    // Receive 10 @ 1500 into the bonded location (avg 1500/unit → value 15000).
+    const received = await call(
+      appRouter.bond.receive,
+      {
+        companyId: company.id,
+        locationId: bonded.id,
+        lines: [
+          {
+            productId: product.id,
+            skuId: sku.id,
+            qty: 10,
+            unitCostMinor: 1500,
+            costCurrency: "USD",
+            costScale: 2,
+          },
+        ],
+      },
+      admin
+    );
+    const receiptLineId = received.lines[0]?.id as string;
+
+    // Release 4 with duty 300 + tax 100.
+    const releaseResult = await call(
+      appRouter.bond.release,
+      {
+        bondReceiptId: received.receipt.id,
+        destLocationId: store.id,
+        lines: [
+          {
+            bondReceiptLineId: receiptLineId,
+            qty: 4,
+            dutyMinor: 300,
+            taxMinor: 100,
+          },
+        ],
+      },
+      admin
+    );
+    expect(releaseResult.release.status).toBe("released");
+    expect(releaseResult.transferId).toBeTruthy();
+
+    // The router INVOKED valuation: bonded cell lost exactly 4×1500=6000.
+    const cellValue = (skuId: string, locationId: string) =>
+      withTenant(db, ORG, (tx) =>
+        tx
+          .select()
+          .from(schema.avgCost)
+          .where(
+            and(
+              eq(schema.avgCost.skuId, skuId),
+              eq(schema.avgCost.locationId, locationId)
+            )
+          )
+          .limit(1)
+          .then((rows) => rows.at(0))
+      );
+    const bondedCell = await cellValue(sku.id, bonded.id);
+    expect(bondedCell?.qtyOnHand).toBe(6);
+    expect(bondedCell?.totalValueMinor).toBe(9000);
+    // Store: 6000 conserved + 300 duty + 100 tax = 6400; qty unchanged by the add.
+    const storeCell = await cellValue(sku.id, store.id);
+    expect(storeCell?.qtyOnHand).toBe(4);
+    expect(storeCell?.totalValueMinor).toBe(6400);
+
+    // inventory.bond_released emitted with the full per-line contract.
+    const releaseEvent = (
+      await withTenant(db, ORG, (tx) =>
+        tx
+          .select()
+          .from(schema.outboxEvent)
+          .where(eq(schema.outboxEvent.type, "inventory.bond_released"))
+      )
+    ).at(-1) as {
+      payload: {
+        bondReleaseId: string;
+        transferId: string;
+        lines: {
+          skuId: string;
+          qtyBase: number;
+          releasedValueMinor: number | null;
+          dutyMinor: number;
+          taxMinor: number;
+          currency: string;
+          scale: number;
+        }[];
+        releasedBy: string | null;
+        requestedBy: string | null;
+        approvedBy: string | null;
+      };
+    };
+    expect(releaseEvent.payload.bondReleaseId).toBe(releaseResult.release.id);
+    const evLine = releaseEvent.payload.lines[0];
+    expect(evLine?.skuId).toBe(sku.id);
+    expect(evLine?.qtyBase).toBe(4);
+    expect(evLine?.releasedValueMinor).toBe(6000);
+    expect(evLine?.dutyMinor).toBe(300);
+    expect(evLine?.taxMinor).toBe(100);
+    expect(evLine?.currency).toBe("USD");
+    // RBAC-immediate: requested/approved default to the actor.
+    expect(releaseEvent.payload.requestedBy).toBe(ADMIN);
+    expect(releaseEvent.payload.approvedBy).toBe(ADMIN);
+
+    // The release is audited.
+    const auditRow = (
+      await withTenant(db, ORG, (tx) =>
+        tx
+          .select()
+          .from(schema.auditLog)
+          .where(eq(schema.auditLog.entityId, releaseResult.release.id))
+      )
+    ).at(0) as { action: string } | undefined;
+    expect(auditRow?.action).toBe("bond.release");
+  });
+
+  // RBAC: a cashier holds neither bond.release nor bond.approve_release.
+  it("rejects bond.release for an actor without the bond permissions", async () => {
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    await expect(
+      call(
+        appRouter.bond.release,
+        {
+          bondReceiptId: "00000000-0000-0000-0000-000000000000",
+          destLocationId: "00000000-0000-0000-0000-000000000000",
+          lines: [
+            {
+              bondReceiptLineId: "00000000-0000-0000-0000-000000000000",
+              qty: 1,
+            },
+          ],
+        },
+        cashier
+      )
+    ).rejects.toThrow();
   });
 });

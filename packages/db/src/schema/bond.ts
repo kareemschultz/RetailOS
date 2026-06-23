@@ -119,6 +119,11 @@ export const bondReceiptLine = pgTable(
       table.tenantId,
       table.movementId
     ),
+    // (tenant_id, id) composite-FK target — lets bond_release_line reference a
+    // bond_receipt_line via a (tenant_id, bond_receipt_line_id) composite FK
+    // (commit 5), closing the H1 cross-tenant hole at the DB layer. Consistent
+    // with the (tenant_id, id) unique every other tenant-owned table carries.
+    unique("bond_receipt_line_tenant_id_uq").on(table.tenantId, table.id),
     // Composite FK: line belongs to a bond_receipt in the same tenant.
     foreignKey({
       columns: [table.tenantId, table.bondReceiptId],

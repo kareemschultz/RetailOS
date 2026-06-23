@@ -3,7 +3,8 @@
 - **Status:** PLAN / contract doc — no code. Purpose: lock event **payload shapes + required IDs now** so later phases (Accounting §5, Procurement §6, Edge Hub §10, Analytics §12) never discover a missing field. Same discipline as `event-map-phase2.md`.
 - **Transport:** transactional outbox (charter §24) — every event row written in the SAME tenant tx as the mutation (`emitEvent`). `occurredAt` is **server-injected** by `emitEvent` (last in the spread; device clocks untrusted, §14). Money = integer `*Minor` + `currency` + `scale`; quantities are **base-unit** integers.
 - **Envelope (every event):** `id, type, version (default 1), tenant_id, correlation_id, request_id, payload (jsonb), status (pending), created_at`. Tenant-scoped, correlation/request-ID aware, versioned, replay-safe (idempotent by the producing mutation's idempotency key).
-- **New `DomainEventType` constants to add** (Phase 3): `inventory.transfer_dispatched`, `inventory.transfer_received`, `inventory.transfer_cancelled`, `inventory.bond_received`, `inventory.bond_release_requested`, `inventory.bond_release_approved`, `inventory.bond_released`. Warehouse-structure CRUD (zone/bin) is **audited but not evented** in Phase 3 (no consumer needs it; add later if one does).
+- **`DomainEventType` constants ADDED (Phase 3, as shipped):** `inventory.transfer_dispatched`, `inventory.transfer_received`, `inventory.transfer_cancelled`, `inventory.bond_received`, `inventory.bond_released`. Warehouse-structure CRUD (zone/bin) is **audited but not evented** in Phase 3 (no consumer needs it; add later if one does).
+- **`inventory.bond_release_requested` / `inventory.bond_release_approved` are RESERVED contract shapes, NOT in `DomainEventType`** — release is **RBAC-immediate** (commit 5): a single `bond.release` mutation requiring BOTH `bond.release` + `bond.approve_release` emits only `inventory.bond_released`. Nothing produces the request/approve events, so — per the Phase-2 "don't enumerate an event nothing emits" lesson — they stay out of the enum. Their shapes are locked below so the §22 request→approve workflow binds them additively later without a shape change.
 
 > **Reserved-field discipline (Phase-2 lesson):** any field a later consumer will bind but Phase 3 can't yet populate is reserved **present-but-null**, never shipped absent. Money fields are `_minor`-suffixed.
 
@@ -40,13 +41,13 @@
 - **Payload:** `{ bondReceiptId, locationId, lines:[{ skuId, productId, qtyBase, unitCostMinor, currency, scale, lotId, customsRef, landedCostRef }], supplierRef, receivedBy, occurredAt }`.
 - **Required IDs:** bondReceiptId, locationId (must be a `bonded` location), per-line skuId. `customsRef`/`landedCostRef` are **reference seams** (nullable; no allocation behaviour). `lotId` nullable.
 
-### `inventory.bond_release_requested`
-- **Producer:** `bond` router → release request (approval seam, limb 1).
+### `inventory.bond_release_requested` — 🔒 RESERVED (not in `DomainEventType`; nothing emits it in Phase 3)
+- **Producer (future):** `bond` router → release request (approval seam, limb 1). **Not wired in commit 5** — release is RBAC-immediate (single mutation). Shape locked for the deferred §22 workflow.
 - **Payload:** `{ bondReleaseId, bondReceiptId, locationId, destLocationId, lines:[{ skuId, qtyBase }], requestedBy, occurredAt }`.
 - **Notes:** opens the approval seam; no stock moves yet. `destLocationId` = where the released stock will land.
 
-### `inventory.bond_release_approved`
-- **Producer:** `bond` router → approval (approval seam, limb 2; requires `bond.approve_release`).
+### `inventory.bond_release_approved` — 🔒 RESERVED (not in `DomainEventType`; nothing emits it in Phase 3)
+- **Producer (future):** `bond` router → approval (approval seam, limb 2; requires `bond.approve_release`). **Not wired in commit 5.** Shape locked for the deferred §22 workflow.
 - **Payload:** `{ bondReleaseId, bondReceiptId, approvedBy, occurredAt }`.
 - **Notes:** authorization event (INV-4); the actual stock move is `bond_released` (executed as a transfer).
 
@@ -66,8 +67,8 @@
 | inventory.transfer_received | ✅ | | ✅ | ✅ |
 | inventory.transfer_cancelled | ✅ | | ✅ | ✅ |
 | inventory.bond_received | ✅ | ✅ | ✅ | ✅ |
-| inventory.bond_release_requested | | ✅ | | ✅ |
-| inventory.bond_release_approved | ✅ | | | ✅ |
+| inventory.bond_release_requested 🔒 reserved | | ✅ | | ✅ |
+| inventory.bond_release_approved 🔒 reserved | ✅ | | | ✅ |
 | inventory.bond_released | ✅ | ✅ | ✅ | ✅ |
 
 ## Cross-cutting risks

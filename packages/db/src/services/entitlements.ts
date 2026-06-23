@@ -17,10 +17,14 @@ export const ROLE_PERMISSIONS = {
     "inventory.reorder",
     "inventory.transfer",
     "inventory.transfer_receive",
-    // Bond receiving (commit 4). Release/approve permissions arrive with commit
-    // 5; richer per-role seeding (splitting a customs/bond-officer role) is
-    // commit 6's job — the minimal RBAC model has no such role yet.
+    // Bond receiving (commit 4) + release/approve (commit 5). Release is
+    // RBAC-immediate: an actor holding BOTH bond.release and bond.approve_release
+    // performs the clearance in one call. Richer per-role seeding (splitting a
+    // customs/bond-officer role) is commit 6's job — the minimal RBAC model has
+    // no such role yet, so tenant_admin holds both.
     "bond.receive",
+    "bond.release",
+    "bond.approve_release",
     "pos.create_sale",
     "reports.view",
   ],
