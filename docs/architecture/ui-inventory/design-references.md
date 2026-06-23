@@ -22,3 +22,13 @@ Reference files (by name, for traceability):
 - Figma (`.fig`): `Dashboard UI`, `Dashboard Flaws 2`, `Sidebar Tutorial`, `Software Sections`, `Every UI Concept-1`, `4 levels`, `Mobile App UI`, `Micro-Animations`, `Micro Dashboard`.
 
 > If the pixels need to be versioned for a specific build, add a **curated subset** via **Git LFS** (not a raw 52 MB commit) — owner's call. The extracted principles above + the design-language skill are the durable record regardless.
+
+## Importable starting point for the Airtable-style table (Phase 4 — do NOT install during backend phases)
+The owner asked whether shadcn Studio has an Airtable-like data table we can import and tweak to match the screenshot. **Yes — two good candidates** (both TanStack-Table-based, owned-in-repo, re-themeable to RetailOS tokens). Sourced from the repo's enumerated, Phase-0-verified inventory (`shadcn-studio.md`, `reui.md`); a live MCP re-probe on 2026-06-22 returned a Cloudflare challenge page, so this cites the verified repo record, not a fresh probe — re-confirm slugs with `shadcn view`/the studio MCP before installing.
+
+| Candidate | Slug | Why it fits the screenshot |
+|---|---|---|
+| **shadcn Studio DataTable (full-featured)** | `@ss-blocks/datatable-component-07` | sort + filter + row-select + paginate in one block — the closest to the Airtable/Notion table aesthetic. `-02` (filters), `-06` (row selection), `-05` (invoices/financial) are lighter variants. |
+| **ReUI Data Grid** | `@reui/data-grid` | the most Airtable-like data-dense grid (resize/reorder, dense rows) and **no Framer-Motion runtime** — ideal for dense operational surfaces. |
+
+**Install (Phase 4 only):** `npx shadcn@latest add @ss-blocks/datatable-component-07 -c packages/ui` (or `@reui/data-grid`), then **re-theme to the design-language law**: the reference green accent → **RetailOS Blue**, status text → **semantic chips (icon+text)**, money/qty columns → **monospace tabular, right-aligned**, add the **density toggle** (Comfortable/Compact/Dense), sticky header + virtualization. Never ship the block with its foreign hardcoded colors/radii/fonts (charter §5). **This is a scoping note — nothing is installed now (backend phase).**
