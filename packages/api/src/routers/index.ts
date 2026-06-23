@@ -2,6 +2,7 @@ import type { RouterClient } from "@orpc/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
 import {
+  bondRouter,
   catalogRouter,
   companyRouter,
   inventoryRouter,
@@ -27,6 +28,7 @@ export const appRouter = {
   product: productRouter,
   inventory: inventoryRouter,
   transfer: transferRouter,
+  bond: bondRouter,
   pos: posRouter,
   reports: reportsRouter,
 };

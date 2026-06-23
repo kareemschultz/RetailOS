@@ -17,6 +17,10 @@ export const ROLE_PERMISSIONS = {
     "inventory.reorder",
     "inventory.transfer",
     "inventory.transfer_receive",
+    // Bond receiving (commit 4). Release/approve permissions arrive with commit
+    // 5; richer per-role seeding (splitting a customs/bond-officer role) is
+    // commit 6's job — the minimal RBAC model has no such role yet.
+    "bond.receive",
     "pos.create_sale",
     "reports.view",
   ],

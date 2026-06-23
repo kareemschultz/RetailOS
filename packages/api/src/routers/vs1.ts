@@ -3228,3 +3228,85 @@ export const transferRouter = {
       });
     }),
 };
+
+// Phase 3 commit 4 — bonded stock receiving (INV-3).
+// Commit 5 adds bond release + duty. Both bond routers live here.
+export const bondRouter = {
+  receive: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid(),
+        locationId: z.string().uuid(),
+        supplierRef: z.string().max(500).optional(),
+        customsReference: z.string().max(500).optional(),
+        landedCostReference: z.string().max(500).optional(),
+        receivedAt: z.string().datetime().optional(),
+        lines: z
+          .array(
+            z.object({
+              productId: z.string().uuid(),
+              skuId: z.string().uuid(),
+              lotId: z.string().uuid().optional(),
+              qty: z.number().int().positive(),
+              unitCostMinor: z.number().int().min(0),
+              costCurrency: z.string().length(3),
+              costScale: z.number().int().min(0),
+              customsReference: z.string().max(500).optional(),
+              landedCostReference: z.string().max(500).optional(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "bond.receive");
+        // Belt-and-braces guards over DB composite FKs.
+        await assertLocationVisible(tx, input.locationId);
+        for (const line of input.lines) {
+          await assertProductVisible(tx, line.productId);
+          await assertSkuBelongsToProduct(tx, line.skuId, line.productId);
+          if (line.lotId) {
+            await assertLotVisible(tx, line.lotId);
+          }
+        }
+        const { receipt, lines } = await services.createBondReceipt(tx, ctx, {
+          companyId: input.companyId,
+          locationId: input.locationId,
+          supplierRef: input.supplierRef ?? null,
+          customsReference: input.customsReference ?? null,
+          landedCostReference: input.landedCostReference ?? null,
+          receivedAt: input.receivedAt ? new Date(input.receivedAt) : null,
+          lines: input.lines,
+        });
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryBondReceived,
+          payload: {
+            bondReceiptId: receipt.id,
+            locationId: receipt.locationId,
+            supplierRef: receipt.supplierRef,
+            lines: lines.map((l) => ({
+              skuId: l.skuId,
+              productId: l.productId,
+              qtyBase: l.qty,
+              unitCostMinor: l.unitCostMinor,
+              currency: l.costCurrency,
+              scale: l.costScale,
+              lotId: l.lotId,
+              customsRef: l.customsReference,
+              landedCostRef: l.landedCostReference,
+            })),
+            receivedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "bond.receive",
+          entityType: "bond_receipt",
+          entityId: receipt.id,
+          after: { receipt, lines },
+        });
+        return { receipt, lines };
+      });
+    }),
+};

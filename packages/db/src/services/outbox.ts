@@ -23,6 +23,9 @@ export const DomainEventType = {
   InventoryTransferDispatched: "inventory.transfer_dispatched",
   InventoryTransferReceived: "inventory.transfer_received",
   InventoryTransferCancelled: "inventory.transfer_cancelled",
+  // Phase 3 — bond lifecycle (contracts in event-map-phase3.md). Commit 4 emits
+  // the receipt event; release events arrive with commit 5.
+  InventoryBondReceived: "inventory.bond_received",
   SaleCreated: "sale.created",
 } as const;
 
