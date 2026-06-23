@@ -10,7 +10,7 @@
 |------|--------|-----|-------|
 | Commit 4 — bonded receiving + INV-3 | ✅ committed + Codex BLOCK review resolved (5 HIGH fixed) | `897f5fe` + `c9e552f` (fix) | db **55/55**, api **19/19**, zero skips; HARD GATE intact (frozen `costing.rls.test.ts` 0-diff vs master; fix touched no frozen file) |
 | Commit 5 — bond release + duty (INV-4/5) | ✅ implemented + Codex review (2 HIGH + 1 MEDIUM fixed); committed | `f013e85` | db **65/65**, api **21/21**, zero skips; fresh PG18 0000→0016; HARD GATE intact (`costing.ts`/`costing.rls.test.ts` untouched by commit 5) |
-| Commit 6 — RBAC + seed + contracts | pending | — | — |
+| Commit 6 — RBAC + seed + contracts | ✅ implemented + Codex review (0 findings); committed | `<pending-commit-6>` | db **70/70**, api **21/21**, zero skips; HARD GATE intact (costing untouched) |
 | Commit 7 — §45 + ADRs | pending | — | — |
 | Phase 4 plan docs | pending | — | — |
 | Phase 5 plan docs | pending | — | — |
@@ -75,5 +75,15 @@
   - **F3 (MEDIUM) — order-dependent value attribution.** `buildValueQueues` dequeued transfer `lineValues` by assumed order, but `loadTransfer` has no `ORDER BY` → duplicate-SKU release lines could swap `releasedValueMinor` in the event (total conserved, split wrong). **Fix:** deterministic per-SKU proportional-by-qty largest-remainder split in input order; independent of DB row order. No `transfer.ts` change.
 - **Regression tests (db 62→65):** F1 live-drift reject, F2 concurrent over-release serialization, F3 duplicate-SKU proportional split. Plus the `bond.release` ROUTER write-path proof in `vs1.integration.test.ts` (api 19→21): drives receive→release through the router and asserts the avg_cost cells ACTUALLY MOVE (bonded −6000, store +6400 = 6000 conserved + 300 duty + 100 tax), the event carries the full per-line contract, and the release is audited — proving the production path invokes valuation (#8 class), not just the service in isolation. + RBAC reject test (cashier lacks bond perms).
 - **Docs:** module-spec INV-4/5 (already accurate); `event-map-phase3.md` reconciled (bond_released ADDED to enum; request/approve marked 🔒 RESERVED + out of enum); 2 lessons-learned entries.
+
+---
+
+### Commit 6 — RBAC per-role seeding + Phase-3 seed + API contracts (`<pending-commit-6>`)
+- **Scope:** `entitlements.ts` (+`warehouse` +`bond_officer` roles); `entitlements.test.ts` (+2 unit tests); `seeds/index.ts` (+`seedPhase3`); `seeds/phase3.rls.test.ts` (NEW, DB-gated); `phase-3-api-contracts.md` (NEW). No schema/migration/service-logic change beyond the role additions → **HARD GATE: costing untouched.**
+- **RBAC (separation of duties):** `warehouse` = stock movement (receive/adjust/count/transfer/transfer_receive) + reports, NO bond, NO POS. `bond_officer` = `bond.receive/release/approve_release` (holds BOTH bond perms → RBAC-immediate clearance in one call) + transfers + reports, NO POS/catalog. `tenant_admin` still holds everything; `manager`/`cashier` unchanged. Pure-fn unit tests assert each role's grants/denials (run in the no-DB gate).
+- **`seedPhase3` (self-contained, run-once on a fresh tenant):** through the SERVICES — a unified location TREE (warehouse → zone → 2 bins with the `max_weight`/`max_volume` capacity seam), a store, a bonded warehouse; 2 AVCO products/SKUs; warehouse stocked via valued receipts; one COMPLETED transfer (create→ship→receive) + one IN-FLIGHT transfer (shipped only); a bonded receipt (40 @ 1500) + a bond release (25, duty 1875 + tax 625) to the store. Intentionally NOT idempotent (gapless numbers + stock consumption) — documented.
+- **Seed test (DB-gated, real PG as `retailos_app`):** cleans the Phase-3 tenant (FK-safe order) + stubs `provisionTenant`, runs `seedPhase3`, asserts the tree parentage + capacity, transfer statuses (received vs shipped), bond release `released` + bonded 40−25=15 left + store 30+25=55.
+- **Gates (fresh PG18 `retailos_c5`, migrated 0000→0016):** mojibake ✓, biome ✓, check-types 0, **db 65→70** (+3 seed +2 RBAC), **api 21/21**, **zero skips**.
+- **Codex review (FRESH scoped `codex:codex-rescue` agent, NOT a fork):** **0 findings, all 5 categories CLEAN** — RBAC consistency, seed correctness (tree parentage, transfer statuses, bond math 40−25=15 / store 30+25=55 / gadget-in-flight-not-at-store), service-invariant call sites, FK-safe test cleanup order, TypeScript shape.
 
 ---
