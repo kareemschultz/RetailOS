@@ -31,6 +31,10 @@ export const DomainEventType = {
   InventoryBondReceived: "inventory.bond_received",
   InventoryBondReleased: "inventory.bond_released",
   SaleCreated: "sale.created",
+  // Phase 4 (MSP) — a tender settling against a sale (event-map-phase4.md). The
+  // refund/void/shift/stored-value event types are reserved for their own
+  // commits; not enumerated until something emits them (Phase-2 lesson).
+  PaymentReceived: "payment.received",
 } as const;
 
 export type DomainEventType =
