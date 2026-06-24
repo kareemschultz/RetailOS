@@ -28,6 +28,7 @@
 - Tech stack & verified dependency versions: `docs/architecture/tech-stack.md`
 - Folder structure, conventions, env matrix: `docs/architecture/folder-structure-conventions.md`
 - UI/UX & component sourcing: `docs/architecture/ui-ux-plan.md` + `docs/architecture/ui-inventory/INDEX.md`
+- **Design language (UI phases 4+):** `.agents/skills/retailos-design-language/SKILL.md` — visual source of truth for every generated UI surface (table/admin baseline in `docs/architecture/ui-inventory/design-references.md`). Backend phases ignore it.
 - **Frontend strategy (GOVERNANCE — read before any UI work):** `docs/architecture/frontend-strategy.md` — official sourcing & adaptation law (source UI from shadcn Studio → AdminCN blocks → Magic UI → custom; every block becomes owned code in `packages/ui`, wired to oRPC, re-themed to RetailOS tokens, stripped of mock/Next/auth/routing assumptions; AdminCN is the visual target, the RetailOS backend stays authoritative). The design *law* is the `retailos-design-language` skill; AdminCN detail is `ui-admin-shell-findings.md`. **No production UI until APIs are stable + approved.**
 - Vertical Slice #1 design: `docs/architecture/vertical-slice-1.md`
 - Phase 2 (Inventory) — ✅ COMPLETE/FROZEN (merged `72b2100`): `docs/architecture/phase-2-complete.md` (archive) · `phase-2-implementation-plan.md` · `event-map-phase2.md` · `phase-2-api-contracts.md` · `phase-2-gap-analysis.md` (D1–D7 locked; ADR-0007/0008)
