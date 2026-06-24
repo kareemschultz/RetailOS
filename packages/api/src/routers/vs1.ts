@@ -2991,6 +2991,9 @@ async function runCreateSaleMsp(
   ctx: RequestContext,
   input: {
     customerId?: string;
+    // Set only when this sale is the outbound leg of an exchange (shared with the
+    // paired return — event-map "Exchange flow"); null for a standalone sale.
+    exchangeGroupId?: string;
     idempotencyKey: string;
     lines: MspLineInput[];
     locationId: string;
@@ -3025,6 +3028,7 @@ async function runCreateSaleMsp(
           currency: subtotal.currency,
           customerId: input.customerId ?? null,
           discountMinor: 0,
+          exchangeGroupId: input.exchangeGroupId ?? null,
           idempotencyKey: input.idempotencyKey,
           locationId: input.locationId,
           number: saleNumber,
@@ -3154,7 +3158,7 @@ async function runCreateSaleMsp(
       customerId: input.customerId ?? null,
       discountFunctionalMinor: null,
       discountMinor: 0,
-      exchangeGroupId: null,
+      exchangeGroupId: input.exchangeGroupId ?? null,
       functionalCurrency: null,
       functionalScale: null,
       fxRateToFunctional: null,
@@ -3200,6 +3204,609 @@ async function runCreateSaleMsp(
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Commit 3 — Returns / Refunds / Voids / Exchanges (event-map-phase4.md).
+// A return is a FIRST-CLASS sale variant (saleType="return", originalSaleId),
+// stored with NEGATIVE money (a credit, so reports net automatically). It reuses
+// every MSP primitive; the ONLY costing touch is the value-exact restock below.
+// ─────────────────────────────────────────────────────────────────────────────
+type SaleLineRow = typeof schema.saleLine.$inferSelect;
+
+interface RefundLineInput {
+  originalSaleLineId: string;
+  qty: number;
+}
+
+// Lock the original sale row (SELECT … FOR UPDATE) BEFORE any status / refunded-
+// qty guard, so two concurrent refunds/voids serialize and the already-refunded
+// check can't be raced (Phase-3 commit-3 HIGH-1 + the over-refund TOCTOU). RLS
+// scopes the read to the tenant, so another tenant's sale returns nothing.
+async function loadSaleForUpdate(tx: TenantTransaction, saleId: string) {
+  return (
+    await tx
+      .select()
+      .from(schema.sale)
+      .where(eq(schema.sale.id, saleId))
+      .for("update")
+  ).at(0);
+}
+
+// Company of a location, RLS-scoped, WITHOUT the sellable gate — a refund/void
+// reverses a historical sale and must succeed even if the location later became
+// non-sellable (the forward sale already proved it sellable). A new sale leg
+// still goes through assertSaleLocation.
+async function loadLocationCompany(tx: TenantTransaction, locationId: string) {
+  const row = (
+    await tx
+      .select({
+        companyId: schema.location.companyId,
+        id: schema.location.id,
+      })
+      .from(schema.location)
+      .where(eq(schema.location.id, locationId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Location not found in this tenant",
+    });
+  }
+  return row;
+}
+
+function requireCogsStamp(originalLine: SaleLineRow) {
+  const { cogsMinor, cogsCurrency, cogsScale, costingMethodApplied } =
+    originalLine;
+  if (cogsMinor == null || cogsCurrency == null || cogsScale == null) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "Original sale line has no COGS stamp — only #8-valued sale lines can be returned",
+    });
+  }
+  // Own guard so TS narrows the text column to the CostingMethod union.
+  if (costingMethodApplied !== "avco" && costingMethodApplied !== "fifo") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Original sale line has an unknown costing method: ${costingMethodApplied}`,
+    });
+  }
+  // The text column is `string`; the runtime guard above proves it is the union.
+  return {
+    cogsCurrency,
+    cogsMinor,
+    cogsScale,
+    method: costingMethodApplied as "avco" | "fifo",
+  };
+}
+
+// Restock one returned line's quantity, landing EXACTLY the value the original
+// sale removed back into the SKU's valuation cell. #8 discipline: the write path
+// MUST invoke valuation — but a positive (restock) movement would be a *receipt*
+// to applyValuation (needs a fresh cost); instead we reuse the value-EXACT lander
+// `applyTransferInValuation` (the frozen transfer primitive), which lands EXACTLY
+// V with the movement's qty and stamps costing_method_applied. `restockedValue`
+// is DERIVED from the ORIGINAL line's stamped COGS (event-map HIGH-4),
+// proportional to refundQty via mulDivRound — NEVER from applyValuation on the
+// restock leg (it returns cogsMinor:0 there). Returns the derived value triple.
+async function restockReturnedLine(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  opts: {
+    docId: string;
+    idempotencyKey: string;
+    locationId: string;
+    originalLine: SaleLineRow;
+    refType: string;
+    refundQty: number;
+  }
+) {
+  const { originalLine, refundQty } = opts;
+  const { cogsCurrency, cogsMinor, cogsScale, method } =
+    requireCogsStamp(originalLine);
+  // Proportional value of the refunded quantity (replay-safe; never re-resolved).
+  const restockedValueMinor = Number(
+    services.mulDivRound(cogsMinor, refundQty, originalLine.qty, "half_even")
+  );
+  const movement = await services.appendStockMovement(tx, ctx, {
+    idempotencyKey: opts.idempotencyKey,
+    locationId: opts.locationId,
+    lotId: originalLine.lotId,
+    movementType: "return",
+    productId: originalLine.productId,
+    qtyDelta: refundQty,
+    refId: opts.docId,
+    refType: opts.refType,
+    skuId: originalLine.skuId,
+  });
+  // FIFO value-exact split may need a SECOND distinct anchor movement when the
+  // value isn't divisible by qty — UNIQUE(tenant_id, source_movement_id) on the
+  // valuation layer forbids two layers sharing one movement id (the same trick
+  // the transfer uses with its paired leg). A qtyDelta:0 companion gives a
+  // collision-free, return-specific anchor. Created only when actually needed.
+  let remainderAnchorMovementId: string | null = null;
+  if (method === "fifo" && restockedValueMinor % refundQty !== 0) {
+    const anchor = await services.appendStockMovement(tx, ctx, {
+      idempotencyKey: opts.idempotencyKey,
+      locationId: opts.locationId,
+      lotId: originalLine.lotId,
+      movementType: "return",
+      productId: originalLine.productId,
+      qtyDelta: 0,
+      refId: opts.docId,
+      refType: `${opts.refType}_remainder_anchor`,
+      skuId: originalLine.skuId,
+    });
+    remainderAnchorMovementId = anchor.id;
+  }
+  await services.applyTransferInValuation(tx, ctx, movement, {
+    currency: cogsCurrency,
+    method,
+    remainderAnchorMovementId,
+    scale: cogsScale,
+    valueMinor: restockedValueMinor,
+  });
+  return {
+    cogsCurrency,
+    cogsScale,
+    costingMethodApplied: method,
+    restockedValueMinor,
+  };
+}
+
+// Sequential return/credit-note doc number (RET-N), serialized on the same
+// per-tenant advisory lock as sale numbering. The fiscal credit-note document is
+// a later fiscal seam; this is the operational doc number.
+async function allocateReturnNumber(tx: TenantTransaction, tenantId: string) {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`docnum:${tenantId}`}, 0))`
+  );
+  const n =
+    ((
+      await tx
+        .select({ c: count() })
+        .from(schema.sale)
+        .where(eq(schema.sale.saleType, "return"))
+    ).at(0)?.c ?? 0) + 1;
+  return `RET-${n}`;
+}
+
+// Raw refund runner (the router wraps it in permission + idempotency; the
+// exchange calls it directly inside ONE idempotency boundary). exchangeGroupId is
+// set only for an exchange's inbound leg (then no disbursement tenders — the
+// credit offsets the new purchase; net settlement is P5's via the shared group).
+async function runRefund(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: {
+    doNotRestock?: boolean;
+    idempotencyKey: string;
+    lines: RefundLineInput[];
+    originalSaleId: string;
+    refundReason?: string;
+    tenders: TenderInput[];
+  },
+  exchangeGroupId: string | null
+) {
+  const original = await loadSaleForUpdate(tx, input.originalSaleId);
+  if (!original) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Original sale not found in this tenant",
+    });
+  }
+  if (original.saleType !== "sale") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Only a sale can be refunded (not a return/exchange doc)",
+    });
+  }
+  if (original.status !== "completed") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Sale is not refundable (status: ${original.status})`,
+    });
+  }
+  const location = await loadLocationCompany(tx, original.locationId);
+
+  const originalLines = await tx
+    .select()
+    .from(schema.saleLine)
+    .where(eq(schema.saleLine.saleId, original.id));
+  const lineById = new Map(originalLines.map((l) => [l.id, l]));
+
+  // Already-refunded qty per original line (under the FOR UPDATE lock above).
+  const refundedRows = await tx
+    .select({
+      olid: schema.saleLine.originalSaleLineId,
+      refunded: sql<number>`COALESCE(SUM(${schema.saleLine.qty}), 0)::int`,
+    })
+    .from(schema.saleLine)
+    .where(
+      inArray(
+        schema.saleLine.originalSaleLineId,
+        originalLines.map((l) => l.id)
+      )
+    )
+    .groupBy(schema.saleLine.originalSaleLineId);
+  const refundedByLine = new Map(
+    refundedRows.map((r) => [r.olid, Number(r.refunded)])
+  );
+
+  // Validate every refund line BEFORE writing anything.
+  const validated = input.lines.map((rl) => {
+    const originalLine = lineById.get(rl.originalSaleLineId);
+    if (!originalLine) {
+      throw new ORPCError("NOT_FOUND", {
+        message: `Original sale line ${rl.originalSaleLineId} does not belong to this sale`,
+      });
+    }
+    const already = refundedByLine.get(originalLine.id) ?? 0;
+    if (rl.qty > originalLine.qty - already) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: `Over-refund: line ${originalLine.id} has ${originalLine.qty - already} of ${originalLine.qty} refundable`,
+      });
+    }
+    return { originalLine, refundQty: rl.qty };
+  });
+
+  const currency = original.currency;
+  const scale = original.scale;
+  const refundTotalMagnitude = validated.reduce(
+    (sum, v) => sum + v.originalLine.unitPriceMinor * v.refundQty,
+    0
+  );
+
+  // Refund tenders = money returned to the customer. A standalone refund MUST be
+  // fully tendered back; an exchange's inbound leg carries NO disbursement (the
+  // credit offsets the outbound sale — net settlement is P5's, via the group).
+  const tenderedBack = input.tenders.reduce((s, t) => s + t.amountMinor, 0);
+  if (exchangeGroupId) {
+    if (input.tenders.length > 0) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Exchange return leg carries no disbursement tenders (credit offsets the new sale)",
+      });
+    }
+  } else if (tenderedBack !== refundTotalMagnitude) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Refund tenders must equal the refunded amount",
+    });
+  }
+  for (const t of input.tenders) {
+    if (t.currency !== currency) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Multi-currency refund tenders are not supported yet",
+      });
+    }
+  }
+
+  const number = await allocateReturnNumber(tx, ctx.tenantId);
+  // Return doc — NEGATIVE money (a credit; reports net automatically).
+  const returnSale = firstOrThrow(
+    (
+      await tx
+        .insert(schema.sale)
+        .values({
+          createdBy: ctx.actorUserId,
+          currency,
+          discountMinor: 0,
+          exchangeGroupId,
+          idempotencyKey: input.idempotencyKey,
+          locationId: original.locationId,
+          number,
+          originalSaleId: original.id,
+          saleType: "return",
+          scale,
+          status: "completed",
+          subtotalMinor: -refundTotalMagnitude,
+          taxMinor: 0,
+          tenantId: ctx.tenantId,
+          totalMinor: -refundTotalMagnitude,
+        })
+        .returning()
+    ).at(0)
+  );
+
+  const eventLines: unknown[] = [];
+  for (const { originalLine, refundQty } of validated) {
+    let restocked = {
+      cogsCurrency: originalLine.cogsCurrency,
+      cogsScale: originalLine.cogsScale,
+      costingMethodApplied: originalLine.costingMethodApplied,
+      restockedValueMinor: 0,
+    };
+    if (!input.doNotRestock) {
+      restocked = await restockReturnedLine(tx, ctx, {
+        docId: returnSale.id,
+        idempotencyKey: input.idempotencyKey,
+        locationId: original.locationId,
+        originalLine,
+        refType: "return",
+        refundQty,
+      });
+    }
+    const returnLine = firstOrThrow(
+      (
+        await tx
+          .insert(schema.saleLine)
+          .values({
+            cogsCurrency: restocked.cogsCurrency,
+            cogsMinor: restocked.restockedValueMinor,
+            cogsScale: restocked.cogsScale,
+            costingMethodApplied: restocked.costingMethodApplied,
+            lotId: originalLine.lotId,
+            originalSaleLineId: originalLine.id,
+            productId: originalLine.productId,
+            qty: refundQty,
+            qtyBase: refundQty,
+            saleId: returnSale.id,
+            skuId: originalLine.skuId,
+            tenantId: ctx.tenantId,
+            unitPriceMinor: originalLine.unitPriceMinor,
+          })
+          .returning()
+      ).at(0)
+    );
+    eventLines.push({
+      costingMethodApplied: restocked.costingMethodApplied,
+      cogsCurrency: restocked.cogsCurrency,
+      cogsScale: restocked.cogsScale,
+      lineCommissionClawbackFunctionalMinor: null,
+      lineCommissionClawbackMinor: null,
+      lotId: originalLine.lotId,
+      originalSaleLineId: originalLine.id,
+      productId: originalLine.productId,
+      qtyBase: refundQty,
+      restockedValueFunctionalMinor: null,
+      restockedValueMinor: restocked.restockedValueMinor,
+      restockLocationId: input.doNotRestock ? null : original.locationId,
+      saleLineId: returnLine.id,
+      skuId: originalLine.skuId,
+      lineTaxMinor: 0,
+      taxRateId: null,
+      unitPriceMinor: originalLine.unitPriceMinor,
+    });
+  }
+
+  const eventTenders: unknown[] = [];
+  for (const t of input.tenders) {
+    const tenderRow = firstOrThrow(
+      (
+        await tx
+          .insert(schema.tender)
+          .values({
+            amountMinor: t.amountMinor,
+            changeMinor: null,
+            createdBy: ctx.actorUserId,
+            currency: t.currency,
+            method: t.method,
+            saleId: returnSale.id,
+            scale,
+            settledAmountMinor: t.amountMinor,
+            tenantId: ctx.tenantId,
+          })
+          .returning()
+      ).at(0)
+    );
+    eventTenders.push({
+      amountMinor: t.amountMinor,
+      fxRateToSale: null,
+      method: t.method,
+      settledAmountMinor: t.amountMinor,
+      settledFunctionalMinor: null,
+      tenderCurrency: t.currency,
+      tenderId: tenderRow.id,
+      tenderScale: scale,
+    });
+  }
+
+  await services.recordAudit(tx, ctx, {
+    action: "pos.refund",
+    after: returnSale,
+    entityId: returnSale.id,
+    entityType: "sale",
+  });
+  await services.emitEvent(tx, ctx, {
+    type: services.DomainEventType.SaleRefunded,
+    payload: {
+      commissionAccrualPolicy: null,
+      commissionClawbackFunctionalMinor: null,
+      commissionClawbackMinor: null,
+      companyId: location.companyId,
+      currency,
+      discountMinor: 0,
+      discountFunctionalMinor: null,
+      exchangeGroupId,
+      functionalCurrency: null,
+      functionalScale: null,
+      fxRateToFunctional: null,
+      lines: eventLines,
+      locationId: original.locationId,
+      number,
+      originalSaleId: original.id,
+      refundReason: input.refundReason ?? null,
+      refundedBy: ctx.actorUserId,
+      saleId: returnSale.id,
+      saleType: "return",
+      scale,
+      shiftId: original.shiftId,
+      subtotalFunctionalMinor: null,
+      subtotalMinor: refundTotalMagnitude,
+      taxBreakdown: [],
+      taxFunctionalMinor: null,
+      taxMinor: 0,
+      tenders: eventTenders,
+      totalFunctionalMinor: null,
+      totalMinor: refundTotalMagnitude,
+    },
+  });
+
+  return {
+    currency,
+    locationId: original.locationId,
+    number,
+    saleId: returnSale.id,
+    scale,
+    totalMinor: -refundTotalMagnitude,
+  };
+}
+
+// Raw void runner — full reversal of a whole, UN-refunded sale. Restocks every
+// line, flips status to "void" (excluded from sales reports), emits sale.voided
+// (parks on originalSaleId, no amounts). Distinct from a refund (partial/credit).
+async function runVoid(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: { idempotencyKey: string; saleId: string; voidReason?: string }
+) {
+  const sale = await loadSaleForUpdate(tx, input.saleId);
+  if (!sale) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Sale not found in this tenant",
+    });
+  }
+  if (sale.saleType !== "sale") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Only a sale can be voided (not a return/exchange doc)",
+    });
+  }
+  if (sale.status === "void") {
+    throw new ORPCError("BAD_REQUEST", { message: "Sale is already void" });
+  }
+  if (sale.status !== "completed") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: `Sale is not voidable (status: ${sale.status})`,
+    });
+  }
+  const location = await loadLocationCompany(tx, sale.locationId);
+  const saleLines = await tx
+    .select()
+    .from(schema.saleLine)
+    .where(eq(schema.saleLine.saleId, sale.id));
+  // A sale that already has returns cannot be voided — voiding would restock the
+  // already-restocked lines twice. Refund-then-void is rejected (use refunds).
+  const priorReturns = (
+    await tx
+      .select({ c: count() })
+      .from(schema.saleLine)
+      .where(
+        inArray(
+          schema.saleLine.originalSaleLineId,
+          saleLines.map((l) => l.id)
+        )
+      )
+  ).at(0)?.c;
+  if (Number(priorReturns ?? 0) > 0) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "Cannot void a sale that has returns — void is for un-refunded sales",
+    });
+  }
+
+  for (const line of saleLines) {
+    await restockReturnedLine(tx, ctx, {
+      docId: sale.id,
+      idempotencyKey: input.idempotencyKey,
+      locationId: sale.locationId,
+      originalLine: line,
+      refType: "void",
+      refundQty: line.qty,
+    });
+  }
+
+  await tx
+    .update(schema.sale)
+    .set({ status: "void" })
+    .where(eq(schema.sale.id, sale.id));
+
+  await services.recordAudit(tx, ctx, {
+    action: "pos.void_sale",
+    after: { status: "void", voidReason: input.voidReason ?? null },
+    before: sale,
+    entityId: sale.id,
+    entityType: "sale",
+  });
+  await services.emitEvent(tx, ctx, {
+    type: services.DomainEventType.SaleVoided,
+    payload: {
+      companyId: location.companyId,
+      currency: sale.currency,
+      locationId: sale.locationId,
+      number: sale.number,
+      originalSaleId: sale.id,
+      saleId: sale.id,
+      scale: sale.scale,
+      shiftId: sale.shiftId,
+      totalMinor: sale.totalMinor,
+      voidReason: input.voidReason ?? null,
+      voidedBy: ctx.actorUserId,
+    },
+  });
+
+  return { saleId: sale.id, status: "void" as const };
+}
+
+// Raw exchange runner — decomposes into a linked return + sale sharing one
+// exchangeGroupId (event-map "Exchange flow"; NOT a distinct event). The return
+// leg credits + restocks the returned items (no disbursement); the sale leg
+// charges the new items. Net cash settlement across the group is P5's concern.
+async function runExchange(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: {
+    idempotencyKey: string;
+    newLines: MspLineInput[];
+    originalSaleId: string;
+    refundReason?: string;
+    returnLines: RefundLineInput[];
+    tenders: TenderInput[];
+  }
+) {
+  const exchangeGroupId = crypto.randomUUID();
+  const refund = await runRefund(
+    tx,
+    ctx,
+    {
+      idempotencyKey: `${input.idempotencyKey}:return`,
+      lines: input.returnLines,
+      originalSaleId: input.originalSaleId,
+      refundReason: input.refundReason,
+      tenders: [],
+    },
+    exchangeGroupId
+  );
+  const sale = await runCreateSaleMsp(tx, ctx, {
+    exchangeGroupId,
+    idempotencyKey: `${input.idempotencyKey}:sale`,
+    lines: input.newLines,
+    locationId: refund.locationId,
+    tenders: input.tenders,
+  });
+  await services.recordAudit(tx, ctx, {
+    action: "pos.exchange",
+    after: {
+      exchangeGroupId,
+      refundSaleId: refund.saleId,
+      saleId: sale.saleId,
+    },
+    entityId: sale.saleId,
+    entityType: "sale",
+  });
+  return { exchangeGroupId, refund, sale };
+}
+
+const refundLineSchema = z.object({
+  originalSaleLineId: z.string().uuid(),
+  qty: z.number().int().positive(),
+});
+const refundTenderSchema = z.object({
+  amountMinor: z.number().int().min(0),
+  currency: z.string().length(3),
+  method: z.enum(schema.TENDER_METHODS),
+});
+const newLineSchema = z.object({
+  productId: z.string().uuid(),
+  skuId: z.string().uuid(),
+  qty: z.number().int().positive(),
+  unitPriceMinor: z.number().int().min(0).optional(),
+});
+
 export const posRouter = {
   createSale: tenantProcedure
     .input(
@@ -3243,6 +3850,86 @@ export const posRouter = {
           input.idempotencyKey,
           input,
           () => runCreateSaleMsp(tx, ctx, input)
+        );
+      });
+    }),
+
+  // First-class return (event-map sale.refunded). Partial allowed; restocks the
+  // refunded value (derived from the original line's stamped COGS) — sensitive,
+  // so it needs pos.refund (admin/manager), not the base cashier grant.
+  refund: tenantProcedure
+    .input(
+      z.object({
+        doNotRestock: z.boolean().optional(),
+        idempotencyKey: z.string().min(1),
+        lines: z.array(refundLineSchema).min(1),
+        originalSaleId: z.string().uuid(),
+        refundReason: z.string().optional(),
+        tenders: z.array(refundTenderSchema),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.refund");
+        return services.runIdempotent(
+          tx,
+          ctx,
+          input.idempotencyKey,
+          input,
+          () => runRefund(tx, ctx, input, null)
+        );
+      });
+    }),
+
+  // Whole-sale void (event-map sale.voided) — full reversal of an un-refunded
+  // sale; restocks every line and flips status to "void".
+  void: tenantProcedure
+    .input(
+      z.object({
+        idempotencyKey: z.string().min(1),
+        saleId: z.string().uuid(),
+        voidReason: z.string().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.void_sale");
+        return services.runIdempotent(
+          tx,
+          ctx,
+          input.idempotencyKey,
+          input,
+          () => runVoid(tx, ctx, input)
+        );
+      });
+    }),
+
+  // Exchange = linked return + sale sharing an exchangeGroupId (event-map
+  // "Exchange flow"). Needs BOTH refund + create-sale rights.
+  exchange: tenantProcedure
+    .input(
+      z.object({
+        idempotencyKey: z.string().min(1),
+        newLines: z.array(newLineSchema).min(1),
+        originalSaleId: z.string().uuid(),
+        refundReason: z.string().optional(),
+        returnLines: z.array(refundLineSchema).min(1),
+        tenders: z.array(refundTenderSchema).min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.refund");
+        await assertPermission(tx, ctx, "pos.create_sale");
+        return services.runIdempotent(
+          tx,
+          ctx,
+          input.idempotencyKey,
+          input,
+          () => runExchange(tx, ctx, input)
         );
       });
     }),
