@@ -10,7 +10,10 @@ export type StockMovementType =
   // §2 value-only valuation adjustment (qty_delta = 0, value moves).
   | "valuation_adjustment"
   // §4 return movement (may link a source movement + original cost).
-  | "return";
+  | "return"
+  // Phase 3 — two-step transfer legs (an issue out of / a receipt into a node).
+  | "transfer_out"
+  | "transfer_in";
 
 export interface StockMovementInput {
   costCurrency?: string | null;

@@ -1520,6 +1520,29 @@ async function assertLocationVisible(
   }
 }
 
+// Codex F2: a router that accepts a caller-supplied companyId must validate it
+// with an RLS-scoped read before passing it to a service/insert. The DB-level
+// composite company FK already rejects a cross-TENANT company id, but this
+// surfaces a clean NOT_FOUND instead of a raw FK violation (and matches the
+// belt-and-braces guard pattern used across this router).
+async function assertCompanyVisible(
+  tx: TenantTransaction,
+  companyId: string
+): Promise<void> {
+  const row = (
+    await tx
+      .select({ id: schema.company.id })
+      .from(schema.company)
+      .where(eq(schema.company.id, companyId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Company not found in this tenant",
+    });
+  }
+}
+
 async function assertCategoryVisible(
   tx: TenantTransaction,
   categoryId: string
@@ -1804,6 +1827,31 @@ async function assertSkuBelongsToProduct(
   if (!item) {
     throw new ORPCError("NOT_FOUND", {
       message: "SKU not found in this tenant/product",
+    });
+  }
+}
+
+// Codex F3: a line that carries both a skuId and a lotId must prove the lot
+// BELONGS to that sku — otherwise a same-tenant lot from a different sku could
+// be attached, corrupting which sku's costing the lot is tied to. Lot has no
+// (tenant_id, sku_id, id) unique to FK against, so this is a guard (mirrors
+// assertSkuBelongsToProduct). The (tenant_id, lot_id) composite FK separately
+// guarantees the lot is in this tenant.
+async function assertLotBelongsToSku(
+  tx: TenantTransaction,
+  lotId: string,
+  skuId: string
+): Promise<void> {
+  const item = (
+    await tx
+      .select({ id: schema.lot.id })
+      .from(schema.lot)
+      .where(and(eq(schema.lot.id, lotId), eq(schema.lot.skuId, skuId)))
+      .limit(1)
+  ).at(0);
+  if (!item) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Lot not found in this tenant/SKU",
     });
   }
 }
@@ -2968,6 +3016,428 @@ export const reportsRouter = {
           onHand: Number(row.on_hand),
           suggestedQty: Math.max(0, Number(row.max_qty) - Number(row.on_hand)),
         }));
+      });
+    }),
+};
+
+// Phase 3 — stock transfers (quantity + value conservation, commits 2/3).
+// Two-step intra-company transfer through the per-transfer in-transit node.
+
+// Aggregate the per-line transfer value into a single top-level (value, currency,
+// scale) — defined only when every valued line shares one currency/scale (a
+// transfer is single-currency in practice; summing minor units across currencies
+// is meaningless, §12). Returns nulls when there is no valued line or currencies
+// differ. The per-line value is always carried losslessly on the event's `lines`.
+function aggregateTransferValue(
+  lineValues: {
+    currency: string | null;
+    scale: number | null;
+    valueMinor: number | null;
+  }[]
+): {
+  valueMinor: number | null;
+  currency: string | null;
+  scale: number | null;
+} {
+  const valued = lineValues.filter(
+    (line) => line.currency != null && line.valueMinor != null
+  );
+  const first = valued.at(0);
+  if (!first) {
+    return { currency: null, scale: null, valueMinor: null };
+  }
+  const uniform = valued.every(
+    (line) => line.currency === first.currency && line.scale === first.scale
+  );
+  if (!uniform) {
+    return { currency: null, scale: null, valueMinor: null };
+  }
+  return {
+    currency: first.currency,
+    scale: first.scale,
+    valueMinor: valued.reduce((sum, line) => sum + (line.valueMinor ?? 0), 0),
+  };
+}
+
+export const transferRouter = {
+  create: tenantProcedure
+    .input(
+      z.object({
+        sourceLocationId: z.string().uuid(),
+        destLocationId: z.string().uuid(),
+        expectedReceiptDate: z.string().optional(),
+        lines: z
+          .array(
+            z.object({
+              productId: z.string().uuid(),
+              skuId: z.string().uuid().optional(),
+              lotId: z.string().uuid().optional(),
+              qty: z.number().int().positive(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer");
+        // Belt-and-braces over the DB composite FKs (which already make a
+        // cross-tenant / inter-company reference impossible).
+        await assertLocationVisible(tx, input.sourceLocationId);
+        await assertLocationVisible(tx, input.destLocationId);
+        for (const line of input.lines) {
+          await assertProductVisible(tx, line.productId);
+          if (line.skuId) {
+            // Not just visible — the SKU must belong to the line's product, or
+            // the ledger would store productId=A while costing resolves from
+            // SKU=B's cell (cross-cell value corruption). Mirrors
+            // inventory.receive's assertSkuBelongsToProduct.
+            await assertSkuBelongsToProduct(tx, line.skuId, line.productId);
+          }
+          if (line.lotId) {
+            await assertLotVisible(tx, line.lotId);
+          }
+        }
+        const { transfer, lines } = await services.createTransfer(tx, ctx, {
+          sourceLocationId: input.sourceLocationId,
+          destLocationId: input.destLocationId,
+          expectedReceiptDate: input.expectedReceiptDate ?? null,
+          lines: input.lines,
+        });
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryTransferCreated,
+          payload: {
+            transferId: transfer.id,
+            companyId: transfer.companyId,
+            number: transfer.number,
+            sourceLocationId: transfer.sourceLocationId,
+            destLocationId: transfer.destLocationId,
+            inTransitLocationId: transfer.inTransitLocationId,
+            expectedReceiptDate: transfer.expectedReceiptDate,
+            lines: lines.map((l) => ({
+              skuId: l.skuId,
+              productId: l.productId,
+              qtyBase: l.qty,
+            })),
+            createdBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.transfer.create",
+          entityType: "stock_transfer",
+          entityId: transfer.id,
+          after: { transfer, lines },
+        });
+        return { transfer, lines };
+      });
+    }),
+  ship: tenantProcedure
+    .input(z.object({ transferId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer");
+        const { transfer, lineValues } = await services.shipTransfer(
+          tx,
+          ctx,
+          input.transferId
+        );
+        const released = aggregateTransferValue(lineValues);
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryTransferDispatched,
+          payload: {
+            transferId: transfer.id,
+            companyId: transfer.companyId,
+            sourceLocationId: transfer.sourceLocationId,
+            destLocationId: transfer.destLocationId,
+            inTransitLocationId: transfer.inTransitLocationId,
+            shippedAt: transfer.shippedAt,
+            expectedReceiptDate: transfer.expectedReceiptDate,
+            // Per-line exact released value V (the integer value that left
+            // source) — value conservation contract (event-map INV-2).
+            lines: lineValues.map((line) => ({
+              skuId: line.skuId,
+              productId: line.productId,
+              qtyBase: line.qtyBase,
+              releasedValueMinor: line.valueMinor,
+              currency: line.currency,
+              scale: line.scale,
+              costingMethod: line.method,
+            })),
+            // Top-level aggregate (single-currency convenience; null if mixed).
+            releasedValueMinor: released.valueMinor,
+            currency: released.currency,
+            scale: released.scale,
+            dispatchedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.transfer.ship",
+          entityType: "stock_transfer",
+          entityId: transfer.id,
+          after: transfer,
+        });
+        return transfer;
+      });
+    }),
+  receive: tenantProcedure
+    .input(z.object({ transferId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer_receive");
+        const { transfer, lineValues } = await services.receiveTransfer(
+          tx,
+          ctx,
+          input.transferId
+        );
+        const received = aggregateTransferValue(lineValues);
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryTransferReceived,
+          payload: {
+            transferId: transfer.id,
+            companyId: transfer.companyId,
+            sourceLocationId: transfer.sourceLocationId,
+            destLocationId: transfer.destLocationId,
+            actualReceiptDate: transfer.actualReceiptDate,
+            // Per-line received value — MUST equal the dispatched releasedValue
+            // per line (value conservation, event-map INV-2). varianceQtyBase is
+            // reserved 0 (full-receive; receive-discrepancy is a deferred P1).
+            lines: lineValues.map((line) => ({
+              skuId: line.skuId,
+              productId: line.productId,
+              qtyBase: line.qtyBase,
+              receivedValueMinor: line.valueMinor,
+              currency: line.currency,
+              scale: line.scale,
+              costingMethod: line.method,
+              varianceQtyBase: 0,
+            })),
+            receivedValueMinor: received.valueMinor,
+            currency: received.currency,
+            scale: received.scale,
+            receivedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.transfer.receive",
+          entityType: "stock_transfer",
+          entityId: transfer.id,
+          after: transfer,
+        });
+        return transfer;
+      });
+    }),
+  cancel: tenantProcedure
+    .input(
+      z.object({
+        transferId: z.string().uuid(),
+        reason: z.string().max(2000).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer");
+        const { transfer, lineValues } = await services.cancelTransfer(
+          tx,
+          ctx,
+          input.transferId
+        );
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryTransferCancelled,
+          payload: {
+            transferId: transfer.id,
+            companyId: transfer.companyId,
+            sourceLocationId: transfer.sourceLocationId,
+            inTransitLocationId: transfer.inTransitLocationId,
+            // Value returned to source when cancelling a SHIPPED transfer (empty
+            // for a draft cancel, which moved nothing).
+            lines: lineValues.map((line) => ({
+              skuId: line.skuId,
+              productId: line.productId,
+              qtyBase: line.qtyBase,
+              returnedValueMinor: line.valueMinor,
+              currency: line.currency,
+              scale: line.scale,
+            })),
+            reason: input.reason ?? null,
+            cancelledBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.transfer.cancel",
+          entityType: "stock_transfer",
+          entityId: transfer.id,
+          after: transfer,
+        });
+        return transfer;
+      });
+    }),
+};
+
+// Phase 3 commit 4 — bonded stock receiving (INV-3).
+// Commit 5 adds bond release + duty. Both bond routers live here.
+export const bondRouter = {
+  receive: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid(),
+        locationId: z.string().uuid(),
+        supplierRef: z.string().max(500).optional(),
+        customsReference: z.string().max(500).optional(),
+        landedCostReference: z.string().max(500).optional(),
+        receivedAt: z.string().datetime().optional(),
+        lines: z
+          .array(
+            z.object({
+              productId: z.string().uuid(),
+              skuId: z.string().uuid(),
+              lotId: z.string().uuid().optional(),
+              qty: z.number().int().positive(),
+              // Codex F5: bonded dutiable goods must carry a POSITIVE unit cost
+              // (a 0 would create qty>0 with value=0 and zero the duty basis).
+              unitCostMinor: z.number().int().positive(),
+              costCurrency: z.string().length(3),
+              costScale: z.number().int().min(0),
+              customsReference: z.string().max(500).optional(),
+              landedCostReference: z.string().max(500).optional(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "bond.receive");
+        // Belt-and-braces guards over DB composite FKs (H1 cross-tenant class).
+        await assertCompanyVisible(tx, input.companyId); // F2
+        await assertLocationVisible(tx, input.locationId);
+        for (const line of input.lines) {
+          await assertProductVisible(tx, line.productId);
+          await assertSkuBelongsToProduct(tx, line.skuId, line.productId);
+          if (line.lotId) {
+            // F3: lot must belong to this line's sku, not merely be visible.
+            await assertLotBelongsToSku(tx, line.lotId, line.skuId);
+          }
+        }
+        const { receipt, lines } = await services.createBondReceipt(tx, ctx, {
+          companyId: input.companyId,
+          locationId: input.locationId,
+          supplierRef: input.supplierRef ?? null,
+          customsReference: input.customsReference ?? null,
+          landedCostReference: input.landedCostReference ?? null,
+          receivedAt: input.receivedAt ? new Date(input.receivedAt) : null,
+          lines: input.lines,
+        });
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryBondReceived,
+          payload: {
+            bondReceiptId: receipt.id,
+            locationId: receipt.locationId,
+            supplierRef: receipt.supplierRef,
+            lines: lines.map((l) => ({
+              skuId: l.skuId,
+              productId: l.productId,
+              qtyBase: l.qty,
+              unitCostMinor: l.unitCostMinor,
+              currency: l.costCurrency,
+              scale: l.costScale,
+              lotId: l.lotId,
+              customsRef: l.customsReference,
+              landedCostRef: l.landedCostReference,
+            })),
+            receivedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "bond.receive",
+          entityType: "bond_receipt",
+          entityId: receipt.id,
+          after: { receipt, lines },
+        });
+        return { receipt, lines };
+      });
+    }),
+
+  // Phase 3 commit 5 — bond release + duty (INV-4/5). Release is RBAC-immediate:
+  // it requires BOTH bond.release AND bond.approve_release (the deferred §22
+  // request→approve workflow binds requestedBy/approvedBy additively later). The
+  // release executes a bonded→released transfer (qty + value conserved, INV-2)
+  // then a value-only duty/tax adjustment (intentional value-ADD, INV-5).
+  release: tenantProcedure
+    .input(
+      z.object({
+        bondReceiptId: z.string().uuid(),
+        destLocationId: z.string().uuid(),
+        lines: z
+          .array(
+            z.object({
+              bondReceiptLineId: z.string().uuid(),
+              qty: z.number().int().positive(),
+              dutyMinor: z.number().int().min(0).optional(),
+              taxMinor: z.number().int().min(0).optional(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        // RBAC-immediate: both permissions required for a one-call clearance.
+        await assertPermission(tx, ctx, "bond.release");
+        await assertPermission(tx, ctx, "bond.approve_release");
+        // H1 cross-tenant class: validate every FK input with a tenant-scoped
+        // read before the service inserts (FK checks bypass RLS). The composite
+        // FKs on bond_release are the durable DB backstop; these give a clean
+        // NOT_FOUND. bondReceiptId/bondReceiptLineId visibility is enforced by
+        // the service's RLS-scoped loads + belong-to checks.
+        await assertLocationVisible(tx, input.destLocationId);
+        const { release, releaseLines, eventLines, transferId } =
+          await services.executeBondRelease(tx, ctx, {
+            bondReceiptId: input.bondReceiptId,
+            destLocationId: input.destLocationId,
+            lines: input.lines.map((l) => ({
+              bondReceiptLineId: l.bondReceiptLineId,
+              qty: l.qty,
+              dutyMinor: l.dutyMinor ?? 0,
+              taxMinor: l.taxMinor ?? 0,
+            })),
+          });
+        await services.emitEvent(tx, ctx, {
+          type: services.DomainEventType.InventoryBondReleased,
+          payload: {
+            bondReleaseId: release.id,
+            bondReceiptId: release.bondReceiptId,
+            transferId,
+            sourceLocationId: release.sourceLocationId,
+            destLocationId: release.destLocationId,
+            lines: eventLines.map((l) => ({
+              skuId: l.skuId,
+              qtyBase: l.qtyBase,
+              releasedValueMinor: l.releasedValueMinor,
+              dutyMinor: l.dutyMinor,
+              taxMinor: l.taxMinor,
+              currency: l.currency,
+              scale: l.scale,
+            })),
+            releasedBy: ctx.actorUserId,
+            // RBAC-immediate: requestedBy/approvedBy default to the actor; the
+            // §22 workflow binds distinct values additively later.
+            requestedBy: ctx.actorUserId,
+            approvedBy: ctx.actorUserId,
+          },
+        });
+        await services.recordAudit(tx, ctx, {
+          action: "bond.release",
+          entityType: "bond_release",
+          entityId: release.id,
+          after: { release, releaseLines },
+        });
+        return { release, releaseLines, transferId };
       });
     }),
 };

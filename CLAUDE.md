@@ -30,7 +30,8 @@
 - UI/UX & component sourcing: `docs/architecture/ui-ux-plan.md` + `docs/architecture/ui-inventory/INDEX.md`
 - **Design language (UI phases 4+):** `.agents/skills/retailos-design-language/SKILL.md` — visual source of truth for every generated UI surface (table/admin baseline in `docs/architecture/ui-inventory/design-references.md`). Backend phases ignore it.
 - Vertical Slice #1 design: `docs/architecture/vertical-slice-1.md`
-- Phase 2 (Inventory): `docs/architecture/phase-2-implementation-plan.md` · `docs/architecture/event-map-phase2.md` · `docs/architecture/inventory-screen-map.md` · `docs/architecture/phase-2-api-contracts.md` · `docs/architecture/phase-2-gap-analysis.md` · `docs/architecture/phase-2-closeout-audit.md` (D1–D7 locked; ADR-0007 costing; backend review-ready for approved scope)
+- Phase 2 (Inventory) — ✅ COMPLETE/FROZEN (merged `72b2100`): `docs/architecture/phase-2-complete.md` (archive) · `phase-2-implementation-plan.md` · `event-map-phase2.md` · `phase-2-api-contracts.md` · `phase-2-gap-analysis.md` (D1–D7 locked; ADR-0007/0008)
+- Phase 3 (Locations/Warehouses/Bonds) — PLANNING (no code; awaiting owner approval): `docs/architecture/phase-3-implementation-plan.md` · `phase-3-gap-analysis.md` · `module-specs/locations-warehouses-bonds.md` · `event-map-phase3.md` · `competitive/locations-warehouses-bonds.md` (parked debt #5 composite-FK + #7 set-once DB-trigger paid first; unified self-referential `location` tree + flags; two-step intra-company-only transfers; bond-release duty reuses the value-only `valuation_adjustment` seam; transfer value-conservation is the load-bearing design question — AVCO reuses seams, only FIFO needs an additive costing touch)
 - Decisions: `docs/architecture/adr/` · Module specs: `docs/architecture/module-specs/` · Competitive: `docs/architecture/competitive/`
 - Phase-0 lock-in scoreboard: `docs/architecture/phase-0-checklist.md`
 

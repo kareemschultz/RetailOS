@@ -8,6 +8,7 @@ import {
   bundle,
   category,
   company,
+  type LOCATION_TYPES,
   location,
   lot,
   organization,
@@ -22,7 +23,15 @@ import {
   uomConversion,
   variant,
 } from "../schema";
-import { appendStockMovement, applyValuation } from "../services";
+import {
+  appendStockMovement,
+  applyValuation,
+  createBondReceipt,
+  createTransfer,
+  executeBondRelease,
+  receiveTransfer,
+  shipTransfer,
+} from "../services";
 import { withTenant } from "../tenant";
 
 type Database = ReturnType<typeof createDb>;
@@ -173,7 +182,7 @@ function ensureLocation(
   tenant: ProvisionedTenant,
   companyId: string,
   name: string,
-  type: string
+  type: (typeof LOCATION_TYPES)[number]
 ) {
   return withTenant(deps.database, tenant.tenantId, async (tx) => {
     const existing = await tx
@@ -211,7 +220,7 @@ async function seedPhase2Tenant(
   input: {
     companyName: string;
     locationName: string;
-    locationType: string;
+    locationType: (typeof LOCATION_TYPES)[number];
     costingMethod: "avco" | "fifo";
     includeMixedOverrides?: boolean;
   }
@@ -1048,4 +1057,262 @@ export async function seedPhase2(deps: SeedDeps): Promise<Phase2SeedResult> {
   });
 
   return { supermarket, pharmacy, mixed };
+}
+
+// ── Phase 3 seed (locations tree / transfers / bonded receive + release) ──────
+// Self-contained on a fresh tenant (charter §32 demo data). Exercises the
+// Phase-3 surfaces end-to-end through the SERVICES (never raw movement inserts
+// for valued stock): a unified location TREE (warehouse → zone → bins with the
+// capacity seam), an in-flight transfer (shipped, not received) AND a completed
+// one, and a bonded receipt followed by a bond release WITH duty. Run-once on a
+// fresh tenant: transfers/releases carry gapless sequence numbers and consume
+// stock, so it is intentionally NOT idempotent on rerun (unlike the Phase-2
+// catalog seed) — provision a fresh tenant (or clean first) to re-seed.
+export interface Phase3SeedResult {
+  binIds: string[];
+  bondedLocationId: string;
+  bondReleaseId: string;
+  completedTransferId: string;
+  inFlightTransferId: string;
+  storeLocationId: string;
+  tenant: ProvisionedTenant;
+  warehouseId: string;
+}
+
+export async function seedPhase3(deps: SeedDeps): Promise<Phase3SeedResult> {
+  const tenant = await deps.provisionTenant({
+    name: "Phase 3 Distribution Co",
+    adminEmail: "phase3.bonds@example.com",
+  });
+  const ctx = { actorUserId: tenant.adminUserId, tenantId: tenant.tenantId };
+
+  // Bonded stock is AVCO-only (§I.4); set the tenant default so the bonded
+  // receipt's SKUs resolve to AVCO.
+  await deps.database
+    .update(organization)
+    .set({ costingMethod: "avco" })
+    .where(eq(organization.id, tenant.tenantId));
+
+  return await withTenant(deps.database, tenant.tenantId, async (tx) => {
+    const co = required(
+      (
+        await tx
+          .insert(company)
+          .values({
+            tenantId: tenant.tenantId,
+            name: "Phase 3 Distribution Ltd",
+            createdBy: tenant.adminUserId,
+          })
+          .returning()
+      ).at(0),
+      "company"
+    );
+    const uom = required(
+      (
+        await tx
+          .insert(unitOfMeasure)
+          .values({ tenantId: tenant.tenantId, code: "EA", name: "Each" })
+          .returning()
+      ).at(0),
+      "uom"
+    );
+
+    const insertLoc = async (vals: {
+      name: string;
+      type: (typeof LOCATION_TYPES)[number];
+      parentLocationId?: string;
+      isSellable?: boolean;
+      isBonded?: boolean;
+      maxWeight?: number;
+      maxVolume?: number;
+    }) =>
+      required(
+        (
+          await tx
+            .insert(location)
+            .values({
+              tenantId: tenant.tenantId,
+              companyId: co.id,
+              createdBy: tenant.adminUserId,
+              ...vals,
+            })
+            .returning()
+        ).at(0),
+        `location ${vals.name}`
+      );
+
+    const store = await insertLoc({
+      name: "P3 Store",
+      type: "store",
+      isSellable: true,
+    });
+    // Unified tree: warehouse → zone → bins (the zone/bin nodes are non-sellable
+    // structural nodes; bins carry the capacity seam).
+    const warehouse = await insertLoc({
+      name: "P3 Central Warehouse",
+      type: "warehouse",
+      isSellable: false,
+    });
+    const zone = await insertLoc({
+      name: "P3 Zone A",
+      type: "zone",
+      parentLocationId: warehouse.id,
+      isSellable: false,
+    });
+    const binA = await insertLoc({
+      name: "P3 Bin A-01",
+      type: "bin",
+      parentLocationId: zone.id,
+      isSellable: false,
+      maxWeight: 100_000,
+      maxVolume: 5000,
+    });
+    const binB = await insertLoc({
+      name: "P3 Bin A-02",
+      type: "bin",
+      parentLocationId: zone.id,
+      isSellable: false,
+      maxWeight: 100_000,
+      maxVolume: 5000,
+    });
+    const bonded = await insertLoc({
+      name: "P3 Bonded WH",
+      type: "bonded",
+      isBonded: true,
+      isSellable: false,
+    });
+
+    const makeProductSku = async (code: string, name: string) => {
+      const p = required(
+        (
+          await tx
+            .insert(product)
+            .values({
+              tenantId: tenant.tenantId,
+              sku: code,
+              name,
+              baseUomId: uom.id,
+              priceMinor: 5000,
+              currency: "USD",
+              createdBy: tenant.adminUserId,
+            })
+            .returning()
+        ).at(0),
+        `product ${code}`
+      );
+      const s = required(
+        (
+          await tx
+            .insert(sku)
+            .values({
+              tenantId: tenant.tenantId,
+              productId: p.id,
+              code: `${code}-EA`,
+              baseUomId: uom.id,
+            })
+            .returning()
+        ).at(0),
+        `sku ${code}`
+      );
+      return { productId: p.id, skuId: s.id };
+    };
+    const widget = await makeProductSku("P3-WIDGET", "Phase 3 Widget");
+    const gadget = await makeProductSku("P3-GADGET", "Phase 3 Gadget");
+
+    // Stock the warehouse with valued receipts so transfers conserve VALUE.
+    const stockWarehouse = async (
+      skuId: string,
+      productId: string,
+      qty: number,
+      unitCostMinor: number,
+      key: string
+    ) => {
+      const { movement } = await appendSeedMovement(tx, tenant, {
+        locationId: warehouse.id,
+        productId,
+        skuId,
+        movementType: "receipt",
+        qtyDelta: qty,
+        unitCostMinor,
+        costCurrency: "USD",
+        costScale: 2,
+        idempotencyKey: key,
+      });
+      await applyValuation(tx, ctx, movement);
+    };
+    await stockWarehouse(
+      widget.skuId,
+      widget.productId,
+      100,
+      1200,
+      "p3-wh-widget"
+    );
+    await stockWarehouse(
+      gadget.skuId,
+      gadget.productId,
+      50,
+      3400,
+      "p3-wh-gadget"
+    );
+
+    // Transfer 1 — COMPLETED (warehouse → store): create → ship → receive.
+    const { transfer: completed } = await createTransfer(tx, ctx, {
+      sourceLocationId: warehouse.id,
+      destLocationId: store.id,
+      lines: [{ productId: widget.productId, skuId: widget.skuId, qty: 30 }],
+    });
+    await shipTransfer(tx, ctx, completed.id);
+    await receiveTransfer(tx, ctx, completed.id);
+
+    // Transfer 2 — IN-FLIGHT (shipped, awaiting receipt; stock sits in the
+    // per-transfer in-transit node).
+    const { transfer: inFlight } = await createTransfer(tx, ctx, {
+      sourceLocationId: warehouse.id,
+      destLocationId: store.id,
+      lines: [{ productId: gadget.productId, skuId: gadget.skuId, qty: 10 }],
+    });
+    await shipTransfer(tx, ctx, inFlight.id);
+
+    // Bonded receipt (import batch) into the bonded location, then a bond
+    // release bonded → store WITH duty + tax (value-only cost-basis add).
+    const { receipt, lines } = await createBondReceipt(tx, ctx, {
+      companyId: co.id,
+      locationId: bonded.id,
+      supplierRef: "P3-IMP-001",
+      customsReference: "P3-CUST-001",
+      lines: [
+        {
+          productId: widget.productId,
+          skuId: widget.skuId,
+          qty: 40,
+          unitCostMinor: 1500,
+          costCurrency: "USD",
+          costScale: 2,
+        },
+      ],
+    });
+    const { release } = await executeBondRelease(tx, ctx, {
+      bondReceiptId: receipt.id,
+      destLocationId: store.id,
+      lines: [
+        {
+          bondReceiptLineId: required(lines[0], "bond receipt line").id,
+          qty: 25,
+          dutyMinor: 1875,
+          taxMinor: 625,
+        },
+      ],
+    });
+
+    return {
+      bondReleaseId: release.id,
+      bondedLocationId: bonded.id,
+      binIds: [binA.id, binB.id],
+      completedTransferId: completed.id,
+      inFlightTransferId: inFlight.id,
+      storeLocationId: store.id,
+      tenant,
+      warehouseId: warehouse.id,
+    };
+  });
 }
