@@ -7,6 +7,7 @@
 
 - @docs/architecture/retailos-master-charter.md — the governing charter (source of truth).
 - @docs/architecture/lessons-learned.md — append-only verified mistakes; never repeat them. Append after any task with a correction/surprise/contradiction.
+- `docs/architecture/engineering-principles.md` — the constitution: backend-owns-truth, one-owner-per-invariant, write-path-through-the-owning-service (#8), Money primitives, stamp-the-irreproducible-fact, imported-blocks-become-owned, verify-against-official-docs, gate-by-kind, the per-phase finish loop, and the **products-not-phases** mental model.
 - @docs/architecture/phase-roadmap.md — phase status and what's in scope now.
 - `docs/architecture/PROGRESS.md` — live cross-agent task board + changelog (a `SessionStart` hook surfaces a lean view automatically). **Claim a lane before writing**; `git pull --rebase` before committing (multiple agents share the branch).
 - `docs/architecture/phase-2-implementation-plan.md` — approved Phase 2 build order and costing/RLS/seed/test design; **Commit 0 gate first, resolver later**.
