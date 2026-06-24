@@ -27,6 +27,7 @@ const TENANT_TABLES = [
   "number_block",
   "idempotency_key",
   "fiscal_document",
+  "tender",
 ] as const;
 
 describe.skipIf(!url)("RLS — fail-closed tenant isolation (ADR 0006)", () => {

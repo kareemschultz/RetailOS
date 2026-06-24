@@ -63,6 +63,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.bondRelease);
         await tx.delete(schema.bondReceiptLine);
         await tx.delete(schema.bondReceipt);
+        await tx.delete(schema.tender);
         await tx.delete(schema.saleLine);
         await tx.delete(schema.invoice);
         await tx.delete(schema.sale);
@@ -139,9 +140,24 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       { sku: "P1", name: "Prod", priceMinor: 1000, currency: "USD" },
       admin
     );
+    // skuId is required on every sale line (#8): give P1 a sku and key the
+    // receipt + sale to it so valuation has a cell.
+    const p1Sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "P1-EA", productId: product.id },
+      admin
+    );
     await call(
       appRouter.inventory.receive,
-      { locationId: location.id, productId: product.id, qty: 10 },
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 10,
+        skuId: p1Sku.id,
+        unitCostMinor: 500,
+      },
       admin
     );
 
@@ -150,7 +166,8 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       {
         locationId: location.id,
         idempotencyKey: "e2e-key",
-        lines: [{ productId: product.id, qty: 3 }],
+        lines: [{ productId: product.id, qty: 3, skuId: p1Sku.id }],
+        tenders: [{ method: "cash", currency: "USD", amountMinor: 3000 }],
       },
       admin
     );
@@ -162,7 +179,8 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       {
         locationId: location.id,
         idempotencyKey: "e2e-key",
-        lines: [{ productId: product.id, qty: 3 }],
+        lines: [{ productId: product.id, qty: 3, skuId: p1Sku.id }],
+        tenders: [{ method: "cash", currency: "USD", amountMinor: 3000 }],
       },
       admin
     );
@@ -1652,19 +1670,26 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       { sku: "H2O-P", name: "H2O Prod", priceMinor: 500, currency: "USD" },
       admin
     );
-    // Opening balance of 5 into the (location, product) cell — product-keyed, so
-    // it lines up with the sale deduction (no skuId).
-    await withTenant(db, ORG, (tx) =>
-      services.appendStockMovement(
-        tx,
-        { tenantId: ORG },
-        {
-          locationId: location.id,
-          productId: product.id,
-          movementType: "receipt",
-          qtyDelta: 5,
-        }
-      )
+    const h2Sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "H2O-EA", productId: product.id },
+      admin
+    );
+    // Opening balance of 5 into the (location, SKU) cell via a valued receipt, so
+    // the sku-keyed sale deduction (skuId is required) values against a real
+    // avg_cost cell — the oversell still drives on-hand negative.
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 5,
+        skuId: h2Sku.id,
+        unitCostMinor: 400,
+      },
+      admin
     );
 
     const discrepancies = () =>
@@ -1682,7 +1707,8 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       {
         locationId: location.id,
         idempotencyKey: "h2-ok",
-        lines: [{ productId: product.id, qty: 3 }],
+        lines: [{ productId: product.id, qty: 3, skuId: h2Sku.id }],
+        tenders: [{ method: "cash", currency: "USD", amountMinor: 1500 }],
       },
       admin
     );
@@ -1694,7 +1720,8 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       {
         locationId: location.id,
         idempotencyKey: "h2-oversell",
-        lines: [{ productId: product.id, qty: 10 }],
+        lines: [{ productId: product.id, qty: 10, skuId: h2Sku.id }],
+        tenders: [{ method: "cash", currency: "USD", amountMinor: 5000 }],
       },
       admin
     );
@@ -1955,6 +1982,374 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
           ],
         },
         cashier
+      )
+    ).rejects.toThrow();
+  });
+
+  // ── Phase 4 Commit 2 — Minimum Sellable POS ───────────────────────────────
+  // THE #8 write-path gate: prove the ROUTER (not just the service) invokes
+  // applyValuation per line — avg_cost / valuation_layer must actually MOVE and
+  // the sale_line must carry stamped COGS. A green costing service suite is NOT
+  // evidence the POS write path uses it (engineering-principles §B5).
+  it("MSP: pos.createSale wires applyValuation per line (#8) — COGS stamped, valuation moves (AVCO+FIFO), tenders + change recorded, idempotent", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "MSPCo" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "MSPStore", type: "store" },
+      admin
+    );
+    const each = await call(
+      appRouter.catalog.uomCreate,
+      { code: "MSP-EA", name: "Each" },
+      admin
+    );
+    const fifoCat = await call(
+      appRouter.catalog.categoryCreate,
+      { costingMethod: "fifo", name: "MSP FIFO" },
+      admin
+    );
+    const avcoProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        costingMethod: "avco",
+        currency: "USD",
+        name: "AVCO",
+        priceMinor: 1000,
+        sku: "MSP-AVCO",
+      },
+      admin
+    );
+    const fifoProduct = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        categoryId: fifoCat.id,
+        currency: "USD",
+        name: "FIFO",
+        priceMinor: 2000,
+        sku: "MSP-FIFO",
+      },
+      admin
+    );
+    const avcoSku = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: "MSP-AVCO-EA", productId: avcoProduct.id },
+      admin
+    );
+    const fifoSku = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: "MSP-FIFO-EA", productId: fifoProduct.id },
+      admin
+    );
+    // Receive valued stock: AVCO 5 @ 100; FIFO 5 @ 300.
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: avcoProduct.id,
+        qty: 5,
+        skuId: avcoSku.id,
+        unitCostMinor: 100,
+      },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: fifoProduct.id,
+        qty: 5,
+        skuId: fifoSku.id,
+        unitCostMinor: 300,
+      },
+      admin
+    );
+
+    // Sell 2 AVCO @1000 + 1 FIFO @2000 = 4000; pay 5000 cash → change 1000.
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "msp-1",
+        lines: [
+          { productId: avcoProduct.id, qty: 2, skuId: avcoSku.id },
+          { productId: fifoProduct.id, qty: 1, skuId: fifoSku.id },
+        ],
+        locationId: location.id,
+        tenders: [{ amountMinor: 5000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    expect(sale.totalMinor).toBe(4000);
+    expect(sale.changeMinor).toBe(1000);
+
+    // #8 — valuation MOVED: AVCO qty 5→3 @ 100; FIFO layer remaining 5→4.
+    const avco = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.avgCost)
+        .where(
+          and(
+            eq(schema.avgCost.skuId, avcoSku.id),
+            eq(schema.avgCost.locationId, location.id)
+          )
+        )
+    );
+    expect(avco.at(0)?.qtyOnHand).toBe(3);
+    expect(avco.at(0)?.totalValueMinor).toBe(300);
+    const fifoLayers = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.valuationLayer)
+        .where(eq(schema.valuationLayer.skuId, fifoSku.id))
+    );
+    const remaining = fifoLayers.reduce(
+      (sum, layer) => sum + Number(layer.qtyRemaining),
+      0
+    );
+    expect(remaining).toBe(4);
+
+    // #8 — COGS STAMPED on every tracked sale line.
+    const lines = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.saleLine)
+        .where(eq(schema.saleLine.saleId, sale.saleId))
+    );
+    for (const line of lines) {
+      expect(line.cogsMinor).not.toBeNull();
+      expect(line.costingMethodApplied).not.toBeNull();
+    }
+    const avcoLine = lines.find((line) => line.skuId === avcoSku.id);
+    expect(avcoLine?.cogsMinor).toBe(200);
+    expect(avcoLine?.costingMethodApplied).toBe("avco");
+    const fifoLine = lines.find((line) => line.skuId === fifoSku.id);
+    expect(fifoLine?.cogsMinor).toBe(300);
+    expect(fifoLine?.costingMethodApplied).toBe("fifo");
+
+    // Tender row recorded with the computed change.
+    const tenders = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.tender)
+        .where(eq(schema.tender.saleId, sale.saleId))
+    );
+    expect(tenders.length).toBe(1);
+    expect(tenders.at(0)?.changeMinor).toBe(1000);
+    expect(tenders.at(0)?.settledAmountMinor).toBe(4000);
+
+    // sale.created carries the reserved-nullable functional/commission keys
+    // PRESENT (toHaveProperty — so a refactor can't silently drop them); a
+    // payment.received was emitted per tender.
+    const saleEvents = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(
+          and(
+            eq(schema.outboxEvent.type, "sale.created"),
+            eq(schema.outboxEvent.tenantId, ORG)
+          )
+        )
+    );
+    const evt = saleEvents.at(-1)?.payload as Record<string, unknown>;
+    for (const key of [
+      "functionalCurrency",
+      "fxRateToFunctional",
+      "commissionAccrualPolicy",
+      "commissionMinor",
+      "taxBreakdown",
+      "tenders",
+      "lines",
+      "offline",
+    ]) {
+      expect(evt).toHaveProperty(key);
+    }
+    const payEvents = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(
+          and(
+            eq(schema.outboxEvent.type, "payment.received"),
+            eq(schema.outboxEvent.tenantId, ORG)
+          )
+        )
+    );
+    expect(payEvents.length).toBeGreaterThan(0);
+
+    // Idempotent replay: same key ⇒ same sale, valuation NOT applied twice.
+    const replay = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "msp-1",
+        lines: [
+          { productId: avcoProduct.id, qty: 2, skuId: avcoSku.id },
+          { productId: fifoProduct.id, qty: 1, skuId: fifoSku.id },
+        ],
+        locationId: location.id,
+        tenders: [{ amountMinor: 5000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    expect(replay.saleId).toBe(sale.saleId);
+    const avcoAfter = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.avgCost)
+        .where(eq(schema.avgCost.skuId, avcoSku.id))
+    );
+    expect(avcoAfter.at(0)?.qtyOnHand).toBe(3);
+  });
+
+  it("MSP: rejects a line with no skuId (#8/INV-P4-8), underpayment, card-overpay-tiny-cash change, and non-sellable location (INV-P4-7)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "MSPGuards" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "GuardStore", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "G", priceMinor: 500, sku: "MSP-G" },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "MSP-G-EA", productId: product.id },
+      admin
+    );
+
+    // (a) A sale line with NO skuId is rejected (skuId is universally required —
+    // the #8 fix; a product-only line has no valuation cell). Cast past the type
+    // to exercise the runtime (Zod) rejection.
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "g-nosku",
+          lines: [
+            { productId: product.id, qty: 1 } as unknown as {
+              productId: string;
+              qty: number;
+              skuId: string;
+            },
+          ],
+          locationId: location.id,
+          tenders: [{ amountMinor: 500, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // (b) Underpayment: tender 100 < total 500 → reject.
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "g-under",
+          lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+          locationId: location.id,
+          tenders: [{ amountMinor: 100, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // (c) Change exceeds cash tendered (card 2000 + cash 1, total 500 → change
+    // 1501 > cash 1) → reject; impossible negative settled can never be written.
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "g-overcard",
+          lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+          locationId: location.id,
+          tenders: [
+            { amountMinor: 2000, currency: "USD", method: "card" },
+            { amountMinor: 1, currency: "USD", method: "cash" },
+          ],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // (d) Non-sellable location → reject. Flip isSellable (the location.create
+    // router doesn't expose it; sellability is set by location type/flags).
+    await withTenant(db, ORG, (tx) =>
+      tx
+        .update(schema.location)
+        .set({ isSellable: false })
+        .where(eq(schema.location.id, location.id))
+    );
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "g-sellable",
+          lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+          locationId: location.id,
+          tenders: [{ amountMinor: 500, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
+  it("MSP: a sale line referencing another tenant's SKU is rejected (H1 — FK checks bypass RLS)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    // Tenant B owns a product+sku.
+    const productB = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "BProd", priceMinor: 100, sku: "B-XT" },
+      adminB
+    );
+    const skuB = await call(
+      appRouter.catalog.skuCreate,
+      { code: "B-XT-EA", productId: productB.id },
+      adminB
+    );
+    // Tenant A: own location + product, but the line points at tenant B's sku.
+    const companyA = await call(
+      appRouter.company.create,
+      { name: "ACo" },
+      admin
+    );
+    const locationA = await call(
+      appRouter.location.create,
+      { companyId: companyA.id, name: "AStore", type: "store" },
+      admin
+    );
+    const productA = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "AProd", priceMinor: 100, sku: "A-XT" },
+      admin
+    );
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "xt-sku",
+          lines: [{ productId: productA.id, qty: 1, skuId: skuB.id }],
+          locationId: locationA.id,
+          tenders: [{ amountMinor: 100, currency: "USD", method: "cash" }],
+        },
+        admin
       )
     ).rejects.toThrow();
   });

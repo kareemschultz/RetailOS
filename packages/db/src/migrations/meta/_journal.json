@@ -127,6 +127,13 @@
       "when": 1782316984100,
       "tag": "0017_phase4_commit1_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782333891353,
+      "tag": "0018_phase4_commit2_msp",
+      "breakpoints": true
     }
   ]
 }
