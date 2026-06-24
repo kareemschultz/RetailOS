@@ -1,5 +1,5 @@
 {
-  "id": "59aefdac-3bce-44d3-abb4-f220c007b308",
+  "id": "c64caa94-2ff8-4281-955f-dbc78c31dd4e",
   "prevId": "697be2fb-7436-459a-b210-e1447ddbf8a7",
   "version": "7",
   "dialect": "postgresql",
@@ -5779,7 +5779,7 @@
           "name": "sale_type",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": "'sale'"
         },
         "original_sale_id": {
@@ -6278,6 +6278,14 @@
         "tender_amount_chk": {
           "name": "tender_amount_chk",
           "value": "\"tender\".\"amount_minor\" >= 0"
+        },
+        "tender_change_chk": {
+          "name": "tender_change_chk",
+          "value": "\"tender\".\"change_minor\" IS NULL OR \"tender\".\"change_minor\" >= 0"
+        },
+        "tender_settled_chk": {
+          "name": "tender_settled_chk",
+          "value": "\"tender\".\"settled_amount_minor\" IS NULL OR \"tender\".\"settled_amount_minor\" >= 0"
         }
       },
       "isRLSEnabled": false

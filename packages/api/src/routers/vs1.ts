@@ -2716,16 +2716,20 @@ export const inventoryRouter = {
 // end-to-end. Returns/refunds, shift/cash, split/multi-currency, offline queue
 // are later commits — the seams are reserved (event-map-phase4.md).
 
+// skuId is REQUIRED on every sale line (Codex CRITICAL — the #8 fix): valuation
+// cells (avg_cost / valuation_layer) are SKU×location, so a product-only line
+// has no cell to value and would silently skip applyValuation. The event-map
+// also lists skuId as a required per-line ID.
 interface MspLineInput {
   productId: string;
   qty: number;
-  skuId?: string;
+  skuId: string;
   unitPriceMinor?: number;
 }
 interface PricedLine {
   productId: string;
   qty: number;
-  skuId: string | null;
+  skuId: string;
   unitPriceMinor: number;
 }
 type TenderMethod = (typeof schema.TENDER_METHODS)[number];
@@ -2788,15 +2792,10 @@ async function priceMspLines(
         message: `Product ${line.productId} not found in this tenant`,
       });
     }
-    if (product.trackingMode !== "none" && !line.skuId) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: `SKU required for inventory-tracked product ${product.sku} (INV-P4-8)`,
-      });
-    }
-    if (line.skuId) {
-      await assertSkuVisible(tx, line.skuId);
-      await assertSkuBelongsToProduct(tx, line.skuId, line.productId);
-    }
+    // skuId is required on EVERY line (INV-P4-8 + the #8 fix). Validate it is in
+    // this tenant (RLS-scoped) AND belongs to this product (the H1 tuple check).
+    await assertSkuVisible(tx, line.skuId);
+    await assertSkuBelongsToProduct(tx, line.skuId, line.productId);
     const unit = services.money(
       line.unitPriceMinor ?? product.priceMinor,
       product.currency,
@@ -2807,7 +2806,7 @@ async function priceMspLines(
     priced.push({
       productId: product.id,
       qty: line.qty,
-      skuId: line.skuId ?? null,
+      skuId: line.skuId,
       unitPriceMinor: unit.minor,
     });
   }
@@ -2840,21 +2839,38 @@ function settleTenders(
       message: "Underpayment: tendered amount is less than the sale total",
     });
   }
-  const change = tendered - total.minor;
   const settled: SettledTender[] = tenders.map((t) => ({
     ...t,
     changeMinor: null,
     settledAmountMinor: t.amountMinor,
   }));
+  // Overpayment is returned as cash change. Change may ONLY come from cash and
+  // is bounded by the cash actually tendered (Codex HIGH) — you cannot give
+  // change on a card, and settled = amount − change can never go negative. The
+  // change is drawn down across the cash tenders in order.
+  let change = tendered - total.minor;
   if (change > 0) {
-    const cash = settled.find((t) => t.method === "cash");
-    if (!cash) {
+    const cashTendered = settled
+      .filter((t) => t.method === "cash")
+      .reduce((sum, t) => sum + t.amountMinor, 0);
+    if (change > cashTendered) {
       throw new ORPCError("BAD_REQUEST", {
-        message: "Change is due but there is no cash tender to return it from",
+        message:
+          "Change due exceeds the cash tendered — non-cash overpayment cannot be refunded as change",
       });
     }
-    cash.settledAmountMinor = cash.amountMinor - change;
-    cash.changeMinor = change;
+    for (const t of settled) {
+      if (change === 0) {
+        break;
+      }
+      if (t.method !== "cash") {
+        continue;
+      }
+      const fromThis = Math.min(change, t.amountMinor);
+      t.changeMinor = fromThis;
+      t.settledAmountMinor = t.amountMinor - fromThis;
+      change -= fromThis;
+    }
   }
   return settled;
 }
@@ -2900,24 +2916,20 @@ async function processSaleLine(
     qtyDelta: -opts.line.qty,
     refId: opts.sale.id,
     refType: "sale",
-    skuId: opts.line.skuId ?? null,
+    skuId: opts.line.skuId,
   });
-  let cogsMinor: number | null = null;
-  let cogsCurrency: string | null = null;
-  let cogsScale: number | null = null;
-  let costingMethodApplied: string | null = null;
-  if (opts.line.skuId) {
-    // #8 — the write path MUST invoke valuation, not just deduct quantity.
-    const valuation = await services.applyValuation(tx, ctx, movement);
-    cogsMinor = valuation.cogsMinor;
-    cogsCurrency = valuation.currency;
-    cogsScale = valuation.scale;
-    costingMethodApplied = valuation.method;
-    await tx
-      .update(schema.saleLine)
-      .set({ cogsMinor, cogsCurrency, cogsScale, costingMethodApplied })
-      .where(eq(schema.saleLine.id, saleLine.id));
-  }
+  // #8 — the write path MUST invoke valuation, UNCONDITIONALLY (skuId is always
+  // present): consume FIFO layers / reduce AVCO value and STAMP the COGS back
+  // onto the line. A line is never written without its valuation.
+  const valuation = await services.applyValuation(tx, ctx, movement);
+  const cogsMinor = valuation.cogsMinor;
+  const cogsCurrency = valuation.currency;
+  const cogsScale = valuation.scale;
+  const costingMethodApplied = valuation.method;
+  await tx
+    .update(schema.saleLine)
+    .set({ cogsMinor, cogsCurrency, cogsScale, costingMethodApplied })
+    .where(eq(schema.saleLine.id, saleLine.id));
   if (movement.balanceAfter < 0) {
     await services.emitEvent(tx, ctx, {
       type: services.DomainEventType.InventoryStockDiscrepancy,
@@ -3149,6 +3161,17 @@ async function runCreateSaleMsp(
       lines: eventLines,
       locationId: input.locationId,
       number: saleNumber,
+      // Offline-origin envelope (event-map-phase4.md, locked) — reserved
+      // present-but-null for the online MSP; populated when the offline queue
+      // (a later commit) carries device/terminal/counter/clock metadata. Absent
+      // → present later would be a breaking contract change (Codex HIGH).
+      offline: {
+        deviceId: null,
+        terminalId: null,
+        monotonicCounter: null,
+        localTs: null,
+        payloadVersion: null,
+      },
       saleId: sale.id,
       saleType: "sale",
       salesRepId: input.salesRepId ?? null,
@@ -3190,7 +3213,9 @@ export const posRouter = {
           .array(
             z.object({
               productId: z.string().uuid(),
-              skuId: z.string().uuid().optional(),
+              // skuId is REQUIRED (Codex CRITICAL / INV-P4-8): valuation is
+              // SKU-level, so every sold line must carry a sku to be valued.
+              skuId: z.string().uuid(),
               qty: z.number().int().positive(),
               unitPriceMinor: z.number().int().min(0).optional(),
             })

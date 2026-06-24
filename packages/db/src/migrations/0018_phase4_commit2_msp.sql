@@ -14,10 +14,12 @@ CREATE TABLE "tender" (
 	"created_by" text,
 	"updated_by" text,
 	CONSTRAINT "tender_method_chk" CHECK ("tender"."method" IN ('cash','card','bank_transfer','mobile_money','cheque','store_credit','gift_card')),
-	CONSTRAINT "tender_amount_chk" CHECK ("tender"."amount_minor" >= 0)
+	CONSTRAINT "tender_amount_chk" CHECK ("tender"."amount_minor" >= 0),
+	CONSTRAINT "tender_change_chk" CHECK ("tender"."change_minor" IS NULL OR "tender"."change_minor" >= 0),
+	CONSTRAINT "tender_settled_chk" CHECK ("tender"."settled_amount_minor" IS NULL OR "tender"."settled_amount_minor" >= 0)
 );
 --> statement-breakpoint
-ALTER TABLE "sale" ADD COLUMN "sale_type" text DEFAULT 'sale' NOT NULL;--> statement-breakpoint
+ALTER TABLE "sale" ADD COLUMN "sale_type" text DEFAULT 'sale';--> statement-breakpoint
 ALTER TABLE "sale" ADD COLUMN "original_sale_id" uuid;--> statement-breakpoint
 ALTER TABLE "sale" ADD COLUMN "subtotal_minor" bigint;--> statement-breakpoint
 ALTER TABLE "sale" ADD COLUMN "discount_minor" bigint;--> statement-breakpoint
@@ -45,11 +47,13 @@ CREATE INDEX "sale_line_skuId_idx" ON "sale_line" USING btree ("sku_id");--> sta
 ALTER TABLE "sale" ADD CONSTRAINT "sale_sale_type_chk" CHECK ("sale"."sale_type" IN ('sale','return','exchange'));--> statement-breakpoint
 -- Phase 4 commit 2 — Minimum Sellable POS. Expand-only: extends sale/sale_line
 -- (SKU/lot identity, base-unit qty, line tax/discount, the COGS stamp written by
--- applyValuation #8) and adds the `tender` table. All sale/sale_line additions
--- are nullable (sale_type carries a DEFAULT so the NOT NULL is backfill-safe).
--- The composite FKs reference (tenant_id, id) targets that already exist
--- (sale: migration 0017; sku/lot: Phase-3 commit 0), so no FK-before-unique
--- reordering is needed within this migration.
+-- applyValuation #8) and adds the `tender` table. Every sale/sale_line addition
+-- is NULLABLE — including `sale_type` (a NOT-NULL retrofit on the existing table
+-- is deferred to a later contract migration after backfill; the DEFAULT 'sale' +
+-- CHECK hold the shape now). `tender` carries change/settled >= 0 CHECKs so
+-- impossible tender math is rejected at the DB. Composite FKs reference
+-- (tenant_id, id) targets that already exist (sale: 0017; sku/lot: Phase-3
+-- commit 0), so no FK-before-unique reordering is needed within this migration.
 --
 -- Fail-closed RLS for the new tenant-owned `tender` table (charter §8/§9;
 -- coverage gate). drizzle-kit does NOT emit RLS — hand-added (Phase 3 lesson).

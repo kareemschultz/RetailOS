@@ -140,9 +140,24 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       { sku: "P1", name: "Prod", priceMinor: 1000, currency: "USD" },
       admin
     );
+    // skuId is required on every sale line (#8): give P1 a sku and key the
+    // receipt + sale to it so valuation has a cell.
+    const p1Sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "P1-EA", productId: product.id },
+      admin
+    );
     await call(
       appRouter.inventory.receive,
-      { locationId: location.id, productId: product.id, qty: 10 },
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 10,
+        skuId: p1Sku.id,
+        unitCostMinor: 500,
+      },
       admin
     );
 
@@ -151,7 +166,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       {
         locationId: location.id,
         idempotencyKey: "e2e-key",
-        lines: [{ productId: product.id, qty: 3 }],
+        lines: [{ productId: product.id, qty: 3, skuId: p1Sku.id }],
         tenders: [{ method: "cash", currency: "USD", amountMinor: 3000 }],
       },
       admin
@@ -164,7 +179,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       {
         locationId: location.id,
         idempotencyKey: "e2e-key",
-        lines: [{ productId: product.id, qty: 3 }],
+        lines: [{ productId: product.id, qty: 3, skuId: p1Sku.id }],
         tenders: [{ method: "cash", currency: "USD", amountMinor: 3000 }],
       },
       admin
@@ -1655,19 +1670,26 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       { sku: "H2O-P", name: "H2O Prod", priceMinor: 500, currency: "USD" },
       admin
     );
-    // Opening balance of 5 into the (location, product) cell — product-keyed, so
-    // it lines up with the sale deduction (no skuId).
-    await withTenant(db, ORG, (tx) =>
-      services.appendStockMovement(
-        tx,
-        { tenantId: ORG },
-        {
-          locationId: location.id,
-          productId: product.id,
-          movementType: "receipt",
-          qtyDelta: 5,
-        }
-      )
+    const h2Sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "H2O-EA", productId: product.id },
+      admin
+    );
+    // Opening balance of 5 into the (location, SKU) cell via a valued receipt, so
+    // the sku-keyed sale deduction (skuId is required) values against a real
+    // avg_cost cell — the oversell still drives on-hand negative.
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 5,
+        skuId: h2Sku.id,
+        unitCostMinor: 400,
+      },
+      admin
     );
 
     const discrepancies = () =>
@@ -1685,7 +1707,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       {
         locationId: location.id,
         idempotencyKey: "h2-ok",
-        lines: [{ productId: product.id, qty: 3 }],
+        lines: [{ productId: product.id, qty: 3, skuId: h2Sku.id }],
         tenders: [{ method: "cash", currency: "USD", amountMinor: 1500 }],
       },
       admin
@@ -1698,7 +1720,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       {
         locationId: location.id,
         idempotencyKey: "h2-oversell",
-        lines: [{ productId: product.id, qty: 10 }],
+        lines: [{ productId: product.id, qty: 10, skuId: h2Sku.id }],
         tenders: [{ method: "cash", currency: "USD", amountMinor: 5000 }],
       },
       admin
@@ -2148,6 +2170,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       "taxBreakdown",
       "tenders",
       "lines",
+      "offline",
     ]) {
       expect(evt).toHaveProperty(key);
     }
@@ -2188,7 +2211,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(avcoAfter.at(0)?.qtyOnHand).toBe(3);
   });
 
-  it("MSP: rejects non-sellable location (INV-P4-7), SKU-required tracked line (INV-P4-8), and underpayment", async () => {
+  it("MSP: rejects a line with no skuId (#8/INV-P4-8), underpayment, card-overpay-tiny-cash change, and non-sellable location (INV-P4-7)", async () => {
     const admin = { context: makeCtx(ADMIN, ORG) };
     const company = await call(
       appRouter.company.create,
@@ -2205,39 +2228,27 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       { currency: "USD", name: "G", priceMinor: 500, sku: "MSP-G" },
       admin
     );
-    const tracked = await call(
-      appRouter.product.create,
-      {
-        currency: "USD",
-        name: "Tracked",
-        priceMinor: 500,
-        sku: "MSP-TRK",
-        trackingMode: "lot",
-      },
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "MSP-G-EA", productId: product.id },
       admin
     );
 
-    // (a) Underpayment: tender 100 < total 500 → reject.
+    // (a) A sale line with NO skuId is rejected (skuId is universally required —
+    // the #8 fix; a product-only line has no valuation cell). Cast past the type
+    // to exercise the runtime (Zod) rejection.
     await expect(
       call(
         appRouter.pos.createSale,
         {
-          idempotencyKey: "g-under",
-          lines: [{ productId: product.id, qty: 1 }],
-          locationId: location.id,
-          tenders: [{ amountMinor: 100, currency: "USD", method: "cash" }],
-        },
-        admin
-      )
-    ).rejects.toThrow();
-
-    // (b) SKU required on an inventory-tracked product (trackingMode lot) → reject.
-    await expect(
-      call(
-        appRouter.pos.createSale,
-        {
-          idempotencyKey: "g-sku",
-          lines: [{ productId: tracked.id, qty: 1 }],
+          idempotencyKey: "g-nosku",
+          lines: [
+            { productId: product.id, qty: 1 } as unknown as {
+              productId: string;
+              qty: number;
+              skuId: string;
+            },
+          ],
           locationId: location.id,
           tenders: [{ amountMinor: 500, currency: "USD", method: "cash" }],
         },
@@ -2245,7 +2256,39 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       )
     ).rejects.toThrow();
 
-    // (c) Non-sellable location → reject. Flip isSellable (the location.create
+    // (b) Underpayment: tender 100 < total 500 → reject.
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "g-under",
+          lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+          locationId: location.id,
+          tenders: [{ amountMinor: 100, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // (c) Change exceeds cash tendered (card 2000 + cash 1, total 500 → change
+    // 1501 > cash 1) → reject; impossible negative settled can never be written.
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "g-overcard",
+          lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+          locationId: location.id,
+          tenders: [
+            { amountMinor: 2000, currency: "USD", method: "card" },
+            { amountMinor: 1, currency: "USD", method: "cash" },
+          ],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // (d) Non-sellable location → reject. Flip isSellable (the location.create
     // router doesn't expose it; sellability is set by location type/flags).
     await withTenant(db, ORG, (tx) =>
       tx
@@ -2258,7 +2301,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         appRouter.pos.createSale,
         {
           idempotencyKey: "g-sellable",
-          lines: [{ productId: product.id, qty: 1 }],
+          lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
           locationId: location.id,
           tenders: [{ amountMinor: 500, currency: "USD", method: "cash" }],
         },

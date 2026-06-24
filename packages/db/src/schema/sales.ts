@@ -40,8 +40,10 @@ export const sale = pgTable(
       .references(() => location.id),
     number: text("number").notNull(),
     // sale | return | exchange (§19). Returns/exchanges are built in a later
-    // commit; the column + originalSaleId seam are reserved now (set-once shape).
-    saleType: text("sale_type", { enum: SALE_TYPES }).default("sale").notNull(),
+    // commit; the column + originalSaleId seam are reserved now. NULLABLE with a
+    // DEFAULT (expand-only: a NOT-NULL retrofit on the existing `sale` table is
+    // deferred to a later contract migration after backfill — Codex MEDIUM).
+    saleType: text("sale_type", { enum: SALE_TYPES }).default("sale"),
     originalSaleId: uuid("original_sale_id"),
     // Money breakdown (nullable seams until the pricing/tax engine fills them;
     // MSP fills subtotal+total, leaves discount/tax 0/null where not used).
@@ -176,6 +178,17 @@ export const tender = pgTable(
       sql`${table.method} IN ('cash','card','bank_transfer','mobile_money','cheque','store_credit','gift_card')`
     ),
     check("tender_amount_chk", sql`${table.amountMinor} >= 0`),
+    // Tender math can never be impossible (Codex HIGH): change/settled are never
+    // negative. Change is only returned from cash and bounded by cash tendered,
+    // so settled = amount − change stays >= 0 (enforced in settleTenders too).
+    check(
+      "tender_change_chk",
+      sql`${table.changeMinor} IS NULL OR ${table.changeMinor} >= 0`
+    ),
+    check(
+      "tender_settled_chk",
+      sql`${table.settledAmountMinor} IS NULL OR ${table.settledAmountMinor} >= 0`
+    ),
   ]
 );
 
