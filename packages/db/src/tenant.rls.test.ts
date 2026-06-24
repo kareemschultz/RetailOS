@@ -26,6 +26,7 @@ const TENANT_TABLES = [
   "outbox_event",
   "number_block",
   "idempotency_key",
+  "fiscal_document",
 ] as const;
 
 describe.skipIf(!url)("RLS — fail-closed tenant isolation (ADR 0006)", () => {

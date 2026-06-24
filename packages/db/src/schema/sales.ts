@@ -38,6 +38,11 @@ export const sale = pgTable(
       table.tenantId,
       table.idempotencyKey
     ),
+    // Composite-FK target (Phase 3 #5 pattern): lets child tables (refunds,
+    // payments, fiscal documents) reference (tenant_id, id) so a cross-tenant FK
+    // becomes a DB-layer impossibility (kills the H1 class at the DB). Redundant-
+    // but-harmless given id is already a unique PK.
+    unique("sale_tenant_id_uq").on(table.tenantId, table.id),
   ]
 );
 
