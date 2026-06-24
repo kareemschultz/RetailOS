@@ -7,9 +7,11 @@ import {
   count,
   eq,
   gte,
+  ilike,
   inArray,
   isNull,
   lte,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -41,48 +43,6 @@ function firstOrThrow<T>(row: T | undefined): T {
 }
 
 type ProductRow = typeof schema.product.$inferSelect;
-interface SaleLineInput {
-  productId: string;
-  qty: number;
-}
-
-// Prices each line off its product (exact integer money) and sums the grand
-// total. All lines must share a currency/scale (addMoney enforces it).
-function priceSaleLines(products: ProductRow[], lines: SaleLineInput[]) {
-  const byId = new Map(products.map((p) => [p.id, p]));
-  let total: ReturnType<typeof services.money> | null = null;
-  const lineValues: {
-    productId: string;
-    qty: number;
-    unitPriceMinor: number;
-  }[] = [];
-  for (const line of lines) {
-    const product = byId.get(line.productId);
-    if (!product) {
-      throw new ORPCError("NOT_FOUND", {
-        message: `Product ${line.productId} not found in this tenant`,
-      });
-    }
-    const unit = services.money(
-      product.priceMinor,
-      product.currency,
-      product.scale
-    );
-    const lineTotal = services.multiplyMoney(unit, line.qty);
-    total = total ? services.addMoney(total, lineTotal) : lineTotal;
-    lineValues.push({
-      productId: product.id,
-      qty: line.qty,
-      unitPriceMinor: unit.minor,
-    });
-  }
-  if (!total) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "Sale must have at least one line",
-    });
-  }
-  return { total, lineValues };
-}
 
 interface CatalogImportPreviewRow {
   baseUomCode?: string;
@@ -273,6 +233,42 @@ export const productRouter = {
           .select()
           .from(schema.product)
           .where(conditions.length ? and(...conditions) : undefined);
+      });
+    }),
+  // Cashier product lookup (MSP): match by name, product SKU code, or barcode
+  // value; tenant-scoped (RLS) and excludes archived products. The cashier only
+  // needs read access tied to ringing a sale, so it gates on pos.create_sale.
+  search: tenantProcedure
+    .input(
+      z.object({
+        q: z.string().min(1),
+        limit: z.number().int().min(1).max(50).default(20),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        const term = `%${input.q}%`;
+        const byBarcode = tx
+          .select({ productId: schema.sku.productId })
+          .from(schema.barcode)
+          .innerJoin(schema.sku, eq(schema.barcode.skuId, schema.sku.id))
+          .where(eq(schema.barcode.value, input.q));
+        return tx
+          .select()
+          .from(schema.product)
+          .where(
+            and(
+              isNull(schema.product.deletedAt),
+              or(
+                ilike(schema.product.name, term),
+                ilike(schema.product.sku, term),
+                inArray(schema.product.id, byBarcode)
+              )
+            )
+          )
+          .limit(input.limit);
       });
     }),
   create: tenantProcedure
@@ -2714,17 +2710,498 @@ export const inventoryRouter = {
     }),
 };
 
+// ── POS — Minimum Sellable POS (Phase 4 commit 2) ───────────────────────────
+// The cashier workflow: ring up products → tender → stock deduction +
+// applyValuation (#8, records COGS) → invoice + receipt-number, idempotent
+// end-to-end. Returns/refunds, shift/cash, split/multi-currency, offline queue
+// are later commits — the seams are reserved (event-map-phase4.md).
+
+interface MspLineInput {
+  productId: string;
+  qty: number;
+  skuId?: string;
+  unitPriceMinor?: number;
+}
+interface PricedLine {
+  productId: string;
+  qty: number;
+  skuId: string | null;
+  unitPriceMinor: number;
+}
+type TenderMethod = (typeof schema.TENDER_METHODS)[number];
+interface TenderInput {
+  amountMinor: number;
+  currency: string;
+  method: TenderMethod;
+}
+interface SettledTender extends TenderInput {
+  changeMinor: number | null;
+  settledAmountMinor: number;
+}
+
+// Location must exist in the tenant (RLS-scoped read — FK checks bypass RLS) AND
+// be sellable (INV-P4-7): a sale cannot ring against a non-sellable location
+// (bonded / in-transit / quarantine / damaged).
+async function assertSaleLocation(tx: TenantTransaction, locationId: string) {
+  const row = (
+    await tx
+      .select({
+        id: schema.location.id,
+        companyId: schema.location.companyId,
+        isSellable: schema.location.isSellable,
+      })
+      .from(schema.location)
+      .where(eq(schema.location.id, locationId))
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Location not found in this tenant",
+    });
+  }
+  if (!row.isSellable) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Location is not sellable (INV-P4-7)",
+    });
+  }
+  return row;
+}
+
+// Validate + price each line. SKU is REQUIRED for inventory-tracked products
+// (INV-P4-8) — valuation/COGS is SKU-level, so applyValuation needs a sku. All
+// lines must share one currency/scale (addMoney enforces it).
+async function priceMspLines(
+  tx: TenantTransaction,
+  products: ProductRow[],
+  lines: MspLineInput[]
+): Promise<{
+  priced: PricedLine[];
+  subtotal: ReturnType<typeof services.money>;
+}> {
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const priced: PricedLine[] = [];
+  let subtotal: ReturnType<typeof services.money> | null = null;
+  for (const line of lines) {
+    const product = byId.get(line.productId);
+    if (!product) {
+      throw new ORPCError("NOT_FOUND", {
+        message: `Product ${line.productId} not found in this tenant`,
+      });
+    }
+    if (product.trackingMode !== "none" && !line.skuId) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: `SKU required for inventory-tracked product ${product.sku} (INV-P4-8)`,
+      });
+    }
+    if (line.skuId) {
+      await assertSkuVisible(tx, line.skuId);
+      await assertSkuBelongsToProduct(tx, line.skuId, line.productId);
+    }
+    const unit = services.money(
+      line.unitPriceMinor ?? product.priceMinor,
+      product.currency,
+      product.scale
+    );
+    const lineTotal = services.multiplyMoney(unit, line.qty);
+    subtotal = subtotal ? services.addMoney(subtotal, lineTotal) : lineTotal;
+    priced.push({
+      productId: product.id,
+      qty: line.qty,
+      skuId: line.skuId ?? null,
+      unitPriceMinor: unit.minor,
+    });
+  }
+  if (!subtotal) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Sale must have at least one line",
+    });
+  }
+  return { priced, subtotal };
+}
+
+// Settle tenders against the sale total (single-currency MSP). Underpayment is
+// rejected; overpayment is returned as cash change (so a cash tender must exist
+// to give it from — you cannot give change on a card).
+function settleTenders(
+  tenders: TenderInput[],
+  total: ReturnType<typeof services.money>
+): SettledTender[] {
+  for (const t of tenders) {
+    if (t.currency !== total.currency) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Multi-currency tenders are not supported yet (MSP single-currency)",
+      });
+    }
+  }
+  const tendered = tenders.reduce((sum, t) => sum + t.amountMinor, 0);
+  if (tendered < total.minor) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Underpayment: tendered amount is less than the sale total",
+    });
+  }
+  const change = tendered - total.minor;
+  const settled: SettledTender[] = tenders.map((t) => ({
+    ...t,
+    changeMinor: null,
+    settledAmountMinor: t.amountMinor,
+  }));
+  if (change > 0) {
+    const cash = settled.find((t) => t.method === "cash");
+    if (!cash) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Change is due but there is no cash tender to return it from",
+      });
+    }
+    cash.settledAmountMinor = cash.amountMinor - change;
+    cash.changeMinor = change;
+  }
+  return settled;
+}
+
+type SaleRow = typeof schema.sale.$inferSelect;
+
+// One sale line: insert it, deduct stock through the ledger (the only mutator),
+// run applyValuation (#8 — consumes FIFO layers / reduces AVCO value, returns
+// COGS), and STAMP the COGS back onto the line. The ledger stays policy-neutral
+// (no hard oversell block — D5 default allow-oversell-with-flagging); a negative
+// on-hand emits inventory.stock_discrepancy for manager review.
+async function processSaleLine(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  opts: {
+    idempotencyKey: string;
+    line: PricedLine;
+    locationId: string;
+    sale: SaleRow;
+  }
+) {
+  const saleLine = firstOrThrow(
+    (
+      await tx
+        .insert(schema.saleLine)
+        .values({
+          tenantId: ctx.tenantId,
+          saleId: opts.sale.id,
+          productId: opts.line.productId,
+          skuId: opts.line.skuId,
+          qty: opts.line.qty,
+          qtyBase: opts.line.qty,
+          unitPriceMinor: opts.line.unitPriceMinor,
+        })
+        .returning()
+    ).at(0)
+  );
+  const movement = await services.appendStockMovement(tx, ctx, {
+    idempotencyKey: opts.idempotencyKey,
+    locationId: opts.locationId,
+    movementType: "sale",
+    productId: opts.line.productId,
+    qtyDelta: -opts.line.qty,
+    refId: opts.sale.id,
+    refType: "sale",
+    skuId: opts.line.skuId ?? null,
+  });
+  let cogsMinor: number | null = null;
+  let cogsCurrency: string | null = null;
+  let cogsScale: number | null = null;
+  let costingMethodApplied: string | null = null;
+  if (opts.line.skuId) {
+    // #8 — the write path MUST invoke valuation, not just deduct quantity.
+    const valuation = await services.applyValuation(tx, ctx, movement);
+    cogsMinor = valuation.cogsMinor;
+    cogsCurrency = valuation.currency;
+    cogsScale = valuation.scale;
+    costingMethodApplied = valuation.method;
+    await tx
+      .update(schema.saleLine)
+      .set({ cogsMinor, cogsCurrency, cogsScale, costingMethodApplied })
+      .where(eq(schema.saleLine.id, saleLine.id));
+  }
+  if (movement.balanceAfter < 0) {
+    await services.emitEvent(tx, ctx, {
+      type: services.DomainEventType.InventoryStockDiscrepancy,
+      payload: {
+        deltaBase: movement.balanceAfter,
+        idempotencyKey: opts.idempotencyKey,
+        locationId: opts.locationId,
+        productId: opts.line.productId,
+        qtySold: opts.line.qty,
+        reason: "oversell",
+        resultingOnHand: movement.balanceAfter,
+        saleId: opts.sale.id,
+        source: "oversell",
+        sourceMovementId: movement.id,
+      },
+    });
+  }
+  // Event-line shaped for the Phase-5 GL consumer (event-map-phase4.md). The
+  // functional-currency + commission fields are reserved present-but-null
+  // (single-currency MSP; populated when those models land — additive).
+  return {
+    eventLine: {
+      cogsCurrency,
+      cogsFunctionalMinor: null,
+      cogsMinor,
+      cogsScale,
+      costingMethodApplied,
+      lineCommissionFunctionalMinor: null,
+      lineCommissionMinor: null,
+      lineDiscountMinor: 0,
+      lineTaxMinor: 0,
+      lotId: null,
+      productId: opts.line.productId,
+      qtyBase: opts.line.qty,
+      qtyScale: null,
+      saleLineId: saleLine.id,
+      skuId: opts.line.skuId,
+      taxRateId: null,
+      unitPriceMinor: opts.line.unitPriceMinor,
+    },
+  };
+}
+
+// Sequential, gapless document numbers per tenant (single-node allocator; the
+// distributed/offline lease allocator is a later commit). Advisory-locked.
+async function allocateSaleNumber(tx: TenantTransaction, tenantId: string) {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`docnum:${tenantId}`}, 0))`
+  );
+  const saleSeq =
+    ((await tx.select({ c: count() }).from(schema.sale)).at(0)?.c ?? 0) + 1;
+  const invoiceSeq =
+    ((await tx.select({ c: count() }).from(schema.invoice)).at(0)?.c ?? 0) + 1;
+  return { saleNumber: `SALE-${saleSeq}`, invoiceNumber: `INV-${invoiceSeq}` };
+}
+
+async function runCreateSaleMsp(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: {
+    customerId?: string;
+    idempotencyKey: string;
+    lines: MspLineInput[];
+    locationId: string;
+    salesRepId?: string;
+    shiftId?: string;
+    tenders: TenderInput[];
+  }
+) {
+  const location = await assertSaleLocation(tx, input.locationId);
+  const products = await tx
+    .select()
+    .from(schema.product)
+    .where(
+      inArray(
+        schema.product.id,
+        input.lines.map((line) => line.productId)
+      )
+    );
+  const { priced, subtotal } = await priceMspLines(tx, products, input.lines);
+  const settled = settleTenders(input.tenders, subtotal);
+  const { saleNumber, invoiceNumber } = await allocateSaleNumber(
+    tx,
+    ctx.tenantId
+  );
+
+  const sale = firstOrThrow(
+    (
+      await tx
+        .insert(schema.sale)
+        .values({
+          createdBy: ctx.actorUserId,
+          currency: subtotal.currency,
+          customerId: input.customerId ?? null,
+          discountMinor: 0,
+          idempotencyKey: input.idempotencyKey,
+          locationId: input.locationId,
+          number: saleNumber,
+          saleType: "sale",
+          salesRepId: input.salesRepId ?? null,
+          scale: subtotal.scale,
+          shiftId: input.shiftId ?? null,
+          status: "completed",
+          subtotalMinor: subtotal.minor,
+          taxMinor: 0,
+          tenantId: ctx.tenantId,
+          totalMinor: subtotal.minor,
+        })
+        .returning()
+    ).at(0)
+  );
+
+  const eventLines: unknown[] = [];
+  for (const line of priced) {
+    const { eventLine } = await processSaleLine(tx, ctx, {
+      idempotencyKey: input.idempotencyKey,
+      line,
+      locationId: input.locationId,
+      sale,
+    });
+    eventLines.push(eventLine);
+  }
+
+  const eventTenders: unknown[] = [];
+  for (const t of settled) {
+    const tenderRow = firstOrThrow(
+      (
+        await tx
+          .insert(schema.tender)
+          .values({
+            amountMinor: t.amountMinor,
+            changeMinor: t.changeMinor,
+            createdBy: ctx.actorUserId,
+            currency: t.currency,
+            method: t.method,
+            saleId: sale.id,
+            scale: subtotal.scale,
+            settledAmountMinor: t.settledAmountMinor,
+            tenantId: ctx.tenantId,
+          })
+          .returning()
+      ).at(0)
+    );
+    eventTenders.push({
+      amountMinor: t.amountMinor,
+      fxRateToSale: null,
+      method: t.method,
+      settledAmountMinor: t.settledAmountMinor,
+      settledFunctionalMinor: null,
+      tenderCurrency: t.currency,
+      tenderId: tenderRow.id,
+      tenderScale: subtotal.scale,
+    });
+    // payment.received — the tender settling against the sale (event-map-phase4).
+    await services.emitEvent(tx, ctx, {
+      type: services.DomainEventType.PaymentReceived,
+      payload: {
+        amountFunctionalMinor: null,
+        amountMinor: t.amountMinor,
+        changeFunctionalMinor: null,
+        changeMinor: t.changeMinor,
+        commissionAccrualPolicy: null,
+        commissionFunctionalMinor: null,
+        commissionMinor: null,
+        companyId: location.companyId,
+        fxRateToSale: null,
+        functionalCurrency: null,
+        functionalScale: null,
+        locationId: input.locationId,
+        method: t.method,
+        paymentId: tenderRow.id,
+        realizedFxGainLossFunctionalMinor: null,
+        receivedBy: ctx.actorUserId,
+        saleCurrency: subtotal.currency,
+        saleId: sale.id,
+        saleScale: subtotal.scale,
+        settledAmountMinor: t.settledAmountMinor,
+        settledFunctionalMinor: null,
+        shiftId: input.shiftId ?? null,
+        tenderCurrency: t.currency,
+        tenderFxRateToFunctional: null,
+        tenderId: tenderRow.id,
+        tenderScale: subtotal.scale,
+      },
+    });
+  }
+
+  const invoice = firstOrThrow(
+    (
+      await tx
+        .insert(schema.invoice)
+        .values({
+          currency: subtotal.currency,
+          number: invoiceNumber,
+          saleId: sale.id,
+          scale: subtotal.scale,
+          tenantId: ctx.tenantId,
+          totalMinor: subtotal.minor,
+        })
+        .returning()
+    ).at(0)
+  );
+
+  await services.recordAudit(tx, ctx, {
+    action: "pos.create_sale",
+    entityType: "sale",
+    entityId: sale.id,
+    after: sale,
+  });
+  // sale.created — extended payload shaped for the Phase-5 GL consumer
+  // (event-map-phase4.md). Functional-currency + commission fields reserved
+  // present-but-null (single-currency MSP; additive when those models land).
+  await services.emitEvent(tx, ctx, {
+    type: services.DomainEventType.SaleCreated,
+    payload: {
+      commissionAccrualPolicy: null,
+      commissionFunctionalMinor: null,
+      commissionMinor: null,
+      companyId: location.companyId,
+      createdBy: ctx.actorUserId,
+      currency: subtotal.currency,
+      customerId: input.customerId ?? null,
+      discountFunctionalMinor: null,
+      discountMinor: 0,
+      exchangeGroupId: null,
+      functionalCurrency: null,
+      functionalScale: null,
+      fxRateToFunctional: null,
+      lines: eventLines,
+      locationId: input.locationId,
+      number: saleNumber,
+      saleId: sale.id,
+      saleType: "sale",
+      salesRepId: input.salesRepId ?? null,
+      scale: subtotal.scale,
+      shiftId: input.shiftId ?? null,
+      subtotalFunctionalMinor: null,
+      subtotalMinor: subtotal.minor,
+      taxBreakdown: [],
+      taxFunctionalMinor: null,
+      taxMinor: 0,
+      tenders: eventTenders,
+      totalFunctionalMinor: null,
+      totalMinor: subtotal.minor,
+    },
+  });
+
+  return {
+    changeMinor: settled.reduce((sum, t) => sum + (t.changeMinor ?? 0), 0),
+    currency: subtotal.currency,
+    invoiceId: invoice.id,
+    number: saleNumber,
+    saleId: sale.id,
+    scale: subtotal.scale,
+    tenders: eventTenders,
+    totalMinor: subtotal.minor,
+  };
+}
+
 export const posRouter = {
   createSale: tenantProcedure
     .input(
       z.object({
         locationId: z.string().uuid(),
         idempotencyKey: z.string().min(1),
+        salesRepId: z.string().min(1).optional(),
+        customerId: z.string().uuid().optional(),
+        shiftId: z.string().uuid().optional(),
         lines: z
           .array(
             z.object({
               productId: z.string().uuid(),
+              skuId: z.string().uuid().optional(),
               qty: z.number().int().positive(),
+              unitPriceMinor: z.number().int().min(0).optional(),
+            })
+          )
+          .min(1),
+        tenders: z
+          .array(
+            z.object({
+              method: z.enum(schema.TENDER_METHODS),
+              currency: z.string().length(3),
+              amountMinor: z.number().int().min(0),
             })
           )
           .min(1),
@@ -2740,152 +3217,7 @@ export const posRouter = {
           ctx,
           input.idempotencyKey,
           input,
-          async () => {
-            // RLS-scoped existence check (FK checks bypass RLS).
-            const saleLocation = (
-              await tx
-                .select({ id: schema.location.id })
-                .from(schema.location)
-                .where(eq(schema.location.id, input.locationId))
-                .limit(1)
-            ).at(0);
-            if (!saleLocation) {
-              throw new ORPCError("NOT_FOUND", {
-                message: "Location not found in this tenant",
-              });
-            }
-            const products = await tx
-              .select()
-              .from(schema.product)
-              .where(
-                inArray(
-                  schema.product.id,
-                  input.lines.map((line) => line.productId)
-                )
-              );
-            const { total: grandTotal, lineValues } = priceSaleLines(
-              products,
-              input.lines
-            );
-
-            // Sequential, gapless document numbers per tenant (single-node
-            // allocator; distributed reservation deferred). Advisory-locked.
-            await tx.execute(
-              sql`SELECT pg_advisory_xact_lock(hashtextextended(${`docnum:${ctx.tenantId}`}, 0))`
-            );
-            const saleSeq =
-              ((await tx.select({ c: count() }).from(schema.sale)).at(0)?.c ??
-                0) + 1;
-            const saleNumber = `SALE-${saleSeq}`;
-
-            const sale = firstOrThrow(
-              (
-                await tx
-                  .insert(schema.sale)
-                  .values({
-                    tenantId: ctx.tenantId,
-                    locationId: input.locationId,
-                    number: saleNumber,
-                    totalMinor: grandTotal.minor,
-                    currency: grandTotal.currency,
-                    scale: grandTotal.scale,
-                    status: "completed",
-                    idempotencyKey: input.idempotencyKey,
-                    createdBy: ctx.actorUserId,
-                  })
-                  .returning()
-              ).at(0)
-            );
-
-            for (const lv of lineValues) {
-              await tx.insert(schema.saleLine).values({
-                tenantId: ctx.tenantId,
-                saleId: sale.id,
-                productId: lv.productId,
-                qty: lv.qty,
-                unitPriceMinor: lv.unitPriceMinor,
-              });
-              // Stock deduction goes through the ledger (the only mutator). The
-              // ledger stays POLICY-NEUTRAL: we do NOT hard-block oversell here
-              // (charter §14; decided D5 default = allow-oversell-with-flagging).
-              const movement = await services.appendStockMovement(tx, ctx, {
-                locationId: input.locationId,
-                productId: lv.productId,
-                movementType: "sale",
-                qtyDelta: -lv.qty,
-                refType: "sale",
-                refId: sale.id,
-                idempotencyKey: input.idempotencyKey,
-              });
-              // D5 flag (event only, applied ABOVE the neutral ledger): when the
-              // sale drives on-hand negative, emit a stock-discrepancy event for
-              // manager review / cycle count. Hard-block remains a per
-              // tenant/category/product config (not wired in this hotfix).
-              if (movement.balanceAfter < 0) {
-                await services.emitEvent(tx, ctx, {
-                  type: services.DomainEventType.InventoryStockDiscrepancy,
-                  payload: {
-                    locationId: input.locationId,
-                    productId: lv.productId,
-                    saleId: sale.id,
-                    qtySold: lv.qty,
-                    resultingOnHand: movement.balanceAfter,
-                    deltaBase: movement.balanceAfter,
-                    source: "oversell",
-                    reason: "oversell",
-                    sourceMovementId: movement.id,
-                    idempotencyKey: input.idempotencyKey,
-                  },
-                });
-              }
-            }
-
-            const invoiceSeq =
-              ((await tx.select({ c: count() }).from(schema.invoice)).at(0)
-                ?.c ?? 0) + 1;
-            const invoice = firstOrThrow(
-              (
-                await tx
-                  .insert(schema.invoice)
-                  .values({
-                    tenantId: ctx.tenantId,
-                    saleId: sale.id,
-                    number: `INV-${invoiceSeq}`,
-                    totalMinor: grandTotal.minor,
-                    currency: grandTotal.currency,
-                    scale: grandTotal.scale,
-                  })
-                  .returning()
-              ).at(0)
-            );
-
-            // Accounting posting is deferred (Phase 5): the sale.created outbox
-            // event below is the seam a future GL consumer subscribes to.
-            await services.recordAudit(tx, ctx, {
-              action: "pos.create_sale",
-              entityType: "sale",
-              entityId: sale.id,
-              after: sale,
-            });
-            await services.emitEvent(tx, ctx, {
-              type: services.DomainEventType.SaleCreated,
-              payload: {
-                saleId: sale.id,
-                number: saleNumber,
-                totalMinor: grandTotal.minor,
-                currency: grandTotal.currency,
-              },
-            });
-
-            return {
-              saleId: sale.id,
-              number: saleNumber,
-              invoiceId: invoice.id,
-              totalMinor: grandTotal.minor,
-              currency: grandTotal.currency,
-              scale: grandTotal.scale,
-            };
-          }
+          () => runCreateSaleMsp(tx, ctx, input)
         );
       });
     }),
