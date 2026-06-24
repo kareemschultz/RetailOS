@@ -6,6 +6,7 @@ export * from "./auth";
 export * from "./bond";
 export * from "./bond_release";
 export * from "./company";
+export * from "./fiscal";
 export * from "./idempotency";
 export * from "./inventory";
 export * from "./membership";

@@ -30,6 +30,14 @@ export const organization = pgTable("organization", {
   oversellPolicy: text("oversell_policy", { enum: OVERSELL_POLICIES }),
   expiryPolicy: text("expiry_policy", { enum: EXPIRY_POLICIES }),
   barcodeParserConfig: jsonb("barcode_parser_config"),
+  // Tax-identity SEAMS (charter §17 fiscal / §19 tax-invoice fields). Nullable,
+  // expand-only: a tenant's VAT registration number + tax identification number
+  // (TIN) for fiscal documents and tax filings (e.g. Guyana GRA tax-invoice +
+  // Form G0002). No validation/format rules wired yet — reserved for the
+  // fiscalization phase; the company-level pair (below) is the per-legal-entity
+  // value when a tenant runs multiple companies.
+  vatRegistrationNumber: text("vat_registration_number"),
+  taxIdentificationNumber: text("tax_identification_number"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

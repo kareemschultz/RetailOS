@@ -38,6 +38,13 @@ export const company = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId,
     name: text("name").notNull(),
+    // Per-legal-entity tax-identity SEAMS (charter §17/§19). Nullable, expand-only
+    // — the company's own VAT registration number + TIN that print on its fiscal
+    // tax invoices and drive its tax filings. A multi-company tenant has one pair
+    // per company; the organization-level pair is the tenant default. No format/
+    // validation wired yet (fiscalization phase).
+    vatRegistrationNumber: text("vat_registration_number"),
+    taxIdentificationNumber: text("tax_identification_number"),
     ...timestamps,
     ...actor,
     ...softDelete,
