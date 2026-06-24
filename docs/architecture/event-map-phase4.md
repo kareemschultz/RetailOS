@@ -103,3 +103,22 @@ The four review gates found, in order: **missing fields → broken symmetry → 
 4. **Money is always the quintuple (POST-1):** `*Minor` + `currency` + `scale` + `*FunctionalMinor` + the server-stamped FX rate used — so the GL balances and posts **in functional currency** without an FX-table re-read (INV-P5-4 + INV-P5-7). The rate (and commission, and costing method) is captured/stamped **at transaction time** (never re-resolved), so reversals reuse the original's stamp and replay is deterministic. `sale.voided` is exempt (parks on + reverses the original journal). **Gate 4 (2026-06-24): the contract is governed by POST-1/POST-2 as checkable invariants; the per-event enumeration is provably complete (commission folded; discount/rounding derivable; loyalty = P7).**
 
 > When Phase 4 is built, each emitted payload is locked by a contract test asserting the keys are PRESENT (the Phase-2 `toHaveProperty` discipline), so a refactor can't silently drop a field the GL consumer binds.
+
+## Validation against `posting-model.md` (source-of-truth pass — 2026-06-24)
+
+This event map was checked, transaction by transaction, against the authoritative **`posting-model.md`** (§1 sale … §8 shift.closed). For **every** journal-line amount the posting model requires, the producing event carries it (POST-1 quintuple) or reserves it nullable:
+
+| Posting-model journal | Carried by | Status |
+|---|---|---|
+| §1 sale — clearing/revenue/VAT/COGS+inventory/commission(at_sale) | `tenders[]`, `subtotal/discount/taxMinor`, `taxBreakdown[]`, `lines[].cogsMinor`, `commissionMinor`/`lineCommissionMinor` (+ functional twins) | ✅ |
+| §2 refund — revenue/VAT reversal/clearing/restock+COGS/commission clawback | `subtotal/discount/taxMinor`+`taxBreakdown[]`, `tenders[]`, `restockedValueMinor`, `commissionClawbackMinor` (+ twins) | ✅ |
+| §3 void — full reversal of original | `originalSaleId` (parks + reverses; no amounts by design) | ✅ |
+| §4 payment — cash/bank/clearing/realized-FX/commission(at_settlement) | `settled*`, `realizedFxGainLossFunctionalMinor`, `changeMinor`, `commissionMinor` | ✅ |
+| §5 stored_value.issued — clearing/contra → liability | `amountMinor`+`amountFunctionalMinor`, `saleId`/`paymentId`/`tenderId` | ✅ |
+| §6 stored_value.redeemed — liability draw → clearing | `amountMinor`+`amountFunctionalMinor` | ✅ |
+| §7 shift.opened — drawer/vault | `openingFloat[]` (+ per-row functional twin) | ✅ |
+| §8 shift.closed — vault/drawer/over-short/movements | `countedCash[]`/`expectedCash[]`/`overShort[]`/`cashMovements[]` (+ per-row twins) | ✅ |
+
+**Note on the payment→clearing line (self-sufficiency proof):** `Cr Tender-Clearing` must equal exactly what the sale debited (so clearing nets to zero). The payment event carries both `settledFunctionalMinor` and `realizedFxGainLossFunctionalMinor`, and `clearing = settledFunctional − realizedFX` algebraically equals the sale's booked clearing — so the consumer derives it from the payment's own fields, with **no re-read of the sale row**.
+
+**Verdict:** every Phase-4 posting-model amount is carried or reserved. The contract is **accounting-complete against the source-of-truth posting model.** (Inventory/bond postings §9–§11 are Phase-2/3 producer events, out of this Phase-4 event-map's scope; §12 lists the dimensions classified out-of-scope — loyalty=P7, tips=restaurant, AP/landed-cost=P6.)

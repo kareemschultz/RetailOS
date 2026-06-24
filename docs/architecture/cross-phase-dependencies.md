@@ -2,6 +2,7 @@
 
 - **Status:** PLAN / master contract map — **no code.** Created 2026-06-23 (owner-requested). Purpose: make every producer→consumer relationship explicit so a later phase never **discovers a missing field late** (the failure the Phase-5 review exposed: POS events that the GL cannot consume). This is the authoritative index for outbox events, accounting projections, analytics, CRM, procurement, and Edge Hub sync.
 - **Source of truth per event:** the `event-map-phase{2,3,4}.md` catalogs (and future `event-map-phase{5,6}.md`). This file is the **cross-phase index**; the per-phase maps hold the full payloads.
+- **Source of truth per JOURNAL:** **`posting-model.md`** — the authoritative enumeration of every GL journal RetailOS posts per business transaction (Dr/Cr accounts, timing, required event fields, reversal/FX/commission behavior), sourced from charter §17–§20. Producer event maps are **validated against it** (POST-2); consumers (P5 GL, P12 analytics) implement to it. Created 2026-06-24 after two gates each surfaced a new posting dimension — the fix was to enumerate the postings once, authoritatively, instead of reconstructing them per-doc.
 - **Transport (all):** transactional outbox (§24), tenant-scoped, server-injected `occurredAt`, replay-safe. **Consumer idempotency is mandatory** (Phase-5 INV-P5-7): a consumer dedups on `(tenant_id, outbox_event_id, posting_kind)` — the outbox redelivers, so no consumer may post twice.
 
 ## Legend
