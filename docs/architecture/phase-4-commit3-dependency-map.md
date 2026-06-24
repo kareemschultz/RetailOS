@@ -1,9 +1,16 @@
-# Phase 4 · Commit 3 — Returns / Refunds / Voids / Exchanges — Implementation Dependency Map
+# Phase 4 · Commit 3 — Returns / Refunds / Voids — Implementation Dependency Map
 
 > **Purpose:** maximize reuse, build Returns *on top of* the MSP (Commit 2, merged `a02e60b`), not beside it.
 > One-page work-planning aid — **not** new architecture (contracts are already locked in `event-map-phase4.md`).
-> Scope LOCKED by the re-sequenced order: **Returns/Refunds/Voids/Exchanges** (Shift/cash, payments-maturity,
-> commission, numbering-lease, offline queue, fiscal seam are LATER commits).
+> Scope: **Returns / Refunds / Voids** (Shift/cash, payments-maturity, commission, numbering-lease, offline
+> queue, fiscal seam are LATER commits).
+>
+> **`pos.exchange` DEFERRED (owner decision, this session).** An exchange needs **net-difference settlement**
+> (pay only the difference; an excess return credit becomes **store credit**, not cash) — which requires the
+> stored-value / store-credit seam (a later commit). The exchange **contract** stays locked in
+> `event-map-phase4.md` (decomposition = a linked `sale.refunded` + `sale.created` sharing one
+> `exchangeGroupId`); only the **producer** is deferred. The `sale.exchange_group_id` column and the
+> reserved-nullable `exchangeGroupId` event field remain in place for it.
 
 ## 1. APIs already available from Commit 2 (reused as-is, no change)
 
@@ -19,7 +26,7 @@
 |---|---|---|
 | `pos.refund` | `{ originalSaleId, idempotencyKey, lines:[{ originalSaleLineId, qty }], refundReason, tenders[] }` | First-class `saleType="return"`; **partial** (per-line qty ≤ original). Emits `sale.refunded`. |
 | `pos.void` | `{ saleId, idempotencyKey, voidReason }` | Full reversal; emits `sale.voided` (parks on `originalSaleId`, **no amounts** by design). Distinct from refund. |
-| `pos.exchange` | `{ originalSaleId, returnLines[], newLines[], tenders[], idempotencyKey }` | **Decomposes into a linked `sale.refunded` + `sale.created` sharing one `exchangeGroupId`** — NOT a new event. P5 needs no exchange-specific posting. |
+| `pos.exchange` | `{ originalSaleId, returnLines[], newLines[], tenders[], idempotencyKey }` | **DEFERRED to a later commit** (needs the stored-value seam for net settlement / excess store credit). Contract stays locked: decomposes into a linked `sale.refunded` + `sale.created` sharing one `exchangeGroupId` — NOT a new event; P5 needs no exchange-specific posting. |
 
 ## 3. Existing services reused (zero new low-level primitives)
 
@@ -57,9 +64,9 @@ Already present from MSP — **no new columns likely needed** for the core retur
 Built on Commit-2 surfaces, no new backend phase needed:
 - **Sale detail → "Refund" / "Void"** action (sales list/detail already unlocked).
 - **Refund dialog** — reuses the cart/line components, capped at original qty.
-- **Exchange flow** — return-cart + new-cart side by side (two reused cart components, one `exchangeGroupId`).
 - **Credit-note / return receipt preview** — reuses the receipt/invoice preview surface.
+- *(Exchange flow — return-cart + new-cart side by side — comes with the deferred `pos.exchange` commit.)*
 
 ## 7. Out of scope (explicitly deferred — do NOT pull forward)
 
-Commission clawback **fields** ride the events (reserved-nullable, derived from the original line's stamp) but the **commission engine** is a later commit; functional-currency twins stay reserved-null (single-currency MSP); stored-value issue/redeem is its own commit; fiscal credit-note numbering is the fiscal seam.
+**`pos.exchange`** (net-difference settlement + excess-credit-as-store-credit) — deferred to a later commit with the stored-value seam; contract stays locked, column/event field reserved. Commission clawback **fields** ride the events (reserved-nullable, derived from the original line's stamp) but the **commission engine** is a later commit; functional-currency twins stay reserved-null (single-currency MSP); stored-value issue/redeem is its own commit; fiscal credit-note numbering is the fiscal seam.

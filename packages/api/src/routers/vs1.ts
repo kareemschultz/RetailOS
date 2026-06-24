@@ -2991,9 +2991,6 @@ async function runCreateSaleMsp(
   ctx: RequestContext,
   input: {
     customerId?: string;
-    // Set only when this sale is the outbound leg of an exchange (shared with the
-    // paired return — event-map "Exchange flow"); null for a standalone sale.
-    exchangeGroupId?: string;
     idempotencyKey: string;
     lines: MspLineInput[];
     locationId: string;
@@ -3028,7 +3025,8 @@ async function runCreateSaleMsp(
           currency: subtotal.currency,
           customerId: input.customerId ?? null,
           discountMinor: 0,
-          exchangeGroupId: input.exchangeGroupId ?? null,
+          // Reserved seam: exchange producer deferred to a later commit.
+          exchangeGroupId: null,
           idempotencyKey: input.idempotencyKey,
           locationId: input.locationId,
           number: saleNumber,
@@ -3158,7 +3156,8 @@ async function runCreateSaleMsp(
       customerId: input.customerId ?? null,
       discountFunctionalMinor: null,
       discountMinor: 0,
-      exchangeGroupId: input.exchangeGroupId ?? null,
+      // Reserved-nullable (event contract): exchange producer deferred.
+      exchangeGroupId: null,
       functionalCurrency: null,
       functionalScale: null,
       fxRateToFunctional: null,
@@ -3205,7 +3204,8 @@ async function runCreateSaleMsp(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Commit 3 — Returns / Refunds / Voids / Exchanges (event-map-phase4.md).
+// Commit 3 — Returns / Refunds / Voids (event-map-phase4.md). (Exchange is
+// DEFERRED to a later commit — needs the stored-value seam for excess credit.)
 // A return is a FIRST-CLASS sale variant (saleType="return", originalSaleId),
 // stored with NEGATIVE money (a credit, so reports net automatically). It reuses
 // every MSP primitive; the ONLY costing touch is the value-exact restock below.
@@ -3390,10 +3390,10 @@ async function allocateReturnNumber(tx: TenantTransaction, tenantId: string) {
   return `RET-${n}`;
 }
 
-// Raw refund runner (the router wraps it in permission + idempotency; the
-// exchange calls it directly inside ONE idempotency boundary). exchangeGroupId is
-// set only for an exchange's inbound leg (then no disbursement tenders — the
-// credit offsets the new purchase; net settlement is P5's via the shared group).
+// Raw refund runner (the router wraps it in permission + idempotency). A
+// standalone refund disburses the refunded value back to the customer (tenders
+// must equal the refunded amount). The exchange producer (net settlement) is
+// DEFERRED to a later commit — `sale.exchange_group_id` stays a reserved seam.
 async function runRefund(
   tx: TenantTransaction,
   ctx: RequestContext,
@@ -3404,8 +3404,7 @@ async function runRefund(
     originalSaleId: string;
     refundReason?: string;
     tenders: TenderInput[];
-  },
-  exchangeGroupId: string | null
+  }
 ) {
   const original = await loadSaleForUpdate(tx, input.originalSaleId);
   if (!original) {
@@ -3489,18 +3488,10 @@ async function runRefund(
     0
   );
 
-  // Refund tenders = money returned to the customer. A standalone refund MUST be
-  // fully tendered back; an exchange's inbound leg carries NO disbursement (the
-  // credit offsets the outbound sale — net settlement is P5's, via the group).
+  // Refund tenders = money returned to the customer; a refund MUST be fully
+  // tendered back (the refunded amount).
   const tenderedBack = input.tenders.reduce((s, t) => s + t.amountMinor, 0);
-  if (exchangeGroupId) {
-    if (input.tenders.length > 0) {
-      throw new ORPCError("BAD_REQUEST", {
-        message:
-          "Exchange return leg carries no disbursement tenders (credit offsets the new sale)",
-      });
-    }
-  } else if (tenderedBack !== refundTotalMagnitude) {
+  if (tenderedBack !== refundTotalMagnitude) {
     throw new ORPCError("BAD_REQUEST", {
       message: "Refund tenders must equal the refunded amount",
     });
@@ -3523,7 +3514,9 @@ async function runRefund(
           createdBy: ctx.actorUserId,
           currency,
           discountMinor: 0,
-          exchangeGroupId,
+          // Reserved seam: exchange producer deferred — a return is never part
+          // of an exchange group yet (set by the future exchange commit).
+          exchangeGroupId: null,
           idempotencyKey: input.idempotencyKey,
           locationId: original.locationId,
           number,
@@ -3650,7 +3643,9 @@ async function runRefund(
       currency,
       discountMinor: 0,
       discountFunctionalMinor: null,
-      exchangeGroupId,
+      // Reserved-nullable (event contract): exchange producer deferred — always
+      // null until the exchange commit pairs a return + sale under one group.
+      exchangeGroupId: null,
       functionalCurrency: null,
       functionalScale: null,
       fxRateToFunctional: null,
@@ -3783,54 +3778,12 @@ async function runVoid(
   return { saleId: sale.id, status: "void" as const };
 }
 
-// Raw exchange runner — decomposes into a linked return + sale sharing one
-// exchangeGroupId (event-map "Exchange flow"; NOT a distinct event). The return
-// leg credits + restocks the returned items (no disbursement); the sale leg
-// charges the new items. Net cash settlement across the group is P5's concern.
-async function runExchange(
-  tx: TenantTransaction,
-  ctx: RequestContext,
-  input: {
-    idempotencyKey: string;
-    newLines: MspLineInput[];
-    originalSaleId: string;
-    refundReason?: string;
-    returnLines: RefundLineInput[];
-    tenders: TenderInput[];
-  }
-) {
-  const exchangeGroupId = crypto.randomUUID();
-  const refund = await runRefund(
-    tx,
-    ctx,
-    {
-      idempotencyKey: `${input.idempotencyKey}:return`,
-      lines: input.returnLines,
-      originalSaleId: input.originalSaleId,
-      refundReason: input.refundReason,
-      tenders: [],
-    },
-    exchangeGroupId
-  );
-  const sale = await runCreateSaleMsp(tx, ctx, {
-    exchangeGroupId,
-    idempotencyKey: `${input.idempotencyKey}:sale`,
-    lines: input.newLines,
-    locationId: refund.locationId,
-    tenders: input.tenders,
-  });
-  await services.recordAudit(tx, ctx, {
-    action: "pos.exchange",
-    after: {
-      exchangeGroupId,
-      refundSaleId: refund.saleId,
-      saleId: sale.saleId,
-    },
-    entityId: sale.saleId,
-    entityType: "sale",
-  });
-  return { exchangeGroupId, refund, sale };
-}
+// NOTE: `pos.exchange` (a linked return + sale sharing an exchangeGroupId, with
+// net-difference settlement) is DEFERRED to a later commit — it needs the
+// stored-value / store-credit seam so an excess return credit can become store
+// credit rather than cash (owner decision). The `sale.exchange_group_id` column
+// and the reserved-nullable `exchangeGroupId` event field stay in place for it.
+// The exchange CONTRACT (decomposition) remains locked in event-map-phase4.md.
 
 const refundLineSchema = z.object({
   originalSaleLineId: z.string().uuid(),
@@ -3840,12 +3793,6 @@ const refundTenderSchema = z.object({
   amountMinor: z.number().int().min(0),
   currency: z.string().length(3),
   method: z.enum(schema.TENDER_METHODS),
-});
-const newLineSchema = z.object({
-  productId: z.string().uuid(),
-  skuId: z.string().uuid(),
-  qty: z.number().int().positive(),
-  unitPriceMinor: z.number().int().min(0).optional(),
 });
 
 export const posRouter = {
@@ -3918,7 +3865,7 @@ export const posRouter = {
           ctx,
           input.idempotencyKey,
           input,
-          () => runRefund(tx, ctx, input, null)
+          () => runRefund(tx, ctx, input)
         );
       });
     }),
@@ -3943,34 +3890,6 @@ export const posRouter = {
           input.idempotencyKey,
           input,
           () => runVoid(tx, ctx, input)
-        );
-      });
-    }),
-
-  // Exchange = linked return + sale sharing an exchangeGroupId (event-map
-  // "Exchange flow"). Needs BOTH refund + create-sale rights.
-  exchange: tenantProcedure
-    .input(
-      z.object({
-        idempotencyKey: z.string().min(1),
-        newLines: z.array(newLineSchema).min(1),
-        originalSaleId: z.string().uuid(),
-        refundReason: z.string().optional(),
-        returnLines: z.array(refundLineSchema).min(1),
-        tenders: z.array(refundTenderSchema).min(1),
-      })
-    )
-    .handler(({ context, input }) => {
-      const ctx = context.requestContext;
-      return withTenant(db, ctx.tenantId, async (tx) => {
-        await assertPermission(tx, ctx, "pos.refund");
-        await assertPermission(tx, ctx, "pos.create_sale");
-        return services.runIdempotent(
-          tx,
-          ctx,
-          input.idempotencyKey,
-          input,
-          () => runExchange(tx, ctx, input)
         );
       });
     }),

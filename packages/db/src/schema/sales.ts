@@ -59,9 +59,10 @@ export const sale = pgTable(
     shiftId: uuid("shift_id"),
     salesRepId: text("sales_rep_id"),
     customerId: uuid("customer_id"),
-    // Exchange link (Commit 3): an exchange decomposes into a linked return +
-    // sale that SHARE this id (event-map-phase4 "Exchange flow"). Nullable —
-    // null for a standalone sale/return. P5 nets the pair via this group.
+    // Reserved-nullable seam for the DEFERRED exchange producer (event-map
+    // "Exchange flow" — a return + sale share this id). The exchange commit
+    // (with stored-value/store-credit net settlement) populates it; until then
+    // every sale/return emits null. Always null today; P5 nets the pair via it.
     exchangeGroupId: uuid("exchange_group_id"),
     // completed | void. A `return` doc is `completed` with NEGATIVE money (a
     // credit, so reports net automatically); a voided sale flips to `void`

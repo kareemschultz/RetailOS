@@ -94,6 +94,8 @@ The four review gates found, in order: **missing fields → broken symmetry → 
 - **GL posting it drives (P5):** Dr **stored-value liability**, Cr cash-clearing (the redemption settles the sale's tender). Balance never goes negative (audited).
 
 > **Exchange flow (Codex gate MEDIUM-6):** an exchange is **NOT a distinct event** — it **decomposes into a linked `sale.refunded` + `sale.created`** that share a common **`exchangeGroupId`** (added to both payloads when `saleType` originates from an exchange; reserved nullable otherwise). This keeps the GL postings symmetric (reverse the returned lines, post the new lines) and orderable (the refund and sale carry stable `originalSaleId`/`saleId`); P5 needs no exchange-specific posting logic. If a future need arises for atomic net-difference accounting, `sale.exchanged` can be added additively — but the decomposition is the locked Phase-4 contract.
+>
+> **PRODUCER STATUS (owner decision, this session):** the `pos.exchange` **producer is DEFERRED** to a later commit — net-difference settlement (pay only the difference; an excess return credit becomes **store credit**, not cash) requires the stored-value / store-credit seam. **The contract above is unchanged and remains locked** — only the producer is deferred. Commit 3 ships Returns / Refunds / Voids; the `sale.exchange_group_id` column and the reserved-nullable `exchangeGroupId` field on `sale.created` / `sale.refunded` stay in place (emitted null) so the future exchange commit is purely additive.
 
 ## What this map locks for Phase 5 (the consumer)
 

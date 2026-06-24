@@ -2354,7 +2354,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).rejects.toThrow();
   });
 
-  // ── Phase-4 Commit 3 — Returns / Refunds / Voids / Exchanges ────────────────
+  // ── Phase-4 Commit 3 — Returns / Refunds / Voids (exchange deferred) ────────
   // The #8 write-path gate for returns: drive the ROUTER (createSale → refund/
   // void) and assert valuation actually MOVES — the restock lands EXACTLY the
   // value the sale removed back into the cell — not just that a service works.
@@ -2891,98 +2891,9 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(vp).toHaveProperty("voidReason", "error");
   });
 
-  it("exchange decomposes into a linked return + sale sharing exchangeGroupId", async () => {
-    const admin = { context: makeCtx(ADMIN, ORG) };
-    const company = await call(
-      appRouter.company.create,
-      { name: "Exch-Co" },
-      admin
-    );
-    const location = await call(
-      appRouter.location.create,
-      { companyId: company.id, name: "Exch-Store", type: "store" },
-      admin
-    );
-    const product = await call(
-      appRouter.product.create,
-      { currency: "USD", name: "Exch-P", priceMinor: 500, sku: "EXCH-P" },
-      admin
-    );
-    const sku = await call(
-      appRouter.catalog.skuCreate,
-      { code: "EXCH-EA", productId: product.id },
-      admin
-    );
-    await call(
-      appRouter.inventory.receive,
-      {
-        costCurrency: "USD",
-        costScale: 2,
-        locationId: location.id,
-        productId: product.id,
-        qty: 10,
-        skuId: sku.id,
-        unitCostMinor: 100,
-      },
-      admin
-    );
-    const sale = await call(
-      appRouter.pos.createSale,
-      {
-        idempotencyKey: "exch-sale-1",
-        lines: [{ productId: product.id, qty: 2, skuId: sku.id }],
-        locationId: location.id,
-        tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
-      },
-      admin
-    );
-    const origLines = await withTenant(db, ORG, (tx) =>
-      tx
-        .select()
-        .from(schema.saleLine)
-        .where(eq(schema.saleLine.saleId, sale.saleId))
-    );
-    const exchange = await call(
-      appRouter.pos.exchange,
-      {
-        idempotencyKey: "exch-1",
-        newLines: [{ productId: product.id, qty: 1, skuId: sku.id }],
-        originalSaleId: sale.saleId,
-        returnLines: [
-          { originalSaleLineId: origLines.at(0)?.id ?? "", qty: 1 },
-        ],
-        tenders: [{ amountMinor: 500, currency: "USD", method: "cash" }],
-      },
-      admin
-    );
-    expect(exchange.exchangeGroupId).toBeTruthy();
-
-    // Both legs carry the SAME exchangeGroupId (event-map "Exchange flow").
-    const refundDoc = await withTenant(db, ORG, (tx) =>
-      tx
-        .select()
-        .from(schema.sale)
-        .where(eq(schema.sale.id, exchange.refund.saleId))
-        .limit(1)
-    );
-    const saleDoc = await withTenant(db, ORG, (tx) =>
-      tx
-        .select()
-        .from(schema.sale)
-        .where(eq(schema.sale.id, exchange.sale.saleId))
-        .limit(1)
-    );
-    expect(refundDoc.at(0)?.exchangeGroupId).toBe(exchange.exchangeGroupId);
-    expect(saleDoc.at(0)?.exchangeGroupId).toBe(exchange.exchangeGroupId);
-    expect(refundDoc.at(0)?.saleType).toBe("return");
-    expect(saleDoc.at(0)?.saleType).toBe("sale");
-
-    // Net stock: started 10, sold 2 (→8), returned 1 (→9), sold 1 new (→8).
-    const onHand = await withTenant(db, ORG, (tx) =>
-      services.stockOnHand(tx, location.id, product.id)
-    );
-    expect(onHand).toBe(8);
-  });
+  // (pos.exchange is DEFERRED to a later commit — needs the stored-value seam
+  // for excess credit. The exchangeGroupId column + reserved-nullable event
+  // field stay; the sale.created assertion above proves the field is null.)
 
   // H1 — a refund cannot reach across tenants. Tenant B owns a sale; Tenant A
   // tries to refund it. RLS hides B's sale from A's FOR UPDATE load (NOT_FOUND),
