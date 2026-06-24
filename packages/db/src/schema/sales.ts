@@ -59,7 +59,13 @@ export const sale = pgTable(
     shiftId: uuid("shift_id"),
     salesRepId: text("sales_rep_id"),
     customerId: uuid("customer_id"),
-    // completed | void
+    // Exchange link (Commit 3): an exchange decomposes into a linked return +
+    // sale that SHARE this id (event-map-phase4 "Exchange flow"). Nullable —
+    // null for a standalone sale/return. P5 nets the pair via this group.
+    exchangeGroupId: uuid("exchange_group_id"),
+    // completed | void. A `return` doc is `completed` with NEGATIVE money (a
+    // credit, so reports net automatically); a voided sale flips to `void`
+    // (excluded from sales reports). Free text (no CHECK) — kept extensible.
     status: text("status").default("completed").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     ...timestamps,
@@ -99,6 +105,11 @@ export const saleLine = pgTable(
     // below pin sku/lot intra-tenant (H1 kill). `lotId` nullable (lot-tracked only).
     skuId: uuid("sku_id"),
     lotId: uuid("lot_id"),
+    // Return link (Commit 3): a `return` sale_line points at the ORIGINAL sale
+    // line it reverses. The refund derives `restockedValueMinor` + commission
+    // clawback proportionally from the original line's stamped COGS (event-map
+    // HIGH-4) — never re-resolves. Nullable (a forward `sale` line has none).
+    originalSaleLineId: uuid("original_sale_line_id"),
     // Legacy each-count qty (VS#1) kept; qtyBase is the base-unit-minor quantity
     // (int8, the ERP-safe ledger type) — nullable until callers populate it.
     qty: integer("qty").notNull(),
@@ -121,6 +132,10 @@ export const saleLine = pgTable(
   (table) => [
     index("sale_line_saleId_idx").on(table.saleId),
     index("sale_line_skuId_idx").on(table.skuId),
+    index("sale_line_originalSaleLineId_idx").on(table.originalSaleLineId),
+    // Composite-FK target (H1 #5 pattern): lets a return line reference
+    // (tenant_id, id) of the original line below.
+    unique("sale_line_tenant_id_uq").on(table.tenantId, table.id),
     // Composite FKs (H1 kill) — reference the (tenant_id, id) targets so a line
     // can never point at another tenant's sku/lot.
     foreignKey({
@@ -132,6 +147,14 @@ export const saleLine = pgTable(
       columns: [table.tenantId, table.lotId],
       foreignColumns: [lot.tenantId, lot.id],
       name: "sale_line_lot_composite_fk",
+    }),
+    // Self-referential composite FK (H1 kill): a return line's originalSaleLineId
+    // can only point at a sale_line in the SAME tenant — a cross-tenant original
+    // reference becomes a DB-layer impossibility, not just a router guard.
+    foreignKey({
+      columns: [table.tenantId, table.originalSaleLineId],
+      foreignColumns: [table.tenantId, table.id],
+      name: "sale_line_original_composite_fk",
     }),
   ]
 );

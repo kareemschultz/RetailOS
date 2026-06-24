@@ -25,6 +25,11 @@ export const ROLE_PERMISSIONS = {
     "bond.release",
     "bond.approve_release",
     "pos.create_sale",
+    // Returns/voids (Commit 3). Sensitive (§19/§22 manager step-up): granted to
+    // admin + manager, NOT the base cashier — a cashier rings sales, a manager
+    // authorizes refunds/voids.
+    "pos.refund",
+    "pos.void_sale",
     "reports.view",
   ],
   manager: [
@@ -36,6 +41,8 @@ export const ROLE_PERMISSIONS = {
     "inventory.transfer",
     "inventory.transfer_receive",
     "pos.create_sale",
+    "pos.refund",
+    "pos.void_sale",
     "reports.view",
   ],
   // Phase 3 (commit 6) — operational separation of duties. A warehouse operator
