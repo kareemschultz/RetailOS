@@ -97,6 +97,12 @@ Never "No Data" — explain what goes here, show the next step, provide a CTA.
 
 ## Invisible UX (self-documenting — the user should rarely need the manual)
 The software teaches itself in context. This is what separates polished enterprise software from "developer-built" software — and it's load-bearing for RetailOS's real users (HR staff, warehouse workers, accountants, store managers) who are not power users and won't read docs.
+
+**Every advanced/irreversible action answers four questions, in context, before the user commits:**
+1. **What is this?** — a one-line plain-language definition.
+2. **Why do I need it?** — the reason it's being asked / the outcome it drives.
+3. **What happens if I continue?** — the concrete consequence ("posts G$X to Duty Payable", "deducts 6 units from Bond").
+4. **Can I undo it?** — state reversibility up front: undoable (offer undo), reversible-by-a-new-entry (explain how), or permanent (require explicit confirm). Never leave the user guessing whether an action is final.
 - **Every advanced/non-obvious field carries helper text** — a one-line "what this is / why it matters" under the field (e.g. "Costing method — how stock value is calculated when you sell; AVCO averages, FIFO uses oldest cost first"). Obvious fields (Name, Quantity) don't need it; anything a non-expert could misread does.
 - **Every validation error explains how to FIX it, not just what's wrong** — "Reorder point must be below the maximum (currently 40)" beats "Invalid value." Point at the field, give the rule and the corrective action.
 - **Every wizard step explains WHY the information is needed** — "We ask for your fiscal year so invoices number correctly for GRA filing" — rationale converts and reduces abandonment (ties to onboarding-in-context).

@@ -30,7 +30,40 @@ When a surface needs a component or layout, source in this order — only descen
 3. **Magic UI** — motion/delight for **marketing, storefront, onboarding, auth, dashboards only** — never the POS checkout or high-frequency data-entry paths (speed rule).
 4. **Custom RetailOS components** — the ~13 builds no registry covers (`gaps-and-custom.md`: offline-status indicator, fiscal/thermal receipt preview, cash-drawer & shift panel, split/multi-currency payment pad, bin/zone scan UI, landed-cost allocator, bonded-vs-released view, barcode/label designer, …), built on shadcn/Base UI primitives.
 
+### Source Priority Matrix (per-need — so we don't guess)
+
+The pyramid above, made concrete. Pick the source by what's needed:
+
+| Need | Source |
+|---|---|
+| Dashboard layout / shell | **AdminCN** layouts (via shadcn Studio `application-shell` / `dashboard-shell` blocks) |
+| Tables / data grids | **shadcn Studio** (DataTable blocks) + `@reui` for data-dense grids |
+| Forms / wizards | **shadcn Studio** (Form Layout, Multi-step Form) |
+| Charts | **AdminCN** chart compositions (Recharts via `@shadcn/chart` / Studio Charts) |
+| KPI / statistics / widgets | **shadcn Studio** (Statistics, Widgets) |
+| Dialogs / sheets / popovers | **shadcn** core (Base UI) |
+| Command palette (Cmd-K) | **shadcn** core (`@shadcn/command`) |
+| Calendar | **shadcn** core / Studio |
+| Marketing / storefront sections | **Magic UI** (+ Magic UI Pro) |
+| Animations / motion / delight | **Magic UI** (marketing/onboarding/dashboards only — never POS) |
+| Auth screens | **shadcn Studio** auth blocks (2FA/verify-email Studio covers) |
+| Kanban / board | **Custom** (on shadcn primitives) |
+| ERP-specific workflows + the ~13 gaps | **Custom** (`gaps-and-custom.md`) |
+
+> "AdminCN" in this matrix means **the AdminCN compositions sourced via the authenticated Studio blocks** (`ui-admin-shell-findings.md`): AdminCN-the-template is a Next download we never fork — its layouts map to Studio `application-shell`/`dashboard-shell`/chart blocks, which install in our `base`/Base UI style.
+
 ### Every imported block becomes owned, adapted code
+
+**NEVER MODIFY AN IMPORTED BLOCK IN PLACE.** Hacking the installed source destroys any path to upgrades and re-imports. The pipeline is always:
+
+> **import → normalize → adapt → extend**
+
+1. **import** — install the block unchanged via Studio MCP / CLI (`-c packages/ui`).
+2. **normalize** — strip Next/auth/routing/mock assumptions; fix imports to our aliases; re-theme to RetailOS tokens. The result is a clean, owned baseline.
+3. **adapt** — wire to oRPC + TanStack Query; match the domain model's data shapes.
+4. **extend** — add RetailOS behavior by **composition/wrapping**, not by editing the normalized baseline in ways that fight a future re-import. Keep the baseline recognizable.
+
+On import, each block:
 No imported block ships as-is. On import, each block:
 
 - **Becomes owned code** — committed source we maintain (never an opaque runtime dependency).
@@ -122,7 +155,18 @@ A cashier mid-outage must know at a glance whether a sale is safe.
   3. **Wire them to oRPC** (+ TanStack Query) against the real domain model.
   4. **Preserve visual parity** with the AdminCN target and the design-language skill.
 - **Do not recreate AdminCN (or any block) manually if a source block already exists** — find it via the studio MCP / registries first; building from scratch is the last resort, reserved for the `gaps-and-custom.md` set.
-- **Sequencing dependency:** the design-language skill (PR #12) and the AdminCN findings (PR #21) merge first; UI surfaces then assemble per `retailos-surface-map.md`.
+- **Sequencing dependency:** the design-language skill and the AdminCN findings (both on master) precede UI surfaces, which assemble per `retailos-surface-map.md`.
+
+### Build layers, NOT pages
+When UI starts, build **bottom-up reusable layers**, never one-off pages — a "page" is the thin top, not the unit of work. This maximizes reuse across the product surfaces and keeps a tenant theme/role change reshaping everything from one place:
+
+> **Application Shell → Module Shell → Reusable Workflows → Blocks → Screens**
+
+- **Application Shell** — the single app frame (sidebar, header, command palette, theme/density, offline-status, auth) — built once.
+- **Module Shell** — per-product frame (POS, Inventory, Accounting…) inheriting the app shell + that product's nav/views.
+- **Reusable Workflows** — the repeated ERP patterns (multi-view table, wizard, detail/timeline, approval, import) — built once, parameterized.
+- **Blocks** — owned, normalized source blocks (Studio/AdminCN) re-themed and wired to oRPC.
+- **Screens** — thin compositions of the above per `retailos-surface-map.md`. A screen should be mostly assembly, not new UI.
 
 ---
 

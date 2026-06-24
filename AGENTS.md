@@ -6,6 +6,7 @@
 
 - `docs/architecture/retailos-master-charter.md` — governing charter (source of truth).
 - `docs/architecture/lessons-learned.md` — append-only verified mistakes; never repeat them; append after any task with a correction/surprise.
+- `docs/architecture/engineering-principles.md` — the constitution (backend-owns-truth, one-owner-per-invariant, write-path-through-owning-service, Money primitives, stamp-irreproducible-facts, imported-blocks-become-owned, verify-against-docs, gate-by-kind, per-phase finish loop, products-not-phases).
 - `docs/architecture/PROGRESS.md` — live cross-agent state (branches/PRs, current step, locked decisions). Update it in the same commit as a change.
 - `docs/architecture/phase-roadmap.md` — phase status / scope.
 - `.claude/CLAUDE.md` — Ultracite/Biome code standards + shadcn/MCP workflow rules.
