@@ -3291,6 +3291,7 @@ async function restockReturnedLine(
   tx: TenantTransaction,
   ctx: RequestContext,
   opts: {
+    alreadyRefunded: number;
     docId: string;
     idempotencyKey: string;
     locationId: string;
@@ -3299,13 +3300,33 @@ async function restockReturnedLine(
     refundQty: number;
   }
 ) {
-  const { originalLine, refundQty } = opts;
+  const { alreadyRefunded, originalLine, refundQty } = opts;
   const { cogsCurrency, cogsMinor, cogsScale, method } =
     requireCogsStamp(originalLine);
-  // Proportional value of the refunded quantity (replay-safe; never re-resolved).
-  const restockedValueMinor = Number(
-    services.mulDivRound(cogsMinor, refundQty, originalLine.qty, "half_even")
+  // Cumulative-difference proportional split (Codex HIGH-2): value THIS refund as
+  // the cumulative target for (alreadyRefunded + refundQty) units MINUS the target
+  // for alreadyRefunded units. Summed across all partial refunds of a line this
+  // equals EXACTLY the original stamped cogsMinor — no per-refund rounding drift
+  // (three qty-1 refunds of cogsMinor=101/qty=3 restock 34+33+34=101, not 3×34).
+  // The refund that completes the line restores the exact remainder. (Same exact-
+  // conservation pattern as the Phase-3 bond-release F3 proportional split.)
+  const before = Number(
+    services.mulDivRound(
+      cogsMinor,
+      alreadyRefunded,
+      originalLine.qty,
+      "half_even"
+    )
   );
+  const after = Number(
+    services.mulDivRound(
+      cogsMinor,
+      alreadyRefunded + refundQty,
+      originalLine.qty,
+      "half_even"
+    )
+  );
+  const restockedValueMinor = after - before;
   const movement = await services.appendStockMovement(tx, ctx, {
     idempotencyKey: opts.idempotencyKey,
     locationId: opts.locationId,
@@ -3428,22 +3449,38 @@ async function runRefund(
     refundedRows.map((r) => [r.olid, Number(r.refunded)])
   );
 
-  // Validate every refund line BEFORE writing anything.
-  const validated = input.lines.map((rl) => {
-    const originalLine = lineById.get(rl.originalSaleLineId);
-    if (!originalLine) {
-      throw new ORPCError("NOT_FOUND", {
-        message: `Original sale line ${rl.originalSaleLineId} does not belong to this sale`,
-      });
+  // Aggregate requested qty per original line FIRST (Codex HIGH-1): two entries
+  // with the same originalSaleLineId in ONE request must be summed before the
+  // over-refund check — otherwise each independently sees the same `already` and
+  // both pass, double-restocking. One return line + one restock per original line.
+  const requestedByLine = new Map<string, number>();
+  for (const rl of input.lines) {
+    requestedByLine.set(
+      rl.originalSaleLineId,
+      (requestedByLine.get(rl.originalSaleLineId) ?? 0) + rl.qty
+    );
+  }
+
+  // Validate every (aggregated) refund line BEFORE writing anything. `already`
+  // (refunded before this request) is carried through for the HIGH-2 cumulative-
+  // difference restock split.
+  const validated = Array.from(requestedByLine.entries()).map(
+    ([originalSaleLineId, refundQty]) => {
+      const originalLine = lineById.get(originalSaleLineId);
+      if (!originalLine) {
+        throw new ORPCError("NOT_FOUND", {
+          message: `Original sale line ${originalSaleLineId} does not belong to this sale`,
+        });
+      }
+      const already = refundedByLine.get(originalLine.id) ?? 0;
+      if (refundQty > originalLine.qty - already) {
+        throw new ORPCError("BAD_REQUEST", {
+          message: `Over-refund: line ${originalLine.id} has ${originalLine.qty - already} of ${originalLine.qty} refundable`,
+        });
+      }
+      return { already, originalLine, refundQty };
     }
-    const already = refundedByLine.get(originalLine.id) ?? 0;
-    if (rl.qty > originalLine.qty - already) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: `Over-refund: line ${originalLine.id} has ${originalLine.qty - already} of ${originalLine.qty} refundable`,
-      });
-    }
-    return { originalLine, refundQty: rl.qty };
-  });
+  );
 
   const currency = original.currency;
   const scale = original.scale;
@@ -3504,7 +3541,7 @@ async function runRefund(
   );
 
   const eventLines: unknown[] = [];
-  for (const { originalLine, refundQty } of validated) {
+  for (const { already, originalLine, refundQty } of validated) {
     let restocked = {
       cogsCurrency: originalLine.cogsCurrency,
       cogsScale: originalLine.cogsScale,
@@ -3513,6 +3550,7 @@ async function runRefund(
     };
     if (!input.doNotRestock) {
       restocked = await restockReturnedLine(tx, ctx, {
+        alreadyRefunded: already,
         docId: returnSale.id,
         idempotencyKey: input.idempotencyKey,
         locationId: original.locationId,
@@ -3700,7 +3738,10 @@ async function runVoid(
   }
 
   for (const line of saleLines) {
+    // A void targets an UN-refunded sale (rejected above if it has returns), so
+    // alreadyRefunded is 0 and the full original cogsMinor restores exactly.
     await restockReturnedLine(tx, ctx, {
+      alreadyRefunded: 0,
       docId: sale.id,
       idempotencyKey: input.idempotencyKey,
       locationId: sale.locationId,

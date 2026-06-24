@@ -2568,6 +2568,236 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).rejects.toThrow();
   });
 
+  // Codex HIGH-1: two entries with the SAME originalSaleLineId in ONE request
+  // must be SUMMED before the over-refund check. Otherwise each sees the same
+  // `already=0` and both pass → over-refund + double-restock.
+  it("aggregates duplicate originalSaleLineId in one request (Codex HIGH-1)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "Dup-Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Dup-Store", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "Dup-P", priceMinor: 500, sku: "DUP-P" },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "DUP-EA", productId: product.id },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 3,
+        skuId: sku.id,
+        unitCostMinor: 100,
+      },
+      admin
+    );
+    // Sell 1 unit, then sell 3 on a second sale (the aggregation case).
+    const sale1 = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "dup-sale-1",
+        lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+        locationId: location.id,
+        tenders: [{ amountMinor: 500, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const s1Line = (
+      await withTenant(db, ORG, (tx) =>
+        tx
+          .select()
+          .from(schema.saleLine)
+          .where(eq(schema.saleLine.saleId, sale1.saleId))
+      )
+    ).at(0);
+    // Two qty-1 entries on a qty-1 line → summed 2 > 1 → REJECTED (the bug would
+    // let each independently pass).
+    await expect(
+      call(
+        appRouter.pos.refund,
+        {
+          idempotencyKey: "dup-overrefund",
+          lines: [
+            { originalSaleLineId: s1Line?.id ?? "", qty: 1 },
+            { originalSaleLineId: s1Line?.id ?? "", qty: 1 },
+          ],
+          originalSaleId: sale1.saleId,
+          tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+
+    // Legit aggregation: sell 3, refund with two qty-1 entries summing to 2 ≤ 3 →
+    // EXACTLY ONE return line for that original (not two).
+    const sale2 = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "dup-sale-2",
+        lines: [{ productId: product.id, qty: 2, skuId: sku.id }],
+        locationId: location.id,
+        tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const s2Line = (
+      await withTenant(db, ORG, (tx) =>
+        tx
+          .select()
+          .from(schema.saleLine)
+          .where(eq(schema.saleLine.saleId, sale2.saleId))
+      )
+    ).at(0);
+    const refund = await call(
+      appRouter.pos.refund,
+      {
+        idempotencyKey: "dup-agg",
+        lines: [
+          { originalSaleLineId: s2Line?.id ?? "", qty: 1 },
+          { originalSaleLineId: s2Line?.id ?? "", qty: 1 },
+        ],
+        originalSaleId: sale2.saleId,
+        tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const retLines = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.saleLine)
+        .where(eq(schema.saleLine.saleId, refund.saleId))
+    );
+    expect(retLines.length).toBe(1);
+    expect(retLines.at(0)?.qty).toBe(2);
+  });
+
+  // Codex HIGH-2: sequential partial refunds must restock EXACTLY the original
+  // stamped cogsMinor — no per-refund rounding drift. cogsMinor=101 / qty=3 with
+  // three qty-1 refunds: the buggy independent round gives 34+34+34=102; the
+  // cumulative-difference split gives 34+33+34=101.
+  it("conserves cogsMinor across sequential partial refunds (Codex HIGH-2)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "Drift-Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Drift-Store", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "Drift-P", priceMinor: 500, sku: "DRIFT-P" },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "DRIFT-EA", productId: product.id },
+      admin
+    );
+    // AVCO cell of (qty 3, value 101): 1@33 + 2@34. Selling 3 stamps cogsMinor=101.
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 1,
+        skuId: sku.id,
+        unitCostMinor: 33,
+      },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 2,
+        skuId: sku.id,
+        unitCostMinor: 34,
+      },
+      admin
+    );
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "drift-sale",
+        lines: [{ productId: product.id, qty: 3, skuId: sku.id }],
+        locationId: location.id,
+        tenders: [{ amountMinor: 1500, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const origLine = (
+      await withTenant(db, ORG, (tx) =>
+        tx
+          .select()
+          .from(schema.saleLine)
+          .where(eq(schema.saleLine.saleId, sale.saleId))
+      )
+    ).at(0);
+    expect(origLine?.cogsMinor).toBe(101);
+
+    // Three sequential qty-1 refunds (separate requests). Each rounds against the
+    // CUMULATIVE target, so the restocked values are 34, 33, 34 — summing to 101.
+    const restockedEach: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const refund = await call(
+        appRouter.pos.refund,
+        {
+          idempotencyKey: `drift-refund-${i}`,
+          lines: [{ originalSaleLineId: origLine?.id ?? "", qty: 1 }],
+          originalSaleId: sale.saleId,
+          tenders: [{ amountMinor: 500, currency: "USD", method: "cash" }],
+        },
+        admin
+      );
+      const retLine = (
+        await withTenant(db, ORG, (tx) =>
+          tx
+            .select()
+            .from(schema.saleLine)
+            .where(eq(schema.saleLine.saleId, refund.saleId))
+        )
+      ).at(0);
+      restockedEach.push(Number(retLine?.cogsMinor));
+    }
+    expect(restockedEach).toEqual([34, 33, 34]);
+    expect(restockedEach.reduce((a, b) => a + b, 0)).toBe(101);
+
+    // The valuation cell holds EXACTLY the original removed value (101), not 102.
+    const avco = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.avgCost)
+        .where(eq(schema.avgCost.skuId, sku.id))
+        .limit(1)
+    );
+    expect(avco.at(0)?.qtyOnHand).toBe(3);
+    expect(avco.at(0)?.totalValueMinor).toBe(101);
+  });
+
   it("voids a fresh sale — full restock, status void, single winner under a race", async () => {
     const admin = { context: makeCtx(ADMIN, ORG) };
     const company = await call(
