@@ -59,5 +59,11 @@ coverage
 tmp
 temp
 
-# Local design-reference uploads (not part of the repo)
+# Local design-reference uploads (binaries — see docs/architecture/ui-inventory/design-references.md)
 uploaded reference designs*
+
+# AdminCN / shadcn Studio Pro template downloads (reference/mining source — NEVER committed; Pro-licensed, we do not fork — see frontend-strategy.md / ui-admin-shell-findings.md)
+admincn*.zip
+*admin-dashboard-template*.zip
+shadcn-nextjs-admincn-*/
+admincn-reference/

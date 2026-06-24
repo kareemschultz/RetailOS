@@ -7,6 +7,7 @@
 
 - @docs/architecture/retailos-master-charter.md — the governing charter (source of truth).
 - @docs/architecture/lessons-learned.md — append-only verified mistakes; never repeat them. Append after any task with a correction/surprise/contradiction.
+- `docs/architecture/engineering-principles.md` — the constitution: backend-owns-truth, one-owner-per-invariant, write-path-through-the-owning-service (#8), Money primitives, stamp-the-irreproducible-fact, imported-blocks-become-owned, verify-against-official-docs, gate-by-kind, the per-phase finish loop, and the **products-not-phases** mental model.
 - @docs/architecture/phase-roadmap.md — phase status and what's in scope now.
 - `docs/architecture/PROGRESS.md` — live cross-agent task board + changelog (a `SessionStart` hook surfaces a lean view automatically). **Claim a lane before writing**; `git pull --rebase` before committing (multiple agents share the branch).
 - `docs/architecture/phase-2-implementation-plan.md` — approved Phase 2 build order and costing/RLS/seed/test design; **Commit 0 gate first, resolver later**.
@@ -28,6 +29,8 @@
 - Tech stack & verified dependency versions: `docs/architecture/tech-stack.md`
 - Folder structure, conventions, env matrix: `docs/architecture/folder-structure-conventions.md`
 - UI/UX & component sourcing: `docs/architecture/ui-ux-plan.md` + `docs/architecture/ui-inventory/INDEX.md`
+- **Design language (UI phases 4+):** `.agents/skills/retailos-design-language/SKILL.md` — visual source of truth for every generated UI surface (table/admin baseline in `docs/architecture/ui-inventory/design-references.md`). Backend phases ignore it.
+- **Frontend strategy (GOVERNANCE — read before any UI work):** `docs/architecture/frontend-strategy.md` — official sourcing & adaptation law (source UI from shadcn Studio → AdminCN blocks → Magic UI → custom; every block becomes owned code in `packages/ui`, wired to oRPC, re-themed to RetailOS tokens, stripped of mock/Next/auth/routing assumptions; AdminCN is the visual target, the RetailOS backend stays authoritative). The design *law* is the `retailos-design-language` skill; AdminCN detail is `ui-admin-shell-findings.md`. **No production UI until APIs are stable + approved.**
 - Vertical Slice #1 design: `docs/architecture/vertical-slice-1.md`
 - Phase 2 (Inventory) — ✅ COMPLETE/FROZEN (merged `72b2100`): `docs/architecture/phase-2-complete.md` (archive) · `phase-2-implementation-plan.md` · `event-map-phase2.md` · `phase-2-api-contracts.md` · `phase-2-gap-analysis.md` (D1–D7 locked; ADR-0007/0008)
 - Phase 3 (Locations/Warehouses/Bonds) — PLANNING (no code; awaiting owner approval): `docs/architecture/phase-3-implementation-plan.md` · `phase-3-gap-analysis.md` · `module-specs/locations-warehouses-bonds.md` · `event-map-phase3.md` · `competitive/locations-warehouses-bonds.md` (parked debt #5 composite-FK + #7 set-once DB-trigger paid first; unified self-referential `location` tree + flags; two-step intra-company-only transfers; bond-release duty reuses the value-only `valuation_adjustment` seam; transfer value-conservation is the load-bearing design question — AVCO reuses seams, only FIFO needs an additive costing touch)
