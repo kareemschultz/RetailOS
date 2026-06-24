@@ -126,7 +126,24 @@ A cashier mid-outage must know at a glance whether a sale is safe.
 
 ---
 
-## 8. Cross-references
+## 8. Studio MCP operational workflow (`/cui` · `/iui` · `/rui` · `/ftc`)
+
+The shadcn-studio MCP is **already wired** (server in the agent config; `.claude/commands/{cui,iui,rui,ftc}.md` present; rules in `.claude/CLAUDE.md`). **All "setup" steps in the studio docs are already done — do not re-run them.** Use the commands when assembling UI (Phase 4+):
+
+- **`/cui` (Create UI)** — compose a screen/section from studio blocks. **Primary** command for RetailOS app/dashboard/table surfaces. Generate **one block at a time** (a separate `/cui` per section), or name exact variants for a full page (e.g. "Use Application Shell 3, DataTable 6…").
+- **`/iui` (Inspire UI — Pro)** — generate a *fresh* block inspired by studio patterns. Use only when no close block exists; it's slow — one section at a time, never a whole page.
+- **`/rui` (Refine UI)** — tweak/iterate an existing block or swap to a named variant ("Update the table to DataTable 6", "install <theme>").
+- **`/ftc` (Figma → Code)** — install the exact studio blocks composed in a Figma design (needs Figma MCP). For design-first **landing/marketing** pages; keep Figma block frame names intact (the matcher parses them).
+
+**Adopted best practices (from the studio docs):** one block per command; **commit/stage before any bulk install** (easy revert); keep Figma frame names; write specific prompts; iterate with `/rui`; install into the shared package with **`-c packages/ui`**.
+
+**RetailOS-specific guardrails — these docs contain traps for our stack:**
+- ⚠️ **NEVER run the studio `curl -o CLAUDE.md …/copilot-instructions.md`** — it would **overwrite our `CLAUDE.md`**. Our studio rules already live in `.claude/CLAUDE.md`. Skip every "setup" step in the studio docs.
+- ⚠️ The `/ftc` **`next.config.ts` image `remotePatterns`** (localhost:3845) is **Next-only**. `apps/web` is **TanStack Start (Vite)** — don't add a `next.config.ts`; localize/serve images per the "strip Next assumptions" rule (§1) or configure Vite image handling.
+- Studio blocks install with **Next `app/page.tsx` targets** + demo content — every install is an **import, not a finished feature**: immediately apply §1 (own in `packages/ui`, port targets to **TanStack Start routes**, wire to **oRPC**, re-theme to RetailOS tokens, strip mock/auth assumptions).
+- The MCP **installs**; it does not absolve adaptation. Every `/cui` result is reviewed against the **`retailos-design-language` skill** before it counts as done.
+
+## 9. Cross-references
 
 | Concern | Authoritative source |
 |---|---|
