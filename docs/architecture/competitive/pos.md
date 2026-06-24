@@ -63,6 +63,19 @@ Verified Guyana facts:
 
 Regional fiscalization models the provider interface must be able to cover (so a future country plug-in fits): (a) **fiscal-device/memory** (printer or sealed device signs each receipt — common in parts of LatAm/the Balkans); (b) **real-time cloud clearance** (each invoice cleared/assigned a control number by the tax authority before/at issue — the Latin-American CFDI/e-invoice pattern); (c) **signed-receipt/reporting** (periodic signed submission). The "none" provider is the absence of all three. *(These three models are knowledge-level (u); confirm a specific country's mechanics against that authority's docs before building its provider.)*
 
+## VAT rounding — GRA finding + ERP convention (verified 2026-06-23)
+
+**GRA mandates NO rounding algorithm** (HIGH for the guidance/regulation layer). Verified directly this session: the GRA [How to calculate VAT](https://www.gra.gov.gy/tax-services/vat-services/how-to-calculate-vat/) page publishes the **VAT fraction 7/57** (= 14%/(1+14%)) and worked examples but states no rounding rule; the [VAT & Invoices](https://www.gra.gov.gy/vat-invoices/) page lists invoice fields with no precision rule; Policy #25 (Tax Fraction) and Policy #13 (inclusive/exclusive pricing) add none; the consolidated **VAT Act + Regulations PDF (Feb 2024)** is image-scanned and its extractable text shows no rounding clause. **Residual:** the scanned Act could carry an un-extractable clause → folds into the tax-expert launch check.
+
+**ERP tax-rounding convention (informs the RetailOS default):**
+- **Xero** — tax computed **per line**, rounded to 2 dp, then line taxes summed = invoice tax. ([Rounding in Xero](https://developer.xero.com/documentation/guides/how-to-guides/rounding-in-xero/))
+- **QuickBooks (Commerce)** — tax **per line item**, rounded before the total ("generally accepted, also used by Xero").
+- **Odoo** — **configurable**: `round_per_line` vs `round_globally` (Accounting config); journal lines capped at 2 dp.
+- **ERPNext** — configurable, with documented line-vs-total consistency pitfalls.
+- Half-even vs half-up is **not** uniformly documented — there is no single industry standard, only conventions, which is itself the argument for making it configurable.
+
+**RetailOS conclusion (Decision #4):** a **configurable rounding-policy framework** (currency-scale + per-line/per-total granularity + mode, config-driven per country/currency — NOT one hardcoded global rule), defaulting to **per-line + half-even** (per-line matches Xero/QuickBooks and the GRA line-item-tax invoice field; half-even is the enterprise/IFRS-aligned default against margin drift). This lets Guyana/Trinidad/Barbados/Suriname differ without schema changes (charter §12/§19).
+
 ## Sources
 
 - [Lightspeed Retail (X-Series) — Selling in offline mode](https://x-series-support.lightspeedhq.com/hc/en-us/articles/25534272395163-Selling-in-offline-mode)
@@ -78,3 +91,7 @@ Regional fiscalization models the provider interface must be able to cover (so a
 - [Odoo — Set up Cash Control in Point of Sale](https://www.odoo.com/documentation/13.0/applications/sales/point_of_sale/shop/cash_control.html)
 - [Guyana Revenue Authority — VAT & Invoices](https://www.gra.gov.gy/vat-invoices/)
 - [Guyana Revenue Authority — Value Added Tax services](https://www.gra.gov.gy/tax-services/vat-services/)
+- [Guyana Revenue Authority — How to calculate VAT (7/57 fraction, no rounding rule)](https://www.gra.gov.gy/tax-services/vat-services/how-to-calculate-vat/)
+- [Guyana VAT Act + Regulations consolidated (Feb 2024 PDF)](https://www.gra.gov.gy/wp-content/uploads/2024/03/VAT-Act-Regul.-Trans.-Reg.-revised-Feb-8-2024.pdf)
+- [Rounding in Xero (per-line tax rounding)](https://developer.xero.com/documentation/guides/how-to-guides/rounding-in-xero/)
+- [Odoo — round_per_line vs round_globally (issue #37896)](https://github.com/odoo/odoo/issues/37896)

@@ -1,6 +1,6 @@
 # Phase 4 — POS & Offline Queue — Implementation Plan (DRAFT for review)
 
-> **STATUS: PLANNING DRAFT — NOT APPROVED, NO CODE.** Produced during the overnight autonomous run for Kareem's morning review. Decisions in the 🔒 section are **Kareem's to lock**, not the agent's.
+> **STATUS: DECISIONS LOCKED (2026-06-23) — PLAN HARDENED — NO CODE YET.** Research complete, Codex-reviewed, and all 7 🔒 decisions locked by Kareem (§12). **Locking decisions + hardening the plan is NOT authorization to build** — Phase-4 implementation (schema/migrations/code/PRs) is a separate session. This doc is the approved-design-of-record for that future build.
 
 ## Confidence
 
@@ -63,13 +63,15 @@ Sequential tamper-evident numbering per company/location/fiscal-year/doc-type/se
 - **Usage tracking:** per-number `used | void | unused-reserved`, feeding the §17 gap/void/out-of-sequence reports.
 - **Tests:** two concurrent terminals leasing the same scope get disjoint ranges; an expired lease's tail is reported as a gap, not reminted.
 
+**Migration strategy for the `number_block` scope change (expand/contract — NOT purely additive).** Today the unique key is `(tenant, company, doc_type, series)` and `location_id` is a nullable column not in the key (verified `numbering.ts:34`). Adding `location_id` + `fiscal_year` to the key is an **expand/contract** change (charter §8): **(1) Expand** — add the `fiscal_year` column (nullable) + a NEW unique index `(tenant, company, location_id, fiscal_year, doc_type, series)` alongside the old one; **(2) Backfill** — set `fiscal_year` for existing rows (current fiscal year) and `location_id` (company default location, or explicit) so the new key is satisfied; **(3) Switch** — services read/allocate on the new scope; **(4) Contract** — drop the old `(tenant, company, doc_type, series)` unique in a LATER release once no code uses it. Never ship the drop in the same release that starts using the new shape (charter §8 destructive-migration rule). For the composite-FK work (INV-P4-10): the migration must **add the `(tenant_id, id)` UNIQUE targets on `sale` and `number_block` BEFORE the composite FKs reference them** (the drizzle-kit FK-before-its-target-unique ordering lesson from Phase-3 commit 0 — read the generated SQL and reorder if needed).
+
 ## 6. Shift & cash (charter §19)
 
 Open/close shift, multi-currency cash float, **blind close** (cashier enters counted cash WITHOUT seeing expected; system computes over/short for the manager's audit log), X-report (mid-shift snapshot) + Z-report (end-of-day final settlement) per terminal/shift. Distinguish **standalone** card payment (system only records a card was used) from **integrated** EFTPOS (POS pushes exact amount to terminal) to eliminate double-entry (§19; ties to Phase 9 hardware).
 
 ## 7. Money / pricing / tax (charter §19) — reuse
 
-Integer minor units only (amount+currency+scale together); one rounding policy. Split-currency payments + FX at POS (realized gain/loss is a Phase-5 accounting concern; POS records the tender currency + rate). Tax-inclusive vs exclusive centrally; line-item tax; consistent rounding. **Issue #6 (BigInt `mulDivRound`) becomes load-bearing here** if POS does tax/discount division — must be resolved before POS valuation math (Phase-5 blocker pulled forward into Phase 4 if needed).
+Integer minor units only (amount+currency+scale together). Split-currency payments + FX at POS (realized gain/loss is a Phase-5 accounting concern; POS records the tender currency + rate). Tax-inclusive vs exclusive centrally; line-item tax; **rounding via the configurable policy framework (Decision #4) — currency-scale + per-line/per-total granularity + mode, config-driven per country/currency, NOT a hardcoded global rule** (charter §12/§19). **Issue #6 (BigInt `mulDivRound(a,b,c,mode)`) is LOCKED as a Phase-4 P0 (commit 1)** — every tax/discount/FX/commission division goes through it; the policy resolver supplies `mode` and decides per-line vs per-total. Phase 5/6 reuse it unchanged.
 
 ## 8. Fiscalization seam (charter §17) — ✅ RESEARCHED 2026-06-23
 
@@ -84,6 +86,12 @@ Verified Guyana facts the receipt/numbering work must honour now:
 The provider interface must be shaped to also cover three regional regimes so a future country plug-in fits without core rework: **fiscal-device/memory** (sealed device/printer signs each receipt), **real-time cloud clearance** (authority assigns a control number per invoice — the LatAm CFDI pattern), and **signed-receipt/periodic reporting**. The "none" provider is the absence of all three. **Caveat (charter §17):** documentary finding, not a tax-attorney opinion — confirm with a Guyana tax expert before launch and watch for GRA regime changes.
 
 **Reserve the schema seam NOW, don't just ship an interface (Codex MEDIUM + the "reserve deferred fields nullable, don't ship them absent" lesson).** An interface alone means a future GRA mandate forces a breaking migration to `sale`/`invoice`. Instead, create a **`fiscal_document` table now** with all-nullable provider fields — `provider`, `status`, `control_number`, `signature_payload`, `qr_data`, `authority_submitted_at`, `authority_response_at`, and `raw_request`/`raw_response` references — plus a **nullable FK from `invoice`**. The "none" provider simply leaves them null; a future regime populates them with **no breaking change** (exactly the present-but-null → present-with-value additive pattern proven in Phase 2). This makes Decision #1 a true seam, not a deferred schema risk.
+
+**VAT Registration Number + TIN seams (required for a GRA-compliant tax invoice).** Verified: no `vat_registration_number`/`tax_identification_number` field exists on `organization` or `company` today. A GRA tax invoice MUST show the seller's name, address, **VAT Registration Number** (and the TIN is the taxpayer identifier behind it) — so without these the receipt/invoice renderer literally cannot produce a compliant document. **Phase-4 commit 1 adds, as reserved seams (nullable, no fiscalization logic):**
+- `organization.vat_registration_number`, `organization.tax_identification_number`
+- `company.vat_registration_number`, `company.tax_identification_number`
+
+Company-level overrides organization-level (a tenant may operate multiple companies with distinct registrations). These feed the receipt/invoice template + the future fiscalization provider; nullable so existing rows are unaffected (additive). Pairs with the unique-serialized-invoice-number requirement (INV-P4-4) to make the §17 receipt GRA-shaped from day one.
 
 ## 9. RBAC (charter §7) — new permissions
 
@@ -113,15 +121,24 @@ Full sourced matrix (Lightspeed X / Square Retail / Shopify POS / Odoo POS, with
 4. **Distributed offline number-block leasing is a genuine differentiator Guyana makes load-bearing** — no surveyed POS publicizes it; the GRA requires a **unique serialized invoice number**, so §17 numbering is both compliance and edge (INV-P4-4).
 5. **Returns + credit-note first-class, not a flag** — Shopify's offline-refund gap is the weakness; RetailOS models `saleType=return` + `originalSaleId` + first-class credit note (§17).
 
-## 12. 🔒 DECISIONS NEEDING KAREEM (lock before Phase 4 code)
+## 12. 🔒 LOCKED DECISIONS (locked by Kareem, 2026-06-23)
 
-1. **Guyana fiscalization (load-bearing):** ✅ **RESEARCHED — GRA does NOT mandate electronic fiscal devices / e-invoicing** (HIGH, documentary; `competitive/pos.md`). Codex concurs this is effectively settled. **Recommendation: lock as "none" provider + the `fiscal_document` schema seam reserved now (all-nullable columns + nullable invoice FK) + a tax-expert launch check.** Build the §17 numbering + mandatory-field receipt now; clearance/signing stays a seam with **no breaking-migration risk** because the columns exist (nullable) from commit 1. → *Kareem to LOCK.*
-2. **Offline conflict policy default:** confirm D5 (allow-oversell-flagged) is the POS default, with hard-block configurable per location; Edge-Hub hard-reservation deferred to Phase 10.
-3. **Sale-line qty type:** keep int4 each-counts, or move to int8 base-unit minor (to support weighed goods at POS now vs later)?
-4. **#6 precision:** ⚠️ **Codex CRITICAL — this is NOT optional for Phase 4.** VAT 14% line tax, percentage discounts, FX tender, and commission % **all divide**, and `money.ts` explicitly defers division/rounding today. **Recommendation: lock #6 (BigInt `mulDivRound` + the single rounding policy) as a Phase-4 P0, built in commit 1 before any line-pricing math.** The only sub-choice left for you: the **rounding mode** (banker's/half-even vs half-up) — which is the same mode Phase 5 will reuse, so lock it once here. → *Kareem to LOCK the rounding mode.*
-5. **Returns model:** first-class `saleType=return` + `originalSaleId` (recommended) vs a separate credit-note entity now.
-6. **Tauri offline store:** confirm SQLite (charter §4) for the desktop POS offline catalog + queue; define the sync contract in Phase 4 (no UI).
-7. **Commission timing:** accrue at sale vs at settlement; refund/void clawback policy.
+All seven are **LOCKED**. This is a decision + architecture lock — **NOT** authorization to build; Phase-4 implementation is a separate session.
+
+1. **Guyana fiscalization → "none" provider + reserved `fiscal_document` schema seam.** 🔒 LOCKED. Ship a no-op "none" fiscalization provider (GRA mandates no fiscal device / e-invoicing — HIGH, documentary; `competitive/pos.md`). **Commit 1 reserves the `fiscal_document` table** (all-nullable `provider`/`status`/`control_number`/`signature_payload`/`qr_data`/`authority_submitted_at`/`authority_response_at`/`raw_request`/`raw_response`) **+ a nullable FK from `invoice`**, so a future GRA mandate is additive (present-but-null → present-with-value), never a breaking migration. **⚠️ CAVEAT (prominent, charter §17): this locks the ARCHITECTURE, not tax-law certainty — confirm with a Guyana tax expert before launch; if the GRA later mandates a fiscal regime, the provider interface + reserved columns are the attach point.**
+2. **Offline conflict policy → D5 allow-oversell-flagged (default).** 🔒 LOCKED. POS default = allow-oversell with `inventory.stock_discrepancy` flagging (the D5 policy already wired in Phase 2/3); **hard-block configurable per location**; Edge-Hub hard-reservation deferred to **Phase 10**. The ledger stays policy-neutral; the no-negative gate is the per-location config.
+3. **Sale-line quantity → int8 base-unit minor (NOT int4).** 🔒 LOCKED. Quantities are `bigint(mode:"number")` base-unit minor, applying the same range discipline as money — because weighed goods + multi-UoM at POS is a real charter §18/§19 requirement (scale-barcode parsing), and the qty-type retrofit is painful (the Phase-2 int8-quantity lesson). `qty_scale` accompanies the quantity (NULL ⇒ integer each-counts).
+4. **#6 `mulDivRound` → P0 in commit 1; rounding is a CONFIGURABLE policy framework (NOT a hardcoded global rule), defaults per-line + half-even.** 🔒 LOCKED. The BigInt `mulDivRound(a, b, c, mode)` primitive is built **first** (commit 1), before any line-pricing math — VAT 14% line tax, % discounts, FX tender, and commission % all divide (Codex CRITICAL-3). **`mode` is a parameter, not a constant.** Above it sits a **config-driven rounding-policy framework** (charter §12 "country config data-driven, not hardcoded to Guyana"; §19 multi-jurisdiction tax engine), resolved via the existing settings-resolver pattern, with **three independent policy axes** so Guyana / Trinidad / Barbados / Suriname / future markets differ **without schema changes**:
+   - **Currency rounding policy** (per currency): decimal **scale** + mode — e.g. GYD whole-dollar, USD scale-2; default **half-even**.
+   - **Tax rounding policy** (per country / tax jurisdiction): **granularity** (round **per-line** vs per-invoice-total) + mode — default **per-line + half-even**.
+   - **Tax-engine rounding** for compound/stacked taxes (per §19): order + intermediate rounding — default round-after-each-component, half-even.
+   - **Defaults are platform choices because GRA mandates no algorithm** (TASK A, verified this session — the GRA publishes the 7/57 VAT fraction + worked examples with no rounding rule; the scanned VAT Act extractable text shows none either; sources in `competitive/pos.md` §fiscalization + §ERP-rounding). **Per-line granularity** matches the dominant ERP convention (Xero, QuickBooks round tax per-line then sum; Odoo/ERPNext make it configurable) and is required anyway because **line-item tax is itself a GRA invoice field**. **Half-even** is the enterprise/IFRS-aligned default (prevents directional margin drift across aggregation). Phase 5/6 reuse the SAME framework + primitive. Residual: confirm no VAT-Act/Regulations rounding clause with the tax expert (same launch check as #1).
+5. **Returns → first-class `saleType=return` + `originalSaleId`; credit-note is a layered fiscal document type.** 🔒 LOCKED. A return is a first-class sale variant linked to its original; the **credit note is a fiscal document TYPE rendered/numbered on top** of the return (per §17 numbering), **not a separate domain entity**. Avoids a parallel returns table.
+6. **Tauri offline store → SQLite; sync contract defined in Phase 4 (no UI).** 🔒 LOCKED. Desktop POS offline catalog + queue = embedded SQLite (charter §4, supermarket-scale catalogs). Phase 4 **defines the client↔server sync contract** (payload shape, idempotency, monotonic counters, block-lease hand-out); **no UI** is built.
+7. **Commission timing → CONFIGURABLE `commission_accrual_policy` enum (`at_sale | at_settlement`) on organization settings, with reversal semantics specified for BOTH modes.** 🔒 LOCKED. A tenant-level `commission_accrual_policy` (`text({ enum: ["at_sale","at_settlement"] })` + CHECK — extensible-enum rule), default **`at_sale`**. **Reversal/clawback semantics are part of the lock (not deferred to implementation):**
+   - **`at_sale`:** commission accrues in full when the sale completes. A **refund** (full or partial) reverses commission **proportional to the refunded value**; a **void** reverses 100%. Reversals are append-only negative commission-adjustment entries (no hard delete), audited.
+   - **`at_settlement`:** commission accrues **proportional to the settled amount** as payments clear (a 40%-paid layaway accrues 40%). On **cancellation of a partially-paid credit/layaway sale**, reverse **ALL** accrued commission for that sale — commission is earned only on a **completed sale of delivered goods**, so neither a refunded deposit nor a **forfeited** deposit is commissionable (a forfeited deposit is **non-commissionable other income**, a Phase-5 GL concern). A refund of settled payment reverses its proportional accrual.
+   - **Both modes:** accruals and reversals net in commission statements/payouts; a clawback against an already-paid payout carries a negative balance to the next payout cycle (payout reconciliation), never a silent deletion. Money-correctness invariant: Σ(accruals) − Σ(reversals) per rep per period == the commissionable-revenue base × rule, reconcilable from the ledger.
 
 ## 13. Testing strategy
 
@@ -142,3 +159,22 @@ A fresh `codex:codex-rescue` agent attacked this plan against the **real schema/
 - **MEDIUM** — offline replay lacks durable device-counter uniqueness. → INV-P4-9 `(tenant, device, terminal, counter)` + payload hash.
 - **MEDIUM** — fiscal seam too thin; reserve columns now. → §8 `fiscal_document` table reserved nullable (the "reserve deferred fields nullable, don't ship absent" lesson).
 - **LOW** — Decision #1 effectively settled. → reframed as a lock recommendation.
+
+## 15. Readiness assessment (Task C/E — 2026-06-23)
+
+**Verdict: ✅ Phase 4 planning is COMPLETE and implementation-ready.** (Earlier verdict was B — not-ready — pending three planning artifacts; all are now closed in this pass.)
+
+Closed in this pass:
+- **Decisions** — all 7 🔒 LOCKED (§12), including the configurable rounding-policy framework (Decision #4) and the commission reversal semantics for both modes (Decision #7).
+- **Event contracts** — `event-map-phase4.md` written and **shaped for the Phase-5 GL consumer** (the top former blocker): `sale.created` (extend) + `sale.refunded`/`sale.voided`/`payment.received`/`shift.opened`/`shift.closed`, carrying COGS/tax/tender breakdowns + stable reversal IDs for idempotent, order-safe posting.
+- **Localization seam** — VAT Registration Number + TIN reserved on `organization` + `company` (§8); receipt is GRA-shaped (unique serialized number INV-P4-4 + mandatory fields).
+- **Migration strategy** — `number_block` scope change documented as expand/contract; composite-FK migration sequenced (UNIQUE targets before FKs) (§5).
+- **Cross-phase** — `cross-phase-dependencies.md` records the P2/P3→P4→P5/P6/P12 producer/consumer graph + reserved future-proofing seams.
+- **Codex** — adversarial review (§14) folded; all 3 CRITICAL + 4 HIGH addressed as design requirements.
+
+Remaining (correctly OUT of planning — for the implementation session):
+- Build commit 1 first (`mulDivRound` + rounding-policy framework + composite-FK migration + `fiscal_document` + VAT/TIN seams) — it unblocks all pricing/valuation/numbering work.
+- Every new tenant table gets fail-closed RLS + the coverage gate + write-path-invokes-service tests in the same commit.
+- The cross-phase residuals (confirm GRA rounding/fiscal specifics + COA structure with a Guyana tax expert) before LAUNCH, not before build.
+
+**This document is the approved design-of-record. Locking decisions + hardening the plan is NOT authorization to build — Phase-4 implementation is a separate session.**
