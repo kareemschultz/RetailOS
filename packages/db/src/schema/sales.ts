@@ -93,8 +93,10 @@ export const saleLine = pgTable(
     productId: uuid("product_id")
       .notNull()
       .references(() => product.id),
-    // SKU/lot identity (nullable — untracked products sell without a SKU). The
-    // composite FKs below pin them intra-tenant (H1 kill); valuation is SKU-level.
+    // SKU/lot identity. The COLUMN is nullable for legacy/VS#1 product-level rows,
+    // but the POS path REQUIRES skuId on every sale line — valuation is SKU×location,
+    // so a SKU-less sale line could not be valued (the #8 fix). The composite FKs
+    // below pin sku/lot intra-tenant (H1 kill). `lotId` nullable (lot-tracked only).
     skuId: uuid("sku_id"),
     lotId: uuid("lot_id"),
     // Legacy each-count qty (VS#1) kept; qtyBase is the base-unit-minor quantity
