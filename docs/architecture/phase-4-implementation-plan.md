@@ -8,8 +8,8 @@
 - **MEDIUM/SPECULATIVE** for anything competitive-comparison or Guyana-GRA-specific — see the ⚠️ banner.
 - **THIS PLAN ASSUMES:** (1) Phase 3 merges as-is (the location tree, transfers, bonds, and the `sale`/`number_block` seams stay); (2) money stays integer minor units + currency + scale; (3) D5 oversell policy (allow-oversell-with-flagging default, configurable hard-block) carries into POS unchanged; (4) the POS sale remains idempotent end-to-end on `(tenant_id, idempotency_key)`; (5) no UI is built in this phase — backend mutations, queue, and Tauri offline-store contract only.
 
-> ## ⚠️ LIVE RESEARCH PENDING (session limit during authoring)
-> Web research agents were blocked by an API session limit (resets 2pm America/Guyana). Per charter §40, competitor capability claims and Guyana-GRA fiscal facts were **NOT fabricated**. The **Competitive matrix (§11)** and the **Guyana fiscalization specifics (§8)** below are marked with their research agenda — **re-run that research and fill/verify before locking**. Everything else is codebase- and charter-grounded.
+> ## ✅ RESEARCH COMPLETE (2026-06-23, post-reset)
+> The competitive matrix (§11) and Guyana-GRA fiscalization specifics (§8) were researched and filled on 2026-06-23 — see `competitive/pos.md` for the sourced matrix + per-cell verification legend. **Load-bearing fact resolved (HIGH confidence, documentary):** the GRA does **not** mandate electronic fiscal devices / fiscal printers / ECRs / real-time e-invoicing — invoice requirements are content-based → **Decision #1 = ship the pluggable seam + "none" provider** (not a hard integration). Remaining caveat per charter §17: confirm with a Guyana tax expert before launch.
 
 ## 1. Scope (charter §31 Phase 4)
 
@@ -32,14 +32,15 @@ POS sale mutation, payments, receipts, shifts, offline queue, idempotency, sync 
 ## 3. Proposed build order (commits)
 
 0. Planning lock + event-map-phase4 + this plan approved (gate-only, no code).
-1. **Shift + cash management:** `shift` (open/close, opening float, blind-close counted vs expected, over/short), `cash_movement` (pay-in/pay-out/drop). X/Z report read models.
-2. **Payment/tender model:** `payment` + `tender` (cash/card/bank-transfer/mobile-money/cheque/store-credit/gift-card/mixed), split + multi-currency tender, change calc. Gift-card/store-credit as **liabilities** (recognized on redemption, not issue — charter §19).
-3. **POS sale mutation (extended):** sale/line extension, sale→stock-deduction (reuse `appendStockMovement`; D5 oversell flag), sale→payment, sale→invoice, returns/refunds/exchanges (first-class, link `originalSaleId`), held/parked sales. Idempotent end-to-end.
-4. **Commission engine:** sales-rep at checkout; flat/%/product/category/tiered; refund/void adjustment.
-5. **Document numbering reservation:** distributed/offline-safe number-block lease so two terminals never mint the same number; gap/void tracking.
-6. **Offline queue + sync ingestion:** server-side sync-batch ingestion (idempotency keys, monotonic counters, device/terminal IDs, server-authoritative time), reconnection backpressure (Redis), conflict surfacing. The client-side Tauri/Dexie store contract is defined here (no UI).
-7. **Fiscalization SEAM (interface only):** pluggable provider interface (submit/clear/sign/status/credit-note/void/logs); a no-op "none" provider for Guyana-today. **No real integration.**
-8. **RBAC + robust seed + API contracts + §45 reassessment.**
+1. **Foundation (pulled forward by Codex review):** (a) the **#6 BigInt `mulDivRound` + the single rounding policy** — a Phase-4 P0 hard blocker, because VAT 14% line tax, percentage discounts, FX tender, and commission % all divide (Codex CRITICAL-3); (b) the **composite `(tenant_id, id)` FK migration** for the legacy POS tables `sale`/`sale_line`/`invoice`/`number_block` (INV-P4-10, Codex HIGH); (c) the **`fiscal_document` schema seam** (all-nullable provider columns + nullable FK from `invoice`, INV/§8, Codex MEDIUM). All expand-only/additive. This commit unblocks every later pricing/valuation/numbering touch.
+2. **Shift + cash management:** `shift` (open/close, opening float, blind-close counted vs expected, over/short), `cash_movement` (pay-in/pay-out/drop). X/Z report read models.
+3. **Payment/tender model:** `payment` + `tender` (cash/card/bank-transfer/mobile-money/cheque/store-credit/gift-card/mixed), split + multi-currency tender, change calc. Gift-card/store-credit recorded in a **stored-value balance ledger (audited)**; GL liability posting is Phase 5 (INV-P4-5).
+4. **POS sale mutation (extended):** sale/line extension (SKU **required** on inventory-tracked lines, INV-P4-8), sale→stock-deduction **+ `applyValuation`** (reuse `appendStockMovement` AND run valuation — closes #8, INV-P4-3; D5 oversell flag), **sellable-location guard** (INV-P4-7), sale→payment, sale→invoice, returns/refunds/exchanges (first-class, link `originalSaleId`), held/parked sales. Idempotent end-to-end. Each with the write-path-invokes-service gate.
+5. **Commission engine:** sales-rep at checkout; flat/%/product/category/tiered (uses #6 from commit 1); refund/void adjustment.
+6. **Document numbering reservation:** allocator + disjoint `number_lease` with the per-scope advisory-lock protocol + state machine + gap/void tracking (§5); two terminals never mint the same number, online or offline (INV-P4-4).
+7. **Offline queue + sync ingestion:** server-side sync-batch ingestion with **`(tenant, device, terminal, counter)` uniqueness + payload hash** (INV-P4-9), monotonic counters, server-authoritative time, reconnection backpressure (Redis), conflict surfacing. The client-side Tauri/Dexie store contract is defined here (no UI).
+8. **Fiscalization SEAM:** the pluggable provider interface (submit/clear/sign/status/credit-note/void/logs) wired to the `fiscal_document` seam from commit 1; a no-op "none" provider for Guyana-today. **No real integration.**
+9. **RBAC + robust seed + API contracts + §45 reassessment.**
 
 ## 4. Offline conflict policy (charter §13/§14; reuse D5)
 
@@ -52,7 +53,15 @@ Phase 4 ships **policy 1 + 3 hooks** (Edge-Hub hard-reservation is Phase 10). Ap
 
 ## 5. Document numbering integrity (charter §17)
 
-Sequential tamper-evident numbering per company/location/fiscal-year/doc-type/series. Offline terminals **reserve number blocks** issued by cloud (or Edge Hub in Phase 10); never let two terminals mint the same number. Track gaps, voids, out-of-sequence, unused reserved, expired blocks. Credit note is a first-class fiscal document type (not a refund flag). The existing `number_block` becomes a **leasable** block: a terminal leases `[start,end]`, advances `next` locally offline, returns/reconciles on sync.
+Sequential tamper-evident numbering per company/location/fiscal-year/doc-type/series. Offline terminals **reserve number blocks** issued by cloud (or Edge Hub in Phase 10); never let two terminals mint the same number. Track gaps, voids, out-of-sequence, unused reserved, expired blocks. Credit note is a first-class fiscal document type (not a refund flag).
+
+**Lease concurrency model (must be specified, not hand-waved — Codex HIGH).** Today `number_block` is a single mutable row (`range_start/range_end/next`, no state machine, scope missing location+fiscal-year). The lease protocol:
+- **Scope first:** extend the unique key to `(tenant, company, location, fiscal_year, doc_type, series)` (INV-P4-4).
+- **Split the model:** an **allocator** (the authoritative high-water mark per scope) issues **disjoint leases** into a `number_lease` table (`scope, range_start, range_end, terminal_id, device_id, state, leased_at, expires_at`) — a terminal advances a local cursor within its lease offline.
+- **Concurrency:** allocation takes a per-scope advisory lock (or `SELECT … FOR UPDATE` on the allocator row) BEFORE computing the next range, so two terminals can **never** receive overlapping ranges (the same lock discipline as `appendStockMovement` / the transfer state machine — see the commit-3 HIGH-1 lesson). A DB constraint enforces lease ranges are disjoint per scope.
+- **State machine:** `leased → active → exhausted | expired`; an expired/partially-used lease's unused numbers are tracked (gap report), never silently reissued.
+- **Usage tracking:** per-number `used | void | unused-reserved`, feeding the §17 gap/void/out-of-sequence reports.
+- **Tests:** two concurrent terminals leasing the same scope get disjoint ranges; an expired lease's tail is reported as a gap, not reminted.
 
 ## 6. Shift & cash (charter §19)
 
@@ -62,10 +71,19 @@ Open/close shift, multi-currency cash float, **blind close** (cashier enters cou
 
 Integer minor units only (amount+currency+scale together); one rounding policy. Split-currency payments + FX at POS (realized gain/loss is a Phase-5 accounting concern; POS records the tender currency + rate). Tax-inclusive vs exclusive centrally; line-item tax; consistent rounding. **Issue #6 (BigInt `mulDivRound`) becomes load-bearing here** if POS does tax/discount division — must be resolved before POS valuation math (Phase-5 blocker pulled forward into Phase 4 if needed).
 
-## 8. Fiscalization seam (charter §17) — ⚠️ LIVE RESEARCH PENDING
+## 8. Fiscalization seam (charter §17) — ✅ RESEARCHED 2026-06-23
 
-Reserve a **pluggable fiscalization provider interface** from day one: `submit/clear`, `sign`, `statusTrack`, `creditNote`, `voidRules`, `fiscalLogs`. A "none" provider (no-op) is the Guyana-today default **IF Guyana has no mandatory electronic-fiscal-device regime** — **this is the single most important fact to verify** (it decides hard-dependency vs seam). Charter §17 already says "Confirm Guyana GRA requirements before launch; do not hardcode one country's fiscal rules."
-- **Research agenda (run after session reset):** (1) Does the Guyana Revenue Authority mandate electronic fiscal devices / e-invoicing / signed receipts? (2) Guyana VAT rate + mandatory receipt fields (TIN, VAT breakdown). (3) 2–3 regional mandatory-fiscalization models (device vs cloud-clearance vs signed-receipt) so the provider interface covers them. Mark HIGH/MEDIUM/SPECULATIVE; confirm with a Guyana tax expert before launch.
+Reserve a **pluggable fiscalization provider interface** from day one: `submit/clear`, `sign`, `statusTrack`, `creditNote`, `voidRules`, `fiscalLogs`. **A "none" provider (no-op) IS the Guyana-today default** — verified (HIGH, documentary): the GRA imposes **content-based** invoice requirements only and does **not** mandate electronic fiscal devices, fiscal printers, ECRs, real-time e-invoicing/clearance, or digital signing (see `competitive/pos.md` § fiscalization note + sources). This resolves the load-bearing seam-vs-hard-integration question in favour of the **seam**.
+
+Verified Guyana facts the receipt/numbering work must honour now:
+- **VAT 14%** standard / 0% zero-rate (VAT Act No. 10 of 2005, Cap. 81:05).
+- **Mandatory tax-invoice fields:** "Tax Invoice" header; business name, address, VAT Registration Number; description; quantity/volume; tax amount, sale cost, total-including-tax; **unique serialized invoice number** + issuance date. (This makes §17 sequential per-series numbering a real compliance requirement, not just integrity hygiene — INV-P4-4.)
+- Cash sale ≤ **G$10,000** → simplified "sales invoice" allowed in lieu of a full tax invoice (a receipt-template variant, not a code branch in the sale mutation).
+- VAT-return e-filing (GRA eServices) is a **Phase-5** accounting concern, not Phase-4 receipt-level fiscalization.
+
+The provider interface must be shaped to also cover three regional regimes so a future country plug-in fits without core rework: **fiscal-device/memory** (sealed device/printer signs each receipt), **real-time cloud clearance** (authority assigns a control number per invoice — the LatAm CFDI pattern), and **signed-receipt/periodic reporting**. The "none" provider is the absence of all three. **Caveat (charter §17):** documentary finding, not a tax-attorney opinion — confirm with a Guyana tax expert before launch and watch for GRA regime changes.
+
+**Reserve the schema seam NOW, don't just ship an interface (Codex MEDIUM + the "reserve deferred fields nullable, don't ship them absent" lesson).** An interface alone means a future GRA mandate forces a breaking migration to `sale`/`invoice`. Instead, create a **`fiscal_document` table now** with all-nullable provider fields — `provider`, `status`, `control_number`, `signature_payload`, `qr_data`, `authority_submitted_at`, `authority_response_at`, and `raw_request`/`raw_response` references — plus a **nullable FK from `invoice`**. The "none" provider simply leaves them null; a future regime populates them with **no breaking change** (exactly the present-but-null → present-with-value additive pattern proven in Phase 2). This makes Decision #1 a true seam, not a deferred schema risk.
 
 ## 9. RBAC (charter §7) — new permissions
 
@@ -75,26 +93,52 @@ Reserve a **pluggable fiscalization provider interface** from day one: `submit/c
 
 - **INV-P4-1 — idempotent sale:** a replayed offline sale (same `(tenant, idempotency_key)`) collapses to exactly one sale + one stock effect + one payment set. (Already enforced by the unique key; tested under concurrent replay.)
 - **INV-P4-2 — payment balance:** Σ tender (converted to sale currency at the recorded rate) == sale total (or change issued); over/under rejected or flagged.
-- **INV-P4-3 — stock deduction through the ledger only:** every sale line deducts via `appendStockMovement` (per-cell advisory lock); oversell emits `inventory.stock_discrepancy` (D5), never silently lost.
-- **INV-P4-4 — numbering uniqueness:** no two terminals mint the same document number, online or offline (block lease + reservation).
-- **INV-P4-5 — gift-card/store-credit are liabilities:** recognized on redemption, not issue; balance audited.
+- **INV-P4-3 — stock deduction AND valuation through the ledger:** every sale/return line deducts via `appendStockMovement` (per-cell advisory lock) **AND runs `applyValuation`** so AVCO cells / FIFO layers actually move and COGS is recorded. **This explicitly closes ticket #8** — the known #8-class gap where `pos.createSale` appends sale movements *without* calling `applyValuation` (verified: the router does not invoke it today). Sale lines gain COGS-minor fields. Oversell emits `inventory.stock_discrepancy` (D5), never silently lost. *(Codex CRITICAL-1.)*
+- **INV-P4-4 — numbering uniqueness:** no two terminals mint the same document number, online or offline (block lease + reservation). The `number_block` unique scope must be extended to include **location_id and fiscal-year** (today it is only `(tenant, company, doc_type, series)` — two locations at one company would share a range). *(Codex HIGH — verified against `numbering.ts`.)*
+- **INV-P4-5 — gift-card/store-credit value is held in a stored-value ledger (audited); GL liability posting is Phase 5.** Phase 4 records issue/redemption against a balance ledger with audit, recognizing value-movement on redemption; the double-entry **liability posting** is deferred to Phase-5 accounting (Phase 4 has no GL). Downgraded from "is a liability" to avoid asserting an invariant Phase 4 cannot enforce. *(Codex MEDIUM.)*
 - **INV-P4-6 — server-authoritative posting time:** device clock recorded but never used for the official posting timestamp.
+- **INV-P4-7 — sale only from a sellable location:** a POS sale line's location must be `is_sellable = true` and **NOT** `is_bonded`/`is_transit`/`is_quarantine` (Phase-3 flags, verified `company.ts:70-73`). Prevents selling bonded stock without a duty release, or selling in-transit/quarantined stock. Enforced at the service AND a DB-backed test. *(Codex CRITICAL-2 — new invariant.)*
+- **INV-P4-8 — SKU required on inventory-tracked lines:** `applyValuation` requires `skuId` and throws without it (verified `costing.ts:376-382`); every inventory-tracked POS line must carry a SKU, with product↔SKU↔lot tuple validation (the recurring tuple-not-just-id lesson). Product-only lines are permitted only for non-inventory items. *(Codex HIGH.)*
+- **INV-P4-9 — durable offline-mutation identity:** offline mutations carry `(device_id, terminal_id, monotonic_counter)` with a **`(tenant_id, device_id, terminal_id, counter)` uniqueness** on the sync-ingestion table + a payload hash — structural ordering/dedup beyond the business idempotency key, so out-of-order/duplicate multi-terminal delivery can't double-apply. *(Codex MEDIUM.)*
+- **INV-P4-10 — POS tables get composite `(tenant_id, id)` FKs:** migrate `sale.location_id`, `sale_line.sale_id`/`product_id`/`sku_id`, `invoice.sale_id`, and the `number_block` FKs to additive composite FKs against the Phase-3 `(tenant_id, id)` UNIQUE targets — the legacy POS tables still carry single-column FKs (verified `sales.ts`), leaving the H1 cross-tenant FK-bypass class open. Prove with a raw cross-tenant insert regression. *(Codex HIGH — the #5 composite-FK class extended to POS.)*
 - Each invariant gets a write-path-invokes-service gate (the recurring #8-class lesson) + a real-Postgres regression.
 
-## 11. Competitive matrix (§41) — ⚠️ LIVE RESEARCH PENDING
+## 11. Competitive matrix (§41) — ✅ RESEARCHED 2026-06-23 → `competitive/pos.md`
 
-The parity program requires a `| Feature | Lightspeed | Square | Shopify POS | Odoo POS | RetailOS (Supported/Planned/Not planned) |` matrix per dimension (sale/payment model, offline sync, shift/cash, numbering, commission, returns). **Authoring blocked by the session limit; do NOT fill from memory.** Research agenda to run after reset: enumerate each system's offline model, tender model, shift/Z-report, and override/permission model from official docs; classify P0/P1/P2/P3; record in `docs/architecture/competitive/pos.md`. The dimensions to compare are enumerated in §2–§9 above.
+Full sourced matrix (Lightspeed X / Square Retail / Shopify POS / Odoo POS, with per-cell verification legend) lives in `docs/architecture/competitive/pos.md`. Headline findings driving the Phase-4 design:
+
+1. **Offline is RetailOS's decisive P0 edge — the competition validates the gap.** All four are bolt-on, not offline-first: Lightspeed gates offline card on the WisePOS E **hardware**; Square enforces a **72h** upload window + per-txn cap; **Shopify POS is weakest — no offline cards, no offline refunds, frozen stock, no offline customer records**; Odoo is single-terminal browser PWA; **none** does LAN multi-terminal coordination. RetailOS's §13 three-level model leads. Phase 4 ships levels 1 + 3 hooks; LAN Edge Hub = Phase 10 (seam reserved).
+2. **Commission is attribution-plus-report everywhere, not an engine** — none ships a configurable flat/%/product/category/tiered engine with statements/payouts/clawback. RetailOS's §19 engine leads (P1 differentiator; see Decision #7).
+3. **Shift/cash/Z is table-stakes; blind close is the differentiator** — Odoo explicitly *shows* the theoretical balance (the opposite of blind close). RetailOS's §19 blind close + X/Z per terminal/shift is parity-plus.
+4. **Distributed offline number-block leasing is a genuine differentiator Guyana makes load-bearing** — no surveyed POS publicizes it; the GRA requires a **unique serialized invoice number**, so §17 numbering is both compliance and edge (INV-P4-4).
+5. **Returns + credit-note first-class, not a flag** — Shopify's offline-refund gap is the weakness; RetailOS models `saleType=return` + `originalSaleId` + first-class credit note (§17).
 
 ## 12. 🔒 DECISIONS NEEDING KAREEM (lock before Phase 4 code)
 
-1. **Guyana fiscalization (load-bearing):** confirm whether GRA mandates electronic fiscal devices / e-invoicing. If NO → ship the pluggable seam + "none" provider. If YES → the provider interface must be built against the real regime in Phase 4, not deferred. **Needs a Guyana tax-expert confirmation.**
+1. **Guyana fiscalization (load-bearing):** ✅ **RESEARCHED — GRA does NOT mandate electronic fiscal devices / e-invoicing** (HIGH, documentary; `competitive/pos.md`). Codex concurs this is effectively settled. **Recommendation: lock as "none" provider + the `fiscal_document` schema seam reserved now (all-nullable columns + nullable invoice FK) + a tax-expert launch check.** Build the §17 numbering + mandatory-field receipt now; clearance/signing stays a seam with **no breaking-migration risk** because the columns exist (nullable) from commit 1. → *Kareem to LOCK.*
 2. **Offline conflict policy default:** confirm D5 (allow-oversell-flagged) is the POS default, with hard-block configurable per location; Edge-Hub hard-reservation deferred to Phase 10.
 3. **Sale-line qty type:** keep int4 each-counts, or move to int8 base-unit minor (to support weighed goods at POS now vs later)?
-4. **#6 precision:** is the BigInt `mulDivRound` decision pulled into Phase 4 (if POS does tax/discount division) or can POS avoid division until Phase 5?
+4. **#6 precision:** ⚠️ **Codex CRITICAL — this is NOT optional for Phase 4.** VAT 14% line tax, percentage discounts, FX tender, and commission % **all divide**, and `money.ts` explicitly defers division/rounding today. **Recommendation: lock #6 (BigInt `mulDivRound` + the single rounding policy) as a Phase-4 P0, built in commit 1 before any line-pricing math.** The only sub-choice left for you: the **rounding mode** (banker's/half-even vs half-up) — which is the same mode Phase 5 will reuse, so lock it once here. → *Kareem to LOCK the rounding mode.*
 5. **Returns model:** first-class `saleType=return` + `originalSaleId` (recommended) vs a separate credit-note entity now.
 6. **Tauri offline store:** confirm SQLite (charter §4) for the desktop POS offline catalog + queue; define the sync contract in Phase 4 (no UI).
 7. **Commission timing:** accrue at sale vs at settlement; refund/void clawback policy.
 
 ## 13. Testing strategy
 
-Real-Postgres RLS coverage gate (every new tenant table); idempotent-replay concurrency test; payment-balance property test; oversell-flag test (reuse D5 harness); numbering-collision simulation (two terminals, offline blocks); blind-close over/short; offline payload upcast; reconnection-avalanche (Redis backpressure) — per charter §26 resilience tests. Each new mutation gets the write-path-invokes-service gate.
+Real-Postgres RLS coverage gate (every new tenant table); idempotent-replay concurrency test; payment-balance property test; oversell-flag test (reuse D5 harness); numbering-collision simulation (two terminals, offline blocks, **disjoint-lease assertion**); blind-close over/short; offline payload upcast; reconnection-avalanche (Redis backpressure) — per charter §26 resilience tests. Plus the Codex-driven regressions: **POS sale moves `avg_cost`/`valuation_layer` + records COGS** (#8 close, INV-P4-3); **sale rejected from bonded/transit/quarantine location** (INV-P4-7); **raw cross-tenant insert rejected** on the new composite POS FKs (INV-P4-10); **duplicate/out-of-order offline mutation deduped** (INV-P4-9). Each new mutation gets the write-path-invokes-service gate.
+
+## 14. Codex adversarial review (2026-06-23) — findings folded in
+
+A fresh `codex:codex-rescue` agent attacked this plan against the **real schema/services** before any decision was locked. It **confirmed** the §2 grounding (sale's `(tenant_id, idempotency_key)` unique key; sale_line/invoice/number_block/idempotency/outbox all exist as described; no payment/shift/tender/device tables) — so the codebase claims held. It found **3 CRITICAL + 4 HIGH + 3 MEDIUM + 1 LOW**, all folded into the invariants/build-order/decisions above and each verified against the schema by me:
+
+- **CRITICAL-1** — POS sale bypasses `applyValuation` (the known #8 class). → INV-P4-3 now requires valuation + COGS; commit-4 write-path gate.
+- **CRITICAL-2** — POS could sell bonded/transit/quarantine stock (Phase-3 flags unenforced). → new INV-P4-7 sellable-location guard. *(verified `company.ts:70-73`.)*
+- **CRITICAL-3** — `#6 mulDivRound` is a Phase-4 hard blocker (VAT/discount/FX/commission all divide), not the optional Decision #4. → reframed Decision #4; commit 1.
+- **HIGH** — legacy POS tables keep single-column FKs (H1 class open). → INV-P4-10 composite-FK migration. *(verified `sales.ts`.)*
+- **HIGH** — `number_block` scope lacks location + fiscal-year. → INV-P4-4 scope extension. *(verified `numbering.ts`: key is `(tenant, company, doc_type, series)`.)*
+- **HIGH** — number-block lease concurrency hand-waved. → §5 allocator + disjoint `number_lease` + advisory lock + state machine.
+- **HIGH** — SKU optional in plan but `applyValuation` requires it. → INV-P4-8 SKU-required + tuple validation. *(verified `costing.ts:376-382`.)*
+- **MEDIUM** — gift-card "liability" unenforceable without GL. → INV-P4-5 downgraded to stored-value ledger; GL posting Phase 5.
+- **MEDIUM** — offline replay lacks durable device-counter uniqueness. → INV-P4-9 `(tenant, device, terminal, counter)` + payload hash.
+- **MEDIUM** — fiscal seam too thin; reserve columns now. → §8 `fiscal_document` table reserved nullable (the "reserve deferred fields nullable, don't ship absent" lesson).
+- **LOW** — Decision #1 effectively settled. → reframed as a lock recommendation.

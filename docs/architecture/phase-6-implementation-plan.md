@@ -6,7 +6,7 @@
 
 - **MEDIUM** (skeleton). Grounded in **charter §18** (procurement + bonded/import requirements) and the **codebase** (verified: NO supplier/PO/GRN/vendor-bill schema exists; the Phase-3 bond receipt + customs/landed-cost **reference seams** already exist and are the natural attach points).
 - **THIS PLAN ASSUMES:** Phases 2–5 merge first; procurement receipts feed the inventory ledger via the existing `appendStockMovement` + valuation engine (a GRN receipt is a valued stock receipt, exactly like a bond receipt); landed-cost allocation posts through Phase-5 accounting.
-- **⚠️ LIVE RESEARCH PENDING** (session limit): competitive (Cin7/Fishbowl/Zoho Inventory/Odoo Purchase) + Guyana customs/import specifics NOT filled — agenda below.
+- **✅ RESEARCH COMPLETE (2026-06-23):** competitive (Cin7/Fishbowl/Zoho Inventory/inFlow/Odoo Purchase) + Guyana customs/import specifics filled in `competitive/procurement.md`. Headline: receiving is a **solved valued-receipt shape** (reuse `appendStockMovement`+`applyValuation`, unify bond+GRN — Decision #1); landed cost forces the **deferred FIFO value-only allocation** decision (Decision #2); Guyana imports = **ASYCUDA/eSAD**, customs value **CIF + duty**, **CARICOM CET 5–20%**, private bonded warehouse under suspension (validates Phase-3 bonded design).
 
 ## 1. Scope (charter §31 Phase 6 / §18)
 
@@ -46,6 +46,6 @@ Suppliers + contacts, purchase requests/orders + approvals, GRNs (goods received
 4. **Three-way-match tolerance:** auto-approve within X%, else flag for review?
 5. **#6 precision** (shared with Phase 5): the BigInt `mulDivRound` + rounding policy must land before allocation math.
 
-## 6. ⚠️ Research agenda (run after session reset)
+## 6. ✅ Research complete (2026-06-23) → `competitive/procurement.md`
 
-Competitive: Cin7, Fishbowl, Zoho Inventory, inFlow, Odoo Purchase — PO/GRN/three-way-match models, landed-cost allocation methods, import/container tracking, supplier performance; classify P0–P3 into `docs/architecture/competitive/procurement.md`. Localization: Guyana customs/import duty workflow, GRA import documentation, CARICOM trade specifics. Verify against official docs; mark HIGH/MEDIUM/SPECULATIVE.
+Competitive (Cin7/Fishbowl/Zoho Inventory/inFlow/Odoo Purchase) + Guyana customs localization filled in `docs/architecture/competitive/procurement.md` (sourced, per-cell legend). Key facts: **unify bond receipt + GRN** into one valued-receipt service (Decision #1, avoids the #8-class divergent-path risk); **landed cost = CIF (invoice+freight+insurance) + CET duty** allocated into unit cost (Decision #3 basis), conserved exactly (INV-P6-2); the **FIFO value-only allocation** Phase-2 deferred is now load-bearing (Decision #2 — `applyValuation` currently `throws`); **#6 `mulDivRound`** required (Decision #5). **Residual:** confirm exact ASYCUDA field mapping + current CET schedule with a Guyana customs broker before building import tracking (skeleton-level; deepen before Phase-6 code).

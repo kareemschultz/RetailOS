@@ -6,7 +6,7 @@
 
 - **MEDIUM** (skeleton). Grounded in the **charter §20** (authoritative in-repo accounting requirements) and the **codebase** (verified: NO accounting/journal/COA/ledger-account schema exists yet → Phase 5 builds from scratch on the existing money/outbox/RLS foundation).
 - **THIS PLAN ASSUMES:** money stays integer minor units + currency + scale; double-entry from day one; Phases 2–4 (inventory ledger, COGS-bearing valuation, POS cash) merge first and feed accounting via domain events (outbox), not direct coupling.
-- **⚠️ LIVE RESEARCH PENDING** (session limit): the competitive matrix (QuickBooks/Xero/Zoho Books/Sage) and Guyana/CARICOM tax-filing specifics are NOT filled — research agenda below; do not fabricate.
+- **✅ RESEARCH COMPLETE (2026-06-23):** competitive matrix (QuickBooks/Xero/Zoho Books/Sage) + Guyana/GRA tax-filing specifics filled in `competitive/accounting.md`. Headline: match **Xero** (not QBO) on multi-currency (P0 for §12, not an upsell); the **inventory↔GL perpetual-COGS tie via event projections** is RetailOS's structural edge; Guyana VAT = **Form G0002**, monthly, due 21st (rate 14%); corporate tax 40% commercial / 25% non-commercial.
 
 ## 1. Scope (charter §31 Phase 5 / §20)
 
@@ -46,6 +46,6 @@ Chart of accounts, general ledger, journal entries, AP, AR, invoices, supplier b
 4. **COA template:** ship a default Caribbean/GRA-friendly chart, or require tenant setup? (Needs the GRA/tax research.)
 5. **Inventory-accounting tie:** perpetual (post COGS per sale, recommended given the ledger) vs periodic.
 
-## 6. ⚠️ Research agenda (run after session reset)
+## 6. ✅ Research complete (2026-06-23) → `competitive/accounting.md`
 
-Competitive: QuickBooks Online, Xero, Zoho Books, Sage — COA structure, journal/posting model, multi-currency + FX gain/loss handling, period close, bank-rec, tax-filing exports; classify P0–P3 into `docs/architecture/competitive/accounting.md`. Localization: Guyana/GRA VAT return + corporate tax filing requirements, CARICOM multi-currency norms, any e-filing. Verify against official docs; mark HIGH/MEDIUM/SPECULATIVE; confirm tax specifics with a Guyana accountant.
+Competitive (QuickBooks Online / Xero / Zoho Books / Sage) and Guyana/GRA localization filled in `docs/architecture/competitive/accounting.md` (sourced, per-cell verification legend). Key facts feeding the decisions above: **multi-currency is P0** (match Xero, which ships it on all paid tiers; QBO paywalls it — §12); **perpetual COGS via event projections** off the existing valuation ledger is the structural edge (Decision #5 → perpetual recommended); **#6 `mulDivRound` is a hard blocker** (Decision #2); Guyana VAT **Form G0002** monthly/due-21st shapes the tax read model; a **Caribbean/GRA COA template** (Decision #4) speeds onboarding. **Residual:** confirm the GRA-preferred account structure + exact filing figures with a Guyana accountant before shipping the COA template (skeleton-level research; deepen before Phase-5 code).
