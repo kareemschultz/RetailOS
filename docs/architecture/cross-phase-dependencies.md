@@ -32,7 +32,8 @@ Each dependency: **Producer (phase/module)** → **Event** → **Consumer (phase
 | P4 POS | `sale.refunded` | P5 (proportional reversal), commission clawback, P12 | saleId, **originalSaleId**, lines[ originalSaleLineId, cogsMinor, restockLocationId ] | ordering (refund-before-sale) → P5 parks | restockLocationId (null) |
 | P4 POS | `sale.voided` | P5 (full reversal), commission clawback | saleId, **originalSaleId** | ordering/parking | — |
 | P4 POS | `payment.received` | P5 (cash/bank clearing, realized FX), P10 | paymentId, tenderId, amountMinor, fxRateToSale, settledAmountMinor | FX rate must be on the event | saleId (null for non-sale receipts) |
-| P4 POS | `shift.opened` / `shift.closed` | P5 (cash account + over/short shrinkage), P12 | shiftId, openingFloat[], countedCash[], expectedCash[], overShort[] | blind close: `expectedCash` system-computed | zReportId | — |
+| P4 POS | `shift.opened` / `shift.closed` | P5 (cash account + over/short shrinkage), P12 | shiftId, openingFloat[], countedCash[], expectedCash[], overShort[] | blind close: `expectedCash` system-computed | zReportId |
+| P4 POS | `stored_value.issued` / `stored_value.redeemed` | **P5** (gift-card/store-credit **LIABILITY** on issue, draw-down on redemption — §19), P12 | storedValueId, storedValueAccountId, movementId, kind, amountMinor+currency+scale, saleId | liability NOT revenue on issue; balance never negative | saleId/customerId (null where N/A) |
 
 ## 3. Procurement → Accounting (Phase 6 producers)
 
