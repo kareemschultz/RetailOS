@@ -95,6 +95,15 @@ Command-K / Raycast-feel — one place searches products, customers, suppliers, 
 ## Empty states
 Never "No Data" — explain what goes here, show the next step, provide a CTA.
 
+## Invisible UX (self-documenting — the user should rarely need the manual)
+The software teaches itself in context. This is what separates polished enterprise software from "developer-built" software — and it's load-bearing for RetailOS's real users (HR staff, warehouse workers, accountants, store managers) who are not power users and won't read docs.
+- **Every advanced/non-obvious field carries helper text** — a one-line "what this is / why it matters" under the field (e.g. "Costing method — how stock value is calculated when you sell; AVCO averages, FIFO uses oldest cost first"). Obvious fields (Name, Quantity) don't need it; anything a non-expert could misread does.
+- **Every validation error explains how to FIX it, not just what's wrong** — "Reorder point must be below the maximum (currently 40)" beats "Invalid value." Point at the field, give the rule and the corrective action.
+- **Every wizard step explains WHY the information is needed** — "We ask for your fiscal year so invoices number correctly for GRA filing" — rationale converts and reduces abandonment (ties to onboarding-in-context).
+- **Every complex/irreversible ERP action has contextual guidance** — bond release, valuation adjustment, void/refund, period close, stock write-off: a short inline explainer + a confirm step that states the consequence ("This posts a G$X duty to Duty Payable and cannot be undone").
+- **Teach in context, not in a manual** — tooltips, inline microcopy, and just-in-time hints at the moment of use; the goal is that a first-time HR/warehouse/accounting user completes the task **without leaving the screen to find documentation**.
+- Pairs with **role-aware progressive disclosure** (the right fields for the role) and the **5 interaction states** (so the user always knows what the system is doing). Self-documenting ≠ cluttered: guidance is quiet, contextual, and dismissible — never a wall of text on the primary path (especially not POS).
+
 ## Professionalism — never ship "vibe-coded" UI
 The tells of AI-generated, unfinished UI; avoid them so RetailOS reads as enterprise-grade:
 - **No emoji as an interface affordance.** Emojis are not icons — use Phosphor/Lucide. (Emoji are fine in user *content*, never as buttons/status/nav.)
