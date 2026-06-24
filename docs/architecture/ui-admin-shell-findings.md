@@ -1,7 +1,7 @@
 # UI Admin-Shell Findings — AdminCN (shadcn studio) evaluation
 
 - **Status:** RESEARCH / findings — **no install, no code.** Owner asked to evaluate shadcn studio's new **AdminCN** admin-dashboard template (released 2026‑06‑23) for RetailOS and write up findings. Belongs to the **design-language track** (with PR #12), NOT the Phase‑4 backend. Live-verified against the studio template page, the official docs, the shadcn registry CLI, and our own committed UI inventory (`ui-inventory/`).
-- **TL;DR:** AdminCN is an excellent **design + composition REFERENCE** (and a Figma source) whose **library choices align with ours**, but it is **NOT a drop-in** for RetailOS because of two hard mismatches — **Next.js 16 (App Router/RSC) vs our TanStack Start**, and **Radix vs our Base UI primitive** — and because it ships as a **downloadable full app, not registry blocks**. Mine it for the 9 dashboard layouts + the theme-customizer pattern; port selected pieces into `packages/ui` on Base UI + TanStack Start, re-themed to RetailOS tokens. Do not fork the Next app.
+- **TL;DR (CORRECTED 2026-06-24 after authenticated MCP/CLI verification — see §4):** The *named* AdminCN template is a Pro full-app **download** (Next.js 16) — not a single registry slug. **BUT the shadcn-studio dashboard BLOCKS that compose it ARE authenticated-registry/MCP-installable** via our `@ss-blocks` namespace + the studio MCP (EMAIL + LICENSE_KEY already wired), and — verified by viewing `@ss-blocks/application-shell-01` — the registry **serves them in our `base` style using Base UI** (`render` prop, `@/registry/base/ui/*`), **not Radix**. So the earlier "Radix-incompatible / download-only" caveat was **WRONG**. The only real gaps: blocks carry Next.js `app/page.tsx` page targets (port to TanStack Start routes) + demo content/branding (re-theme to RetailOS tokens). **Path:** pull studio dashboard blocks into `packages/ui` via the authenticated CLI/MCP (`-c packages/ui`), port the page wiring, re-theme; use the AdminCN template + Figma as the *composition* reference for which blocks to assemble per surface.
 
 ## 1. What AdminCN is (verified)
 
@@ -9,23 +9,25 @@
 - **Scope:** 9 dashboards (Sales, Finance, Logistics, Productivity, Campaign, Analytics, Payments, E‑Commerce, Orders), 6 apps (Mail, Chat, Kanban, Calendar, Contacts, Users), 50+ pages (landing, pricing, FAQ, onboarding, auth, error, empty, settings), 4 form/table layouts, 5 chart/component sets.
 - **Tech stack (verified from the template page):** **Next.js 16** App Router · **Tailwind v4** · **shadcn/ui on Radix UI** · TypeScript (strict) · **Zustand** · **TanStack Query + TanStack Table** · **React Hook Form + Zod** · **Recharts** · **Lucide** · **Sonner** · **Nuqs** (URL search params) · date‑fns + React Day Picker · ESLint/Prettier.
 - **Theme customizer:** live control of theme preset (10+), font, color mode, radius, content layout, scale, sidebar variant & mode — "all update live without rebuild."
-- **Delivery confirmed NOT a registry item:** `shadcn view @ss-blocks/{admincn,admin-dashboard,admin-cn,dashboard-admin}` all return **404** against the studio registry (even with our license). It is a repo/Figma download gated behind the **Pro Plan** — so it is a *reference to port*, never `shadcn add`.
+- **Delivery (CORRECTED):** the *named template* `admincn` is NOT a single registry slug (`shadcn view @ss-blocks/admincn` + variants 404; not in the studio MCP block metadata) — it's a Pro full-app **download** + Figma. **HOWEVER, the studio dashboard BLOCKS it is built from ARE authenticated-registry/MCP-installable** — verified: `shadcn view @ss-blocks/application-shell-01` resolves with our license and returns a `registry:block` whose content imports `@/registry/**base**/ui/*` and uses the Base UI `render` prop. So "reference to port" applies to the *cohesive app/Figma*, while the constituent *blocks* are first-class `shadcn add`-able into our Base UI project.
 
 ## 2. Fit vs the RetailOS stack
 
 | Dimension | RetailOS | AdminCN | Verdict |
 |---|---|---|---|
-| Framework | **TanStack Start** SSR (+ Tauri static, Expo) | **Next.js 16** App Router / RSC | ❌ **Hard mismatch** — app shell, routing, RSC server components, middleware, `nuqs` are Next‑coupled; not portable wholesale |
-| Primitive | **Base UI** (`components.json` `base: base`) | **Radix** | ❌ **Mismatch** — charter §5 forbids mixing Radix + Base UI variants of the same component; AdminCN components need porting to Base UI, not dropping in |
-| Delivery | own-in-repo via registry `add` | full‑app **download** (Pro) | ❌ Not `shadcn add` — port, don't install |
+| Framework (template app) | **TanStack Start** SSR (+ Tauri static, Expo) | **Next.js 16** App Router / RSC | ⚠️ The *template app* shell/routing/RSC/`nuqs` are Next‑coupled — port compositions, don't fork the app |
+| Page targets (blocks) | TanStack Start routes | studio blocks target `app/page.tsx` | ⚠️ Port each block's page wiring to a TanStack Start route (the block body is portable) |
+| Primitive | **Base UI** (`base: base`) | **studio registry serves Base UI in our `base` style** — VERIFIED: `render` prop, `@/registry/base/ui/*` | ✅ **Compatible** — the earlier "Radix" claim was WRONG; the authenticated registry adapts to our primitive |
+| Delivery (named template) | registry `add` | Pro full-app **download** + Figma | ⚠️ The *template* is a download/reference (not a single registry slug) |
+| Delivery (constituent blocks) | registry `add` | **authenticated `@ss-blocks` / studio MCP** | ✅ The blocks ARE `shadcn add`-able (verified `application-shell-01` resolves with our license) |
 | Tailwind | v4 | v4 | ✅ |
 | State / data | Zustand, TanStack Query/Table | same | ✅ |
 | Forms | TanStack Form (charter) / RHF+Zod elsewhere | RHF + Zod | ⚠️ AdminCN uses RHF; charter standard is TanStack Form — port forms, don't copy |
 | Charts | `@shadcn/chart` (Recharts) | Recharts | ✅ |
-| Icons / toast | Lucide / Sonner | Lucide / Sonner | ✅ |
-| License | studio EMAIL + LICENSE_KEY wired | **Pro Plan** template tier | ⚠️ **Verify** our entitlement covers the *template* (distinct from studio *blocks*) before download |
+| Icons / toast | Lucide / Sonner | Lucide / Sonner | ✅ (studio blocks use an `IconPlaceholder` adapting to lucide/tabler/hugeicons/phosphor) |
+| License | studio EMAIL + LICENSE_KEY wired | **Pro Plan** | ⚠️ Studio *blocks* already resolve with our key; **verify** the full *template download* tier separately |
 
-**Net:** the *library* choices align almost perfectly (Tailwind v4, Zustand, TanStack, Recharts, Lucide, Sonner) — which validates our own stack decisions. The *framework* and *primitive* do not, and the delivery is a full app, so AdminCN is a **reference/port source**, not a foundation we adopt.
+**Net (corrected):** library AND primitive align — the authenticated studio registry serves **Base UI** blocks in our style. The only real gaps are (a) Next.js `app/` page targets → port to TanStack Start routes, and (b) demo content/branding → re-theme to RetailOS tokens. The *named AdminCN template* (cohesive 9-dashboard app + theme-customizer wiring) is a download/reference; its *building-block content* is authenticated-registry-installable. So studio blocks are a **viable accelerator** for the admin/dashboard surfaces, not merely a reference.
 
 ## 3. What is genuinely valuable to take
 
@@ -34,9 +36,38 @@
 - **The 50+ page/state catalogue** — auth, onboarding, settings, error, empty states — covers many charter §5 wizards/states; good structural reference.
 - **The Figma source** — useful for the design-language track regardless of the code-stack mismatch.
 
-## 4. The decision it surfaces (flag, don't flip)
+## 4. Correction (2026-06-24) — verified via the authenticated studio MCP/CLI
 
-AdminCN being **Radix + Next‑first** is a data point that the broader shadcn *template/studio* ecosystem leans Radix/Next. Our **Base UI** choice (charter §5; primitive locked project‑wide) makes adopting these templates *more expensive* (every component ports). This is **not** a reason to flip — Base UI was chosen deliberately (consistent API, accessibility, Base UI transition hooks, RTL) and is charter‑locked — but the friction is real and worth an explicit owner decision if we expect to lean heavily on studio/Radix templates. **Recommended: keep Base UI; treat Radix templates as reference-only.** If we ever reconsider, it requires an ADR (no silent change).
+**My first pass was wrong on two points and I'm recording the correction (charter §40).** I initially concluded "AdminCN is Radix + download-only, incompatible with our Base UI" — extrapolated from (a) four *guessed* registry slugs returning 404 and (b) the marketing page's "Next.js / shadcn (Radix)" stack label. I had NOT queried the authenticated shadcn-studio MCP/CLI — exactly the lesson-#8 anti-pattern ("no searchable index ≠ broken; discover studio items via the studio MCP, not guessed `view` slugs").
+
+**What the authenticated tools actually show:**
+- `get-blocks-metadata` (studio MCP) enumerates the installable **block catalog** — `dashboard-and-application` (Application Shell ×9, Dashboard Shell ×9, Header ×6, Sidebar, Statistics ×3, Widgets, Charts ×5, Account Settings, Form Layout, Empty State, File Upload, Onboarding Feed, Multi-step Form), Datatable, eCommerce, Marketing UI. AdminCN the *named template* is NOT in it (confirming it's a separate full-app product).
+- `shadcn view @ss-blocks/application-shell-01` (with our license) **resolves** and returns a `registry:block` whose source imports `@/registry/**base**/ui/{button,sidebar,card,avatar,breadcrumb,separator}` and uses the **Base UI `render` prop** (`<SidebarMenuButton render={<a href='#' />}>`), an `IconPlaceholder` that adapts to our `lucide`, and a `target` of `app/application-shell-01/page.tsx`.
+
+**Conclusion:** the **Base-UI-vs-Radix concern does NOT apply** to the authenticated studio-blocks path — the registry serves a `base` (Base UI) variant in our project style. Studio dashboard blocks are first-class installable into `packages/ui`. The only genuine port work is the Next.js `app/` page target → a TanStack Start route, plus re-theming demo content to RetailOS tokens. (The standalone *AdminCN template repo* is still Next.js 16 — but that matters only if we forked the app, which we won't; we assemble from blocks.)
+
+## 4b. What the official AdminCN docs reveal (install, structure, data, auth, theming)
+
+Read from the AdminCN docs (`shadcnstudio.com/docs/documentation-admin/*`). The decisive insight: **AdminCN's Next-coupled layers are exactly the ones RetailOS already replaces with its own stack** — so the framework mismatch is *low-cost*, because we don't want those layers anyway.
+
+- **Install:** a **downloaded/extracted full Next.js repo** ("from the root of the extracted template folder" → `pnpm install`, Node 18.17+, env vars). Confirms: the *template* is a download, not a CLI/registry scaffold.
+- **Folder structure:** `src/app/(pages)` (admin-shell routes) · `src/app/(blank)/(auth)` (auth screens) · `src/app/api` + `src/app/server` (route handlers + **Server Actions**) · **`src/views`** (page-level UI modules for *dashboards / datatables / forms / apps* — **the portable layer**) · `src/components` (shadcn primitives + shared) · `src/store` (Zustand: calendar/chat/contact/kanban/mail/roles/users) · `src/configs` (nav/menus/theme) · `src/fake-db` (mock data) · `src/assets` (command-palette search data, SVG).
+- **Data layer:** mock `src/fake-db` served via `src/app/api` + **Next.js Server Actions** (`src/app/server`). The "use a real API" guide = delete fake-db/api/server, replace calls with your backend. **RetailOS replaces this wholesale with oRPC + TanStack Query** — Server Actions don't exist in TanStack Start, and we have our own typed API. *Not a loss — we don't want their data layer.*
+- **Auth:** ships with **Clerk** (`Providers.tsx`, `auth/` guards, `authConfig.ts`, `proxy.ts`, `(auth)` routes). **RetailOS uses Better Auth (charter §6)** — we replace all of it. *Again, not a loss.*
+- **Theming/customizer:** `src/configs/themeConfig.ts` controls font/radius/scale/content-width/sidebar-variant/color-mode/theme-preset; CSS vars in `globals.css`; presets from `utils/themePresets.ts`; **settings persist via cookies** (`settingsCookieName`); nav in `navConfig.tsx`; command palette in `assets/data/search.ts`. **This is a concrete reference architecture for our `tenant_ui_config` white-label (§11)** — config-driven font/radius/density/sidebar + a live customizer is precisely what we need (we'd persist per-tenant in `tenant_ui_config`, not a cookie).
+- **Components docs expose a `?base=radix` vs `?base=base` toggle** — corroborating that studio ships **both** Radix and Base UI variants; our `base`-configured project pulls Base UI (verified in §4).
+
+**Portable vs Next-coupled (the take-away):**
+
+| AdminCN layer | RetailOS action |
+|---|---|
+| `src/views` dashboard/datatable/form compositions | ✅ **Mine + port** (React/Tailwind, Base-UI-compatible) into `packages/ui` |
+| studio dashboard **blocks** (registry) | ✅ **Install** via authenticated `@ss-blocks`/MCP (Base UI, our style) |
+| `themeConfig.ts` + customizer + `navConfig` + command-palette `search.ts` | ✅ **Reference pattern** for `tenant_ui_config` + Cmd-K |
+| Zustand app stores (kanban/calendar/mail…) | ✅ Reference (we use Zustand) |
+| `src/app` routing / RSC / `(pages)`/`(blank)` | ❌ Replace with **TanStack Start routes** |
+| `src/app/api` + `src/app/server` Server Actions | ❌ Replace with **oRPC + TanStack Query** |
+| Clerk auth (`Providers`, guards, `authConfig`) | ❌ Replace with **Better Auth** |
 
 ## 5. AdminCN → RetailOS surface mapping
 
@@ -69,13 +100,19 @@ These are the PR #12 design-language rules; AdminCN gives the shell, not these:
 
 ## 7. Recommendation & sequencing
 
-1. **Do not adopt AdminCN as the app foundation** (Next.js 16 + Radix + full-app download). Use it as a **design/composition reference + Figma**.
-2. **Foundation stays our stack**: `@shadcn/dashboard-01` (installs in our `base-lyra` style + Base UI — verified) + shadcn studio `@ss-blocks` **Dashboard & Application** set (289 blocks, already wired + mapped) for the dense ERP surfaces, all re-themed to RetailOS tokens.
+1. **Don't fork the AdminCN *app repo*** (its Next.js 16 shell/routing/RSC is Next-coupled). **DO install the studio dashboard BLOCKS** via the authenticated `@ss-blocks` / studio MCP — they resolve in our `base`/Base UI style (verified). Use the AdminCN template + Figma as the *composition reference* for which blocks to assemble per surface.
+2. **Foundation stays our stack**: `@shadcn/dashboard-01` (installs in our `base-lyra` style + Base UI — verified) + shadcn studio `@ss-blocks` **Dashboard & Application** set (289 blocks, authenticated-installable + already mapped) for the dense ERP surfaces, all re-themed to RetailOS tokens. Port each block's Next `app/` page target to a TanStack Start route.
 3. **Layer the design-language rules** (§6) on top — these are the differentiators AdminCN lacks.
 4. **Sequencing:** design-language track, **after PR #12 merges**, on a dedicated UI branch — NOT on the Phase‑4 backend PR. When greenlit: scaffold the shell into `packages/ui` (`-c packages/ui`), port the page wiring to TanStack Start routes, mount TooltipProvider at root, then build the ~13 custom components.
 
-## 8. Open verification items
+## 8. Known facts to honor when we build (from the docs) + open items
 
-- **License tier:** confirm our shadcn studio entitlement includes the **AdminCN template download** (Pro template tier may differ from the studio *blocks* our `@ss-*` registries already serve). Treat registry tokens/keys as secrets — never commit them (charter §25; lesson #11: studio CLI errors leak `license_key` in the URL — redact in any logs/issues).
-- **Component licensing for port:** confirm porting AdminCN component *patterns* into our own Base UI implementations is within the studio license (it is copy-paste/owned source by shadcn philosophy, but verify the template's terms).
-- **Forms:** AdminCN uses RHF+Zod; our charter standard is **TanStack Form** — port forms to TanStack Form rather than copying RHF wiring.
+Confirmed from the official docs — bake these into the UI-track plan:
+- **Auth:** AdminCN ships **Clerk**; RetailOS uses **Better Auth** (§6) → replace `Providers.tsx`/`auth/`/`authConfig.ts`/`proxy.ts`; reuse only the auth *page layouts* (re-themed).
+- **Data:** AdminCN is **Next Server Actions + `fake-db`**; RetailOS uses **oRPC + TanStack Query** → replace the data layer entirely; keep the `src/views` UI shapes + the data *contracts* (field names) as a checklist.
+- **Forms:** AdminCN uses **RHF+Zod**; charter standard is **TanStack Form** → port forms, don't copy wiring.
+- **Theming:** AdminCN persists customizer settings in a **cookie** via `themeConfig.ts`; RetailOS persists per-tenant in **`tenant_ui_config`** (§11) → adopt the *config shape*, not the cookie store.
+
+Open items:
+- **License tier:** the studio *blocks* already resolve with our wired `EMAIL`+`LICENSE_KEY` (verified). **Confirm** the full **AdminCN template download** tier separately. Treat keys as secrets — never commit (charter §25; lesson #11: studio CLI errors leak `license_key` in the URL — redact in any logs/issues).
+- **Port licensing:** confirm porting AdminCN `src/views` *patterns* into our owned Base UI components is within the template license (shadcn philosophy is owned/copy-paste source, but verify the template's terms before lifting code).

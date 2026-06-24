@@ -16,7 +16,7 @@
 | `shadcnblocks.md` | Shadcnblocks.com — evaluated, **not configured** (registry live-verified; overlaps studio Pro; paid) |
 | `gaps-and-custom.md` | RetailOS-specific components no registry covers — to build custom in `packages/ui` |
 | `retailos-surface-map.md` | Recommended items per RetailOS surface (POS, warehouse, admin, accounting, exec, ecommerce, auth, MSP, marketing) |
-| `../ui-admin-shell-findings.md` | **AdminCN** (shadcn studio admin template, 2026-06-23) evaluation — reference-only (Next.js 16 + Radix ≠ our TanStack Start + Base UI); not a drop-in |
+| `../ui-admin-shell-findings.md` | **AdminCN** (shadcn studio admin template, 2026-06-23) evaluation — the *named template* is a Pro Next.js download, but its studio dashboard **blocks are authenticated-installable in our `base`/Base UI style** (verified via studio MCP/CLI); port Next page targets to TanStack Start + re-theme |
 
 ## Methodology
 
