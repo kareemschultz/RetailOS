@@ -2353,4 +2353,482 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       )
     ).rejects.toThrow();
   });
+
+  // ── Phase-4 Commit 3 — Returns / Refunds / Voids / Exchanges ────────────────
+  // The #8 write-path gate for returns: drive the ROUTER (createSale → refund/
+  // void) and assert valuation actually MOVES — the restock lands EXACTLY the
+  // value the sale removed back into the cell — not just that a service works.
+  it("refund restocks EXACTLY the value the sale removed (AVCO + FIFO, #8)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "Ret-Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Ret-Store", type: "store" },
+      admin
+    );
+    const fifoCategory = await call(
+      appRouter.catalog.categoryCreate,
+      { costingMethod: "fifo", name: "Ret-FIFO-Cat" },
+      admin
+    );
+    const avcoProduct = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "Ret-AVCO", priceMinor: 500, sku: "RET-AVCO" },
+      admin
+    );
+    const fifoProduct = await call(
+      appRouter.product.create,
+      {
+        categoryId: fifoCategory.id,
+        currency: "USD",
+        name: "Ret-FIFO",
+        priceMinor: 500,
+        sku: "RET-FIFO",
+      },
+      admin
+    );
+    const avcoSku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "RET-AVCO-EA", productId: avcoProduct.id },
+      admin
+    );
+    const fifoSku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "RET-FIFO-EA", productId: fifoProduct.id },
+      admin
+    );
+    // AVCO: 5 @ 100 = 500. FIFO: two layers 1 @ 33 + 2 @ 34 = 101 (a multi-layer
+    // odd value that forces the refund's value-EXACT remainder split).
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: avcoProduct.id,
+        qty: 5,
+        skuId: avcoSku.id,
+        unitCostMinor: 100,
+      },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: fifoProduct.id,
+        qty: 1,
+        skuId: fifoSku.id,
+        unitCostMinor: 33,
+      },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: fifoProduct.id,
+        qty: 2,
+        skuId: fifoSku.id,
+        unitCostMinor: 34,
+      },
+      admin
+    );
+    // Sell 3 of each. AVCO cogs = 300; FIFO cogs = 33 + 2·34 = 101.
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "ret-sale-1",
+        lines: [
+          { productId: avcoProduct.id, qty: 3, skuId: avcoSku.id },
+          { productId: fifoProduct.id, qty: 3, skuId: fifoSku.id },
+        ],
+        locationId: location.id,
+        tenders: [{ amountMinor: 3000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    // After the sale: AVCO qty 2 / value 200; FIFO qty 0 / value 0.
+    const avcoAfterSale = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.avgCost)
+        .where(eq(schema.avgCost.skuId, avcoSku.id))
+        .limit(1)
+    );
+    expect(avcoAfterSale.at(0)?.qtyOnHand).toBe(2);
+    expect(avcoAfterSale.at(0)?.totalValueMinor).toBe(200);
+
+    // Find the original sale lines (to reference originalSaleLineId).
+    const origLines = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.saleLine)
+        .where(eq(schema.saleLine.saleId, sale.saleId))
+    );
+    const avcoLine = origLines.find((l) => l.skuId === avcoSku.id);
+    const fifoLine = origLines.find((l) => l.skuId === fifoSku.id);
+    expect(avcoLine?.cogsMinor).toBe(300);
+    expect(fifoLine?.cogsMinor).toBe(101);
+
+    // Refund 2 of 3 on each. restockedValue = mulDivRound(cogs, 2, 3, half_even):
+    // AVCO → round(600/3)=200; FIFO → round(202/3)=67 (odd ⇒ remainder split).
+    const refund = await call(
+      appRouter.pos.refund,
+      {
+        idempotencyKey: "ret-refund-1",
+        lines: [
+          { originalSaleLineId: avcoLine?.id ?? "", qty: 2 },
+          { originalSaleLineId: fifoLine?.id ?? "", qty: 2 },
+        ],
+        originalSaleId: sale.saleId,
+        refundReason: "customer changed mind",
+        tenders: [{ amountMinor: 2000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    expect(refund.totalMinor).toBe(-2000);
+
+    // #8: valuation MOVED via the router. AVCO regains 200 (qty 2→4, value 200→400).
+    const avcoAfterRefund = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.avgCost)
+        .where(eq(schema.avgCost.skuId, avcoSku.id))
+        .limit(1)
+    );
+    expect(avcoAfterRefund.at(0)?.qtyOnHand).toBe(4);
+    expect(avcoAfterRefund.at(0)?.totalValueMinor).toBe(400);
+
+    // FIFO: the restock landed EXACTLY 67 across a 2-layer split (1@33 + 1@34),
+    // qty 0→2, value 0→67 — value-exact, anchor path exercised.
+    const fifoLayers = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.valuationLayer)
+        .where(eq(schema.valuationLayer.skuId, fifoSku.id))
+    );
+    const fifoQty = fifoLayers.reduce((s, l) => s + Number(l.qtyRemaining), 0);
+    const fifoValue = fifoLayers.reduce(
+      (s, l) => s + Number(l.qtyRemaining) * Number(l.unitCostMinor),
+      0
+    );
+    expect(fifoQty).toBe(2);
+    expect(fifoValue).toBe(67);
+
+    // The return line stamps the derived restock value (event-map HIGH-4).
+    const retLines = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.saleLine)
+        .where(eq(schema.saleLine.saleId, refund.saleId))
+    );
+    expect(retLines.find((l) => l.skuId === avcoSku.id)?.cogsMinor).toBe(200);
+    expect(retLines.find((l) => l.skuId === fifoSku.id)?.cogsMinor).toBe(67);
+    for (const l of retLines) {
+      expect(l.originalSaleLineId).toBeTruthy();
+    }
+
+    // sale.refunded event carries the locked contract shape.
+    const refundEvents = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(eq(schema.outboxEvent.type, "sale.refunded"))
+    );
+    const payload = refundEvents.at(-1)?.payload as Record<string, unknown>;
+    expect(payload).toHaveProperty("originalSaleId", sale.saleId);
+    expect(payload).toHaveProperty("exchangeGroupId", null);
+    expect(payload).toHaveProperty("commissionClawbackMinor", null);
+    expect(payload).toHaveProperty("functionalCurrency", null);
+    const evLines = payload.lines as Record<string, unknown>[];
+    expect(evLines[0]).toHaveProperty("restockedValueMinor");
+    expect(evLines[0]).toHaveProperty("originalSaleLineId");
+
+    // Over-refund the remaining 1 + 1 more (2 > 1 left) → rejected (TOCTOU guard).
+    await expect(
+      call(
+        appRouter.pos.refund,
+        {
+          idempotencyKey: "ret-overrefund",
+          lines: [{ originalSaleLineId: avcoLine?.id ?? "", qty: 2 }],
+          originalSaleId: sale.saleId,
+          tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
+  it("voids a fresh sale — full restock, status void, single winner under a race", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "Void-Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Void-Store", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "Void-P", priceMinor: 500, sku: "VOID-P" },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "VOID-EA", productId: product.id },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 5,
+        skuId: sku.id,
+        unitCostMinor: 100,
+      },
+      admin
+    );
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "void-sale-1",
+        lines: [{ productId: product.id, qty: 3, skuId: sku.id }],
+        locationId: location.id,
+        tenders: [{ amountMinor: 1500, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    // On-hand after sale: 5 − 3 = 2.
+    const onHandAfterSale = await withTenant(db, ORG, (tx) =>
+      services.stockOnHand(tx, location.id, product.id)
+    );
+    expect(onHandAfterSale).toBe(2);
+
+    // Two concurrent voids of the SAME sale — exactly ONE wins (FOR UPDATE).
+    const results = await Promise.allSettled([
+      call(
+        appRouter.pos.void,
+        { idempotencyKey: "void-1", saleId: sale.saleId, voidReason: "error" },
+        admin
+      ),
+      call(
+        appRouter.pos.void,
+        { idempotencyKey: "void-2", saleId: sale.saleId, voidReason: "error" },
+        admin
+      ),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+
+    // Restocked exactly ONCE: on-hand back to 5, not 8.
+    const onHandAfterVoid = await withTenant(db, ORG, (tx) =>
+      services.stockOnHand(tx, location.id, product.id)
+    );
+    expect(onHandAfterVoid).toBe(5);
+
+    const voided = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.sale)
+        .where(eq(schema.sale.id, sale.saleId))
+        .limit(1)
+    );
+    expect(voided.at(0)?.status).toBe("void");
+
+    const voidEvents = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(eq(schema.outboxEvent.type, "sale.voided"))
+    );
+    const vp = voidEvents.at(-1)?.payload as Record<string, unknown>;
+    expect(vp).toHaveProperty("originalSaleId", sale.saleId);
+    expect(vp).toHaveProperty("voidReason", "error");
+  });
+
+  it("exchange decomposes into a linked return + sale sharing exchangeGroupId", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "Exch-Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Exch-Store", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "Exch-P", priceMinor: 500, sku: "EXCH-P" },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "EXCH-EA", productId: product.id },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 10,
+        skuId: sku.id,
+        unitCostMinor: 100,
+      },
+      admin
+    );
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "exch-sale-1",
+        lines: [{ productId: product.id, qty: 2, skuId: sku.id }],
+        locationId: location.id,
+        tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const origLines = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.saleLine)
+        .where(eq(schema.saleLine.saleId, sale.saleId))
+    );
+    const exchange = await call(
+      appRouter.pos.exchange,
+      {
+        idempotencyKey: "exch-1",
+        newLines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+        originalSaleId: sale.saleId,
+        returnLines: [
+          { originalSaleLineId: origLines.at(0)?.id ?? "", qty: 1 },
+        ],
+        tenders: [{ amountMinor: 500, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    expect(exchange.exchangeGroupId).toBeTruthy();
+
+    // Both legs carry the SAME exchangeGroupId (event-map "Exchange flow").
+    const refundDoc = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.sale)
+        .where(eq(schema.sale.id, exchange.refund.saleId))
+        .limit(1)
+    );
+    const saleDoc = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.sale)
+        .where(eq(schema.sale.id, exchange.sale.saleId))
+        .limit(1)
+    );
+    expect(refundDoc.at(0)?.exchangeGroupId).toBe(exchange.exchangeGroupId);
+    expect(saleDoc.at(0)?.exchangeGroupId).toBe(exchange.exchangeGroupId);
+    expect(refundDoc.at(0)?.saleType).toBe("return");
+    expect(saleDoc.at(0)?.saleType).toBe("sale");
+
+    // Net stock: started 10, sold 2 (→8), returned 1 (→9), sold 1 new (→8).
+    const onHand = await withTenant(db, ORG, (tx) =>
+      services.stockOnHand(tx, location.id, product.id)
+    );
+    expect(onHand).toBe(8);
+  });
+
+  // H1 — a refund cannot reach across tenants. Tenant B owns a sale; Tenant A
+  // tries to refund it. RLS hides B's sale from A's FOR UPDATE load (NOT_FOUND),
+  // and the self-referential composite FK DB-guards originalSaleLineId too.
+  it("rejects a cross-tenant refund (H1 — original sale belongs to another tenant)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const companyB = await call(
+      appRouter.company.create,
+      { name: "H1R-CoB" },
+      adminB
+    );
+    const locationB = await call(
+      appRouter.location.create,
+      { companyId: companyB.id, name: "H1R-StoreB", type: "store" },
+      adminB
+    );
+    const productB = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "H1R-PB", priceMinor: 500, sku: "H1R-PB" },
+      adminB
+    );
+    const skuB = await call(
+      appRouter.catalog.skuCreate,
+      { code: "H1R-EAB", productId: productB.id },
+      adminB
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: locationB.id,
+        productId: productB.id,
+        qty: 5,
+        skuId: skuB.id,
+        unitCostMinor: 100,
+      },
+      adminB
+    );
+    const saleB = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "h1r-sale-b",
+        lines: [{ productId: productB.id, qty: 2, skuId: skuB.id }],
+        locationId: locationB.id,
+        tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+      },
+      adminB
+    );
+    const bLines = await withTenant(db, ORG_B, (tx) =>
+      tx
+        .select()
+        .from(schema.saleLine)
+        .where(eq(schema.saleLine.saleId, saleB.saleId))
+    );
+    // Tenant A refunds tenant B's sale → rejected.
+    await expect(
+      call(
+        appRouter.pos.refund,
+        {
+          idempotencyKey: "h1r-refund",
+          lines: [{ originalSaleLineId: bLines.at(0)?.id ?? "", qty: 1 }],
+          originalSaleId: saleB.saleId,
+          tenders: [{ amountMinor: 500, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+    // And tenant A cannot void it either.
+    await expect(
+      call(
+        appRouter.pos.void,
+        { idempotencyKey: "h1r-void", saleId: saleB.saleId },
+        admin
+      )
+    ).rejects.toThrow();
+  });
 });
