@@ -24,9 +24,10 @@ The reference screenshots use a green status accent; **RetailOS uses BLUE as its
 - **Never:** SAP GUI, legacy Dynamics, old Odoo themes, Bootstrap/AdminLTE admin templates, generic Tailwind CRUD.
 
 ## Component sourcing (the *where*; sourcing law = `frontend-strategy.md`)
-This skill governs how UI **looks**; `docs/architecture/frontend-strategy.md` governs where it **comes from** — the binding **5-layer stack**: **① AdminCN** (application shell + visual language) → **② shadcn Studio** (feature blocks **and** polished component variants) → **③ shadcn/ui** (base primitives) → **④ Magic UI** (tasteful motion, never POS) → **⑤ RetailOS custom** (ERP-specific). Two rules matter for visual quality:
-- **shadcn Studio is a *first-class* source, not a fallback.** Prefer a **Studio variant** of a primitive (button, input, select, dialog, tabs, stepper, badge, tooltip) **whenever it is more polished** than base shadcn/ui — and use Studio for **workflow blocks** (multi-step forms, wizards, dashboards, timelines, kanban, command menus, data tables) and **POS pieces where available** (checkout, cart, product grid, order summary, payment dialog, receipt). Don't hand-roll something Studio/AdminCN already provides.
-- **Every imported block becomes owned, re-themed code** (`packages/ui`), stripped of Next/auth/mock/routing assumptions and re-themed to RetailOS tokens — a Studio/AdminCN import is a *starting point*, never a finished surface, and is reviewed against THIS skill before it counts as done. Full pipeline (`import → normalize → adapt → extend`) and the per-module **UI Source Registry** live in `frontend-strategy.md`.
+This skill governs how UI **looks**; `docs/architecture/frontend-strategy.md` governs where it **comes from** — the binding **7-layer stack**: **① AdminCN** (application shell + visual language) → **② CommerceO** (retail/commerce workflows — products, orders, customers, vendors, commerce settings) → **③ shadcn Studio Blocks** (large workflows) → **④ shadcn Studio Components** (polished primitive variants — the default primitive library) → **⑤ shadcn/ui** (fallback primitives) → **⑥ Magic UI** (tasteful motion, never POS) → **⑦ RetailOS custom** (ERP-specific). Three rules matter for visual quality:
+- **shadcn Studio is a *first-class* source, not a fallback** — and it splits in two. **Studio Blocks** are whole workflows (multi-step forms, wizards, dashboards, timelines, kanban, command menus, data tables, and POS pieces — checkout, cart, product grid, order summary, payment dialog, receipt). **Studio Components** are the **default primitive library**: prefer a Studio variant of a primitive (button, input, select, dialog, tabs, stepper, badge, tooltip) **whenever it is more polished** than base shadcn/ui. Don't hand-roll something Studio/AdminCN/CommerceO already provides; the per-component preferred source is fixed in `component-preference-matrix.md`.
+- **AdminCN frames the app; CommerceO fills the commerce surfaces.** Take the shell / dashboards / RBAC / datatables from **AdminCN** and the product / order / customer / vendor / commerce-settings screens from **CommerceO** — both are Base UI (`base-vega`) Next downloads we **mine, never fork** (normalize CommerceO's remixicon → lucide/Phosphor and its `zod@4` on import).
+- **Every imported block becomes owned, re-themed code** (`packages/ui`), stripped of Next/auth/mock/routing assumptions and re-themed to RetailOS tokens — a Studio/AdminCN/CommerceO import is a *starting point*, never a finished surface, and is reviewed against THIS skill before it counts as done. Full pipeline (`import → normalize → adapt → extend`), the per-module **UI Source Registry** (`ui-source-registry.md`), and the verified ZIP facts live in `frontend-strategy.md`.
 
 ## Color
 - Primary accent: RetailOS Blue (emphasis only).
@@ -126,6 +127,17 @@ The tells of AI-generated, unfinished UI; avoid them so RetailOS reads as enterp
 ## Marketing & SaaS surfaces (Phase 8 storefront / Phase 11 billing)
 - **Landing/marketing pages build trust with real, high-quality visuals** — styled screenshots of the actual RetailOS app, not generic stock icons. Showing the product *is* the value proposition.
 - **Pricing/billing:** a clear plan hierarchy, readable prices + discounts, current-plan emphasis; Billing and Usage as distinct tabs. (These surfaces may use the fuller Magic UI motion palette — they're not the POS path.)
+
+## Core design principles (the 8)
+The durable principles every RetailOS UI surface upholds (the Golden rule below governs them all):
+1. **One design language everywhere** — users must **never** be able to identify a component's original source (AdminCN / CommerceO / Studio). Everything reads as RetailOS.
+2. **Compose, don't recreate** — prefer adapting an existing high-quality block over rebuilding equivalent UI from scratch.
+3. **Backend first, frontend second** — every UI surface must be backed by stable, approved APIs before implementation.
+4. **Contextual complexity** — advanced functionality is progressively disclosed by permission, business type, and workflow — **never** split into separate editions.
+5. **Configuration over customization** — business differences are expressed through settings, onboarding presets, feature flags, and RBAC — **not** divergent code paths (see `vertical-presets.md`).
+6. **Accessibility by default** — every imported component must preserve or improve keyboard support, screen-reader behavior, and WCAG AA contrast.
+7. **Performance as a feature** — large tables virtualize; lazy-load, optimistic updates where appropriate, and responsive skeleton/loading states.
+8. **Help users learn the system** — every complex screen carries contextual helper text, tooltips, inline examples, empty states, and guided workflows.
 
 ## Golden rule (the governor over everything, including the screenshots and these videos)
 Would a cashier understand this? Would a warehouse worker use it one-handed? Would a CFO trust this? Would a CEO get it in 5 seconds? If not — simplify. Borrowed SaaS tactics (delight, gamification, long personalized onboarding) serve this rule — they never override it, and never reach the POS/checkout path.
