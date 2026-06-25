@@ -1,21 +1,22 @@
 # RetailOS UI Source Registry (per-module — authoritative)
 
-- **Status:** GOVERNANCE — the **single authoritative per-module UI sourcing registry**. **Docs-only; no UI is built during backend phases.** This file fixes, *before* any UI session starts, **where each module's screens come from**, so a UI session **follows the registry instead of re-deciding** per screen. It is the per-module companion to `frontend-strategy.md` (the sourcing *law* + the 6-layer stack) and the `retailos-design-language` skill (the design *law*).
+- **Status:** GOVERNANCE — the **single authoritative per-module UI sourcing registry**. **Docs-only; no UI is built during backend phases.** This file fixes, *before* any UI session starts, **where each module's screens come from**, so a UI session **follows the registry instead of re-deciding** per screen. It is the per-module companion to `frontend-strategy.md` (the sourcing *law* + the 7-layer stack), `component-preference-matrix.md` (the per-component source), and the `retailos-design-language` skill (the design *law*).
 - **Authority:** this file **owns the per-module table**. `frontend-strategy.md` points here and does not duplicate it (one owner per concern — avoid drift). When a module's source changes, change it **here**.
 - **Grounded in:** read-only inspection of the **AdminCN** and **CommerceO** template ZIPs (2026-06-25) + `ui-admin-shell-findings.md` + the `ui-inventory/` catalog + `gaps-and-custom.md`. Claims about template contents are verified against the actual ZIP folder structure, not marketing copy (Principle D).
 
 ---
 
-## The 6-layer stack (recap — full detail in `frontend-strategy.md`)
+## The 7-layer stack (recap — full detail in `frontend-strategy.md`)
 
 | # | Layer | Role |
 |---|---|---|
 | ① | **AdminCN** | Application shell & visual language — sidebar, header, command palette, 9 dashboards, 11 datatable patterns, RBAC (`roles`/`permissions`/`users`), form wizards, charts/statistics/widgets, settings, theme customizer |
 | ② | **CommerceO** | Retail & commerce workflows — Products (incl. inventory section), Orders (detail/tracking), Customers (CRM-shaped), Vendors (suppliers), commerce Settings (store/checkout/payments/shipping/locations) |
-| ③ | **shadcn Studio** | First-class source for **both** workflow blocks **and** polished primitive variants (prefer a Studio variant whenever it is more polished than base shadcn/ui) |
-| ④ | **shadcn/ui** | Base primitives (Base UI) when nothing above provides a better variant |
-| ⑤ | **Magic UI** | Tasteful motion — marketing / onboarding / auth-success / KPI accents only. **Never** on the POS checkout, accounting, or high-frequency data-entry path |
-| ⑥ | **RetailOS custom** | ERP-specific surfaces no registry covers (`gaps-and-custom.md`) — owned in `packages/ui` |
+| ③ | **shadcn Studio Blocks** | Large workflows that save days — checkout, cart, product grid, dashboards, CRM pipeline, wizards, auth, POS pieces, timeline, kanban, command menu, data tables |
+| ④ | **shadcn Studio Components** | Polished primitive variants — the **default** primitive library (buttons/inputs/selects/tabs/dialogs/progress/sonner/sliders/commands/data-tables/stepper/phone-input/rating…) whenever more polished than plain shadcn/ui |
+| ⑤ | **shadcn/ui** | Fallback primitives (Base UI) when Studio has no better variant |
+| ⑥ | **Magic UI** | Tasteful motion — marketing / onboarding / auth-success / KPI accents only. **Never** on the POS checkout, accounting, or high-frequency data-entry path |
+| ⑦ | **RetailOS custom** | ERP-specific surfaces no registry covers (`gaps-and-custom.md`) — owned in `packages/ui` |
 
 > Both templates are the same vendor's stack: **Base UI** (`@base-ui/react`) **+ shadcn `base-vega` + Tailwind v4 + Next 16 / React 19**, all-mock, zero Radix, zero bundled auth — so they compose once ported. **We mine `src/views`/`src/components`; we never fork the Next app.**
 
@@ -53,6 +54,21 @@ Every screen is **composed of blocks** (build layers, not pages — see `fronten
 
 ---
 
+## Screen Composition Matrix (blocks, not pages)
+
+Every screen is **assembled from blocks**, each pulled from its source layer (build layers, not pages — `frontend-strategy.md` §7). Below is the per-screen block-by-block source sequence for the key screens — the assembly recipe a UI session follows. `→` reads "then". Layer names match the 7-layer stack.
+
+- **POS:** AdminCN (app shell) → Studio Block (product search / command) → CommerceO (product grid) → Studio Block (cart) → Studio Block (checkout) → Studio Component (tender dialog) → CommerceO + Custom (receipt preview) → **RetailOS business logic (custom)**. *Speed-first — no Magic UI.*
+- **Inventory / Products:** AdminCN (shell + logistics dashboard) → CommerceO (product list + multi-section add incl. inventory) → Studio Block (`datatable-06`, multi-step product wizard) → Custom (stock-ledger / FIFO viewer, bonded-vs-released, bin/zone scan).
+- **Warehouse:** AdminCN (shell + logistics) → Studio Block (kanban pick/pack, `datatable-03`) → Studio Component (progress, scan input) → Custom (location hierarchy Warehouse→Zone→Aisle→Rack→Bin, scanner-first tablet UI). *Speed-first — no Magic UI.*
+- **Accounting:** AdminCN (shell + finance/payments dashboards) → Studio Block (`datatable-01` transactions, `datatable-05` invoices) → Studio Component (tabs for ledgers, resizable reconciliation) → Custom (journals / GL / reconciliation, tax engine, period close — monospace, right-aligned).
+- **CRM:** AdminCN (shell + contacts) → CommerceO (customer all / overview / billing) → Studio Block (pipeline kanban, activity timeline) → Custom (credit-limit / store-credit, loyalty, segmentation).
+- **HR / Payroll:** AdminCN (shell + users app) → Studio Block (employee profile, onboarding multi-step form, timeline) → Studio Component (`datatable-04`) → Custom (payroll engine, commission engine + statements/payouts).
+- **Procurement:** AdminCN (shell) → CommerceO (vendor list / create / details) → Studio Block (PO multi-step wizard, PO kanban board) → Custom (GRN workflow, landed-cost allocator, supplier performance, OCR/AI document seam).
+- **Dashboard / Executive:** AdminCN (dashboard shell sales/finance/analytics) → Studio Block (statistics, widgets, charts) → Studio Component (number ticker) + Magic UI (KPI accents only) → Custom (correlated-insight cards, exception/KPI consolidation).
+
+---
+
 ## Reconciliation when combining AdminCN + CommerceO (verified deltas)
 
 Both ship Base UI / `base-vega` / Tailwind v4, so they compose — but normalize these on import:
@@ -74,7 +90,9 @@ Both ship Base UI / `base-vega` / Tailwind v4, so they compose — but normalize
 
 | Concern | Authoritative source |
 |---|---|
-| Sourcing law + 6-layer stack + verified ZIP facts | `frontend-strategy.md` |
+| Sourcing law + 7-layer stack + verified ZIP facts | `frontend-strategy.md` |
+| Per-component preferred source ("which button do I use?") | `component-preference-matrix.md` |
+| Vertical onboarding presets (platform-not-product) | `vertical-presets.md` |
 | Design law (color/type/spacing/states/offline/motion/a11y) | `.agents/skills/retailos-design-language/SKILL.md` |
 | AdminCN: installable vs Next-coupled, what to port | `ui-admin-shell-findings.md` |
 | Component catalog + per-surface picks | `ui-inventory/` (`INDEX.md`, `retailos-surface-map.md`) |
