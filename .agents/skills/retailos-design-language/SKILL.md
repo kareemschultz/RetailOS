@@ -23,6 +23,11 @@ The reference screenshots use a green status accent; **RetailOS uses BLUE as its
 - **Aspires to:** Linear, Stripe Dashboard, Vercel, Notion, Retool, Airtable, modern Odoo — enterprise ERP density + modern SaaS polish + calm, zero clutter.
 - **Never:** SAP GUI, legacy Dynamics, old Odoo themes, Bootstrap/AdminLTE admin templates, generic Tailwind CRUD.
 
+## Component sourcing (the *where*; sourcing law = `frontend-strategy.md`)
+This skill governs how UI **looks**; `docs/architecture/frontend-strategy.md` governs where it **comes from** — the binding **5-layer stack**: **① AdminCN** (application shell + visual language) → **② shadcn Studio** (feature blocks **and** polished component variants) → **③ shadcn/ui** (base primitives) → **④ Magic UI** (tasteful motion, never POS) → **⑤ RetailOS custom** (ERP-specific). Two rules matter for visual quality:
+- **shadcn Studio is a *first-class* source, not a fallback.** Prefer a **Studio variant** of a primitive (button, input, select, dialog, tabs, stepper, badge, tooltip) **whenever it is more polished** than base shadcn/ui — and use Studio for **workflow blocks** (multi-step forms, wizards, dashboards, timelines, kanban, command menus, data tables) and **POS pieces where available** (checkout, cart, product grid, order summary, payment dialog, receipt). Don't hand-roll something Studio/AdminCN already provides.
+- **Every imported block becomes owned, re-themed code** (`packages/ui`), stripped of Next/auth/mock/routing assumptions and re-themed to RetailOS tokens — a Studio/AdminCN import is a *starting point*, never a finished surface, and is reviewed against THIS skill before it counts as done. Full pipeline (`import → normalize → adapt → extend`) and the per-module **UI Source Registry** live in `frontend-strategy.md`.
+
 ## Color
 - Primary accent: RetailOS Blue (emphasis only).
 - Light: bg white / surface `#FAFAFA` / card white / subtle gray borders.
