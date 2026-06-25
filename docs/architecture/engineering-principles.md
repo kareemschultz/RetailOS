@@ -35,12 +35,31 @@
 
 ## E. Process (every phase / commit finishes with)
 
-17. The standing loop, non-negotiable:
-    - **Adversarial review** (fresh `codex:codex-rescue`, never a fork) for CRITICAL/HIGH — on contracts *before* building the producer, and on code per commit.
-    - **Tests** (incl. real-Postgres RLS where relevant) + the write-path-invokes-service gate.
-    - **CI green** — verified from logs, not the checkmark.
-    - **PR to master** — never push to master directly; **never merge without owner approval**; small, reviewable commits.
-    - **`lessons-learned.md` + `PROGRESS.md` updated in the same commit** as the change, so docs/state/code never drift.
+### The RetailOS Development Loop (🔒 FROZEN — proven repeatedly; do not deviate)
+
+This is the methodology, frozen by owner directive (2026-06-24) after it caught a disguised #8 valuation defect that 83 green tests missed, and again separated two real invariant bugs from a feature-boundary decision in Commit 3. **Freeze the process, not the code.** Every implementation slice runs all twelve steps, in order:
+
+```
+1.  Locked design decision        → don't build on an open business rule (defer it to the owner)
+2.  Small implementation commit    → one bounded, reviewable slice
+3.  Local gates                    → check-types · lint · mojibake
+4.  Real Postgres verification     → migrate as retailos_migrator, test as retailos_app; "N passed", zero skips
+5.  Independent Codex review       → fresh codex:codex-rescue (never a fork); adversarial, by-kind not by-count
+6.  Fix CRITICAL/HIGH only         → fold invariant bugs; surface business-rule boundaries to the owner, never guess
+7.  Re-run verification            → real Postgres again; frozen layers stay byte-identical
+8.  Codex confirm gate             → a fix pass needs its OWN gate (the fold can introduce new defects)
+9.  Open PR                        → with the summary sections below
+10. Human review                   → owner; never merge without approval
+11. Merge                          → then sync master
+12. Update PROGRESS + lessons      → in-repo state never drifts from code
+```
+
+**Every implementation PR summary carries three sections** (presentational — reinforces user value + the architecture; skip for pure-docs PRs):
+- **Customer-visible capability delivered** — demo flow + business value per role (cashier / manager / accountant).
+- **Frontend surfaces unlocked** — the UI screens this backend now makes buildable.
+- **Backend services reused** — the existing primitives this slice built on (e.g. `applyValuation`, `appendStockMovement`, Money, idempotency, audit, outbox, number-block) — proving we compose, not duplicate.
+
+17. The loop above is non-negotiable. Its load-bearing rules restated: adversarial review (fresh `codex:codex-rescue`, never a fork) on contracts *before* building the producer AND on code per commit; the write-path-invokes-service gate; **CI green verified from logs, not the checkmark**; **never push to master directly, never merge without owner approval**; `lessons-learned.md` + `PROGRESS.md` updated in the **same commit** as the change.
 18. **No architecture change without an ADR.** Surface a decision only after confirming it isn't already settled by the charter/an ADR/a locked prior decision (don't waste the owner's time on falsely-open decisions).
 
 ---
@@ -54,6 +73,8 @@ The roadmap stays phased for sequencing, but the **mental model is products**. E
 Products: **POS · Inventory · Accounting · CRM · Procurement · Warehouse · Payroll/HR · Reports · Ecommerce · Platform/MSP.**
 
 Why it matters: a phase is a *time slice*; a product is a *durable thing with an owner, invariants, events, and a surface*. Thinking in products makes the event contracts, the posting model, and (later) the UI compose naturally — each product's events feed the GL and analytics, and each product's UI is assembled from its own blocks. When UI work begins, you build **layers, not pages** (see `frontend-strategy.md`): Application Shell → Module Shell → Reusable Workflows → Blocks → Screens — so reuse is maximized and a screen is the thin top, not the unit of work.
+
+**Ship the smallest valuable thing (owner directive 2026-06-24).** The next slice is not chosen by asking *"what's next in the roadmap?"* but *"what is the smallest valuable thing we can ship?"* — and, once a pilot deployment exists, **let the first real customer drive the slice order, not the original phase sequence.** This is exactly what re-sequenced Phase 4 (Minimum Sellable POS → Returns/Refunds/Voids before shift/cash) and deferred the Exchange Settlement Engine. The architecture is strong enough that **customer value, not planning order, drives implementation** — the roadmap is a default, not a mandate; a customer need re-sequences it.
 
 ---
 
