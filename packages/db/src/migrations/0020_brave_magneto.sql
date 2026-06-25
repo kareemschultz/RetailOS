@@ -40,6 +40,12 @@ ALTER TABLE "location" ADD COLUMN "cash_drawer" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "shift_enforcement" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "blind_close" text;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "cash_drawer" text;--> statement-breakpoint
+ALTER TABLE "location" ADD CONSTRAINT "location_shift_enforcement_chk" CHECK ("location"."shift_enforcement" IN ('required','optional','disabled'));--> statement-breakpoint
+ALTER TABLE "location" ADD CONSTRAINT "location_blind_close_chk" CHECK ("location"."blind_close" IN ('on','off'));--> statement-breakpoint
+ALTER TABLE "location" ADD CONSTRAINT "location_cash_drawer_chk" CHECK ("location"."cash_drawer" IN ('on','off'));--> statement-breakpoint
+ALTER TABLE "organization" ADD CONSTRAINT "organization_shift_enforcement_chk" CHECK ("organization"."shift_enforcement" IN ('required','optional','disabled'));--> statement-breakpoint
+ALTER TABLE "organization" ADD CONSTRAINT "organization_blind_close_chk" CHECK ("organization"."blind_close" IN ('on','off'));--> statement-breakpoint
+ALTER TABLE "organization" ADD CONSTRAINT "organization_cash_drawer_chk" CHECK ("organization"."cash_drawer" IN ('on','off'));--> statement-breakpoint
 ALTER TABLE "cash_movement" ADD CONSTRAINT "cash_movement_shift_composite_fk" FOREIGN KEY ("tenant_id","shift_id") REFERENCES "public"."shift"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shift" ADD CONSTRAINT "shift_location_composite_fk" FOREIGN KEY ("tenant_id","company_id","location_id") REFERENCES "public"."location"("tenant_id","company_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shift" ADD CONSTRAINT "shift_company_fk" FOREIGN KEY ("tenant_id","company_id") REFERENCES "public"."company"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

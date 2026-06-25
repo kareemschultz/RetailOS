@@ -99,26 +99,36 @@ const EXPECTED_SIGN: Record<string, number> = {
   pay_out: -1,
 };
 
-// THE load-bearing blind-close computation (per currency):
-//   expected[c] = Σ open_float + Σ pay_in − Σ pay_out − Σ drop
-//                 + Σ cash tenders settled on sales with this shift
-// System-computed (the cashier never supplies or sees it — blind). Returns one
-// CashAmount per currency present in the drawer.
+// THE load-bearing blind-close computation, reconciled against REAL cash flow
+// (per currency AND scale — never merge different scales of one currency):
+//   expected = Σ open_float + Σ pay_in − Σ pay_out − Σ drop
+//              + Σ(cash settled on COMPLETED 'sale'-type sales this shift)   [cash IN]
+//              − Σ(cash settled on 'return'-type sales this shift)           [cash OUT]
+// A voided sale (status 'void') is EXCLUDED from cash-IN (the cash went back
+// out, netting to zero for a same-shift void). System-computed — the cashier
+// never supplies or sees it (blind). Returns one CashAmount per (currency,scale).
 export async function computeExpectedCash(
   tx: TenantTransaction,
   _ctx: ServiceContext,
   shiftId: string
 ): Promise<CashAmount[]> {
-  const byCurrency = new Map<string, { amountMinor: number; scale: number }>();
+  // Key by (currency, scale) — a USD scale-2 row and a USD scale-0 row are
+  // different denominations and must NOT be summed into one bucket (Codex HIGH).
+  const byKey = new Map<
+    string,
+    { amountMinor: number; currency: string; scale: number }
+  >();
   const add = (currency: string, scale: number, deltaMinor: number) => {
-    const prior = byCurrency.get(currency);
-    byCurrency.set(currency, {
+    const key = `${currency}:${scale}`;
+    const prior = byKey.get(key);
+    byKey.set(key, {
       amountMinor: (prior?.amountMinor ?? 0) + deltaMinor,
-      scale: prior?.scale ?? scale,
+      currency,
+      scale,
     });
   };
 
-  // Drawer movements (float + pay-ins/outs/drops), grouped by type + currency.
+  // Drawer movements (float + pay-ins/outs/drops), grouped by type + currency+scale.
   const movements = await tx
     .select({
       currency: cashMovement.currency,
@@ -132,30 +142,43 @@ export async function computeExpectedCash(
   for (const m of movements) {
     const sign = EXPECTED_SIGN[m.type] ?? 0;
     if (sign !== 0) {
+      // `pg` returns int8 SUMs as STRINGS even with mode:number columns —
+      // coerce explicitly (the Phase-2 raw-bigint lesson).
       add(m.currency, m.scale, sign * Number(m.total));
     }
   }
 
-  // Cash tenders settled on sales attached to this shift (the cash that entered
-  // the drawer from sales). settled = amount − change, so the drawer receives
-  // exactly the settled cash. RLS scopes both tables to the tenant.
-  const cashSales = await tx
+  // Cash tenders on sales attached to this shift, split by sale type + status:
+  //   completed 'sale'  → cash IN  (+settled): the cash that entered the drawer
+  //                       (settled = amount − change, so exactly what was kept).
+  //   'return'          → cash OUT (−settled): a refund handed to the customer
+  //                       from THIS drawer during the shift.
+  //   voided 'sale'     → SKIPPED: the cash went back out (net zero same-shift).
+  // RLS scopes both tables to the tenant.
+  const cashTenders = await tx
     .select({
       currency: tender.currency,
+      saleStatus: sale.status,
+      saleType: sale.saleType,
       scale: tender.scale,
       total: sql<string>`COALESCE(SUM(${tender.settledAmountMinor}), 0)`,
     })
     .from(tender)
     .innerJoin(sale, eq(sale.id, tender.saleId))
     .where(and(eq(sale.shiftId, shiftId), eq(tender.method, "cash")))
-    .groupBy(tender.currency, tender.scale);
-  for (const c of cashSales) {
-    add(c.currency, c.scale, Number(c.total));
+    .groupBy(tender.currency, tender.scale, sale.saleType, sale.status);
+  for (const c of cashTenders) {
+    if (c.saleType === "sale" && c.saleStatus === "completed") {
+      add(c.currency, c.scale, Number(c.total));
+    } else if (c.saleType === "return") {
+      add(c.currency, c.scale, -Number(c.total));
+    }
+    // voided 'sale' (status 'void') → skipped.
   }
 
-  return Array.from(byCurrency.entries()).map(([currency, v]) => ({
+  return Array.from(byKey.values()).map((v) => ({
     amountMinor: v.amountMinor,
-    currency,
+    currency: v.currency,
     scale: v.scale,
   }));
 }

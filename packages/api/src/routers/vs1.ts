@@ -2996,17 +2996,20 @@ async function runCreateSaleMsp(
     locationId: string;
     salesRepId?: string;
     shiftId?: string;
+    terminalId?: string;
     tenders: TenderInput[];
   }
 ) {
   const location = await assertSaleLocation(tx, input.locationId);
   // Resolve the shift per the configured shift_enforcement (Commit 4). Default
-  // 'optional' + no shiftId → null (unchanged MSP behaviour).
+  // 'optional' + no shiftId/terminalId → null (unchanged MSP behaviour). A
+  // provided shiftId must belong to the caller's terminal (Codex HIGH).
   const resolvedShiftId = await resolveSaleShift(
     tx,
     ctx,
     input.locationId,
-    input.shiftId
+    input.shiftId,
+    input.terminalId
   );
   const products = await tx
     .select()
@@ -3118,7 +3121,10 @@ async function runCreateSaleMsp(
         saleScale: subtotal.scale,
         settledAmountMinor: t.settledAmountMinor,
         settledFunctionalMinor: null,
-        shiftId: input.shiftId ?? null,
+        // The DB-resolved shift (what was actually written), never the raw
+        // client input — a `disabled` tenant stores null and must emit null,
+        // not a spurious/cross-tenant UUID to the P5 GL (Codex MEDIUM).
+        shiftId: resolvedShiftId,
         tenderCurrency: t.currency,
         tenderFxRateToFunctional: null,
         tenderId: tenderRow.id,
@@ -3187,7 +3193,8 @@ async function runCreateSaleMsp(
       saleType: "sale",
       salesRepId: input.salesRepId ?? null,
       scale: subtotal.scale,
-      shiftId: input.shiftId ?? null,
+      // DB-resolved shift (Codex MEDIUM) — matches the persisted sale row.
+      shiftId: resolvedShiftId,
       subtotalFunctionalMinor: null,
       subtotalMinor: subtotal.minor,
       taxBreakdown: [],
@@ -3411,6 +3418,7 @@ async function runRefund(
     lines: RefundLineInput[];
     originalSaleId: string;
     refundReason?: string;
+    terminalId?: string;
     tenders: TenderInput[];
   }
 ) {
@@ -3420,6 +3428,17 @@ async function runRefund(
       message: "Original sale not found in this tenant",
     });
   }
+  // Attach the refund to the CURRENT open shift at the caller's terminal — a
+  // cash refund pays cash OUT of THIS drawer now, so it must reduce that shift's
+  // expected cash (Codex HIGH). No terminal / no open shift → null (a refund
+  // outside a shift, e.g. back-office), unchanged for the Commit-3 tests.
+  const refundShiftId = await resolveSaleShift(
+    tx,
+    ctx,
+    original.locationId,
+    undefined,
+    input.terminalId
+  );
   if (original.saleType !== "sale") {
     throw new ORPCError("BAD_REQUEST", {
       message: "Only a sale can be refunded (not a return/exchange doc)",
@@ -3531,6 +3550,8 @@ async function runRefund(
           originalSaleId: original.id,
           saleType: "return",
           scale,
+          // The refund's cash leaves THIS shift's drawer (Codex HIGH).
+          shiftId: refundShiftId,
           status: "completed",
           subtotalMinor: -refundTotalMagnitude,
           taxMinor: 0,
@@ -3666,7 +3687,9 @@ async function runRefund(
       saleId: returnSale.id,
       saleType: "return",
       scale,
-      shiftId: original.shiftId,
+      // The shift the refund cash actually left (Codex HIGH/MEDIUM) — the
+      // current open shift, not the original sale's shift.
+      shiftId: refundShiftId,
       subtotalFunctionalMinor: null,
       subtotalMinor: refundTotalMagnitude,
       taxBreakdown: [],
@@ -3857,23 +3880,31 @@ async function allocateZReportNumber(
   return `Z-${n}`;
 }
 
-// overShort = counted − expected, per currency (union of both sides).
+// overShort = counted − expected, per (currency, scale) — never merge different
+// scales of one currency (Codex HIGH; mirrors computeExpectedCash's keying).
 function computeOverShort(
   expected: services.CashAmount[],
   counted: CashLineInput[]
 ): services.CashAmount[] {
-  const exp = new Map(expected.map((e) => [e.currency, e]));
-  const cnt = new Map(counted.map((c) => [c.currency, c]));
-  const currencies = new Set([...exp.keys(), ...cnt.keys()]);
-  return Array.from(currencies).map((currency) => {
-    const e = exp.get(currency);
-    const k = cnt.get(currency);
-    return {
-      amountMinor: (k?.amountMinor ?? 0) - (e?.amountMinor ?? 0),
-      currency,
-      scale: e?.scale ?? k?.scale ?? 2,
-    };
-  });
+  const keyOf = (r: { currency: string; scale: number }) =>
+    `${r.currency}:${r.scale}`;
+  const exp = new Map(expected.map((e) => [keyOf(e), e]));
+  const cnt = new Map(counted.map((c) => [keyOf(c), c]));
+  const out: services.CashAmount[] = [];
+  for (const key of new Set([...exp.keys(), ...cnt.keys()])) {
+    const e = exp.get(key);
+    const c = cnt.get(key);
+    const ref = e ?? c;
+    if (!ref) {
+      continue;
+    }
+    out.push({
+      amountMinor: (c?.amountMinor ?? 0) - (e?.amountMinor ?? 0),
+      currency: ref.currency,
+      scale: ref.scale,
+    });
+  }
+  return out;
 }
 
 function reservedFxTwin(rows: CashLineInput[] | services.CashAmount[]) {
@@ -3887,27 +3918,40 @@ function reservedFxTwin(rows: CashLineInput[] | services.CashAmount[]) {
   }));
 }
 
-// Resolve which shift a sale attaches to, per the configured shift_enforcement
-// (the platform seam — no business-type branch). `disabled` → always null;
-// `required` → a valid OPEN shift (at this location) is mandatory; `optional` →
-// attach the provided shift if open, else null. A provided shiftId is validated
-// under RLS (a cross-tenant id returns nothing → NOT_FOUND, the H1 read guard).
+// Resolve which shift a sale/return attaches to, per the configured
+// shift_enforcement (the platform seam — no business-type branch). `disabled` →
+// always null; `required` → a valid OPEN shift at this terminal+location is
+// mandatory; `optional` → attach if one is found, else null.
+//
+// A sale can only attach to ITS OWN terminal's open shift (the one-shift-per-
+// terminal design): a provided shiftId MUST belong to the caller's `terminalId`
+// (Codex HIGH — otherwise A could credit cash to B's drawer). When only
+// `terminalId` is given (refunds), the open shift for that terminal is
+// looked up. All reads are RLS-scoped (a cross-tenant id returns nothing → the
+// H1 read guard).
 async function resolveSaleShift(
   tx: TenantTransaction,
   ctx: RequestContext,
   locationId: string,
-  shiftId: string | undefined
+  shiftId: string | undefined,
+  terminalId: string | undefined
 ): Promise<string | null> {
   const settings = await services.resolveShiftSettings(tx, ctx, locationId);
   if (settings.shiftEnforcement === "disabled") {
     return null;
   }
   if (shiftId) {
+    if (!terminalId) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "terminalId is required to attach a sale to a shift",
+      });
+    }
     const s = (
       await tx
         .select({
           locationId: schema.shift.locationId,
           status: schema.shift.status,
+          terminalId: schema.shift.terminalId,
         })
         .from(schema.shift)
         .where(eq(schema.shift.id, shiftId))
@@ -3926,7 +3970,31 @@ async function resolveSaleShift(
         message: "Shift belongs to a different location",
       });
     }
+    if (s.terminalId !== terminalId) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Shift belongs to a different terminal",
+      });
+    }
     return shiftId;
+  }
+  // No explicit shiftId — find the open shift for the caller's terminal.
+  if (terminalId) {
+    const open = (
+      await tx
+        .select({ id: schema.shift.id })
+        .from(schema.shift)
+        .where(
+          and(
+            eq(schema.shift.terminalId, terminalId),
+            eq(schema.shift.locationId, locationId),
+            eq(schema.shift.status, "open")
+          )
+        )
+        .limit(1)
+    ).at(0);
+    if (open) {
+      return open.id;
+    }
   }
   if (settings.shiftEnforcement === "required") {
     throw new ORPCError("BAD_REQUEST", {
@@ -4048,6 +4116,7 @@ async function runCashMovement(
     reason?: string;
     scale: number;
     shiftId: string;
+    terminalId: string;
     type: "pay_in" | "pay_out" | "drop";
   }
 ) {
@@ -4056,6 +4125,13 @@ async function runCashMovement(
   if (!shiftRow) {
     throw new ORPCError("NOT_FOUND", {
       message: "Shift not found in this tenant",
+    });
+  }
+  // You can only act on a shift through ITS OWN terminal (Codex HIGH) — else a
+  // cashier could post a drop to a colleague's open drawer.
+  if (shiftRow.terminalId !== input.terminalId) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Shift belongs to a different terminal",
     });
   }
   if (shiftRow.status !== "open") {
@@ -4104,6 +4180,7 @@ async function runCloseShift(
     countedCash: CashLineInput[];
     idempotencyKey: string;
     shiftId: string;
+    terminalId: string;
   }
 ) {
   const cashier = requireActor(ctx);
@@ -4113,6 +4190,13 @@ async function runCloseShift(
   if (!shiftRow) {
     throw new ORPCError("NOT_FOUND", {
       message: "Shift not found in this tenant",
+    });
+  }
+  // A shift can only be closed through ITS OWN terminal (Codex HIGH) — else a
+  // cashier could close a colleague's drawer with an empty count.
+  if (shiftRow.terminalId !== input.terminalId) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Shift belongs to a different terminal",
     });
   }
   if (shiftRow.status !== "open") {
@@ -4280,6 +4364,9 @@ export const posRouter = {
         salesRepId: z.string().min(1).optional(),
         customerId: z.string().uuid().optional(),
         shiftId: z.string().uuid().optional(),
+        // The cashier's terminal. Required to attach a sale to a shift (so a
+        // sale can only ever credit ITS OWN terminal's open drawer — Codex HIGH).
+        terminalId: z.string().min(1).optional(),
         lines: z
           .array(
             z.object({
@@ -4329,6 +4416,9 @@ export const posRouter = {
         lines: z.array(refundLineSchema).min(1),
         originalSaleId: z.string().uuid(),
         refundReason: z.string().optional(),
+        // The cashier's terminal — the refund attaches to its open shift so the
+        // cash-out is reflected in that drawer's expected cash (Codex HIGH).
+        terminalId: z.string().min(1).optional(),
         tenders: z.array(refundTenderSchema),
       })
     )
@@ -4412,6 +4502,7 @@ export const posRouter = {
         reason: z.string().optional(),
         scale: z.number().int().min(0).default(2),
         shiftId: z.string().uuid(),
+        terminalId: z.string().min(1),
         type: z.enum(["pay_in", "pay_out", "drop"]),
       })
     )
@@ -4445,6 +4536,7 @@ export const posRouter = {
           .default([]),
         idempotencyKey: z.string().min(1),
         shiftId: z.string().uuid(),
+        terminalId: z.string().min(1),
       })
     )
     .handler(({ context, input }) => {
