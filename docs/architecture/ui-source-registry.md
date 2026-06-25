@@ -46,7 +46,7 @@ Every screen is **composed of blocks** (build layers, not pages — see `fronten
 | **HR / Payroll** | shadcn Studio (employee profile / timeline / wizard) | AdminCN (users app) · CommerceO (account layouts) | Multi-step Form (onboarding) · Timeline · `datatable-04` | **payroll engine**, **commission engine** + statements/payouts |
 | **Reports / Analytics** | AdminCN (analytics dashboards + charts) | Studio (datatables) | Charts (Recharts) · `datatable-07` (analytics) · Statistics | custom read-model views, scheduled-report builder, drilldowns |
 | **Settings** | AdminCN (account/settings layouts) | CommerceO (commerce settings: store/checkout/payments/shipping/locations) · shadcn primitives | Account Settings · Tabs · Form Layout | **tenant white-label config** (tokens / density / radius), feature-flag switches, residency/attestation |
-| **Auth / Onboarding** | shadcn Studio (auth blocks + multi-step) | AdminCN / CommerceO (auth page layouts: login/register/forgot/reset/2FA/verify-email) · Magic UI (success/delight) | Auth (2FA / Verify-Email — shadcn core lacks) · Onboarding Feed · Multi-step Form | **tenant-branded login** (hostname-resolved), device/PIN fast-switch, guided setup wizards |
+| **Auth / Onboarding** | shadcn Studio (auth blocks + multi-step) | AdminCN / CommerceO (auth page-layout **shells** — login/register/forgot/reset/2FA/verify-email; **no bundled provider**) · Magic UI (success/delight) | Auth (2FA / Verify-Email — shadcn core lacks) · Onboarding Feed · Multi-step Form | **tenant-branded login** (hostname-resolved), device/PIN fast-switch, guided setup wizards. **All session/auth wiring → Better Auth** |
 | **Platform / MSP console** | AdminCN (admin dashboards + RBAC) | Studio (datatables) | `datatable-04` (user admin) · Statistics (MRR/usage) · Switch (feature flags) | audited impersonation banner, tenant health, residency/attestation panels |
 | **Marketing / Storefront** | Magic UI (+ Magic UI Pro sections) | CommerceO (eCommerce surfaces) · Studio (eCommerce) | eCommerce (product-list / category / reviews / mega-footer) · Marketing sections | tenant-themed storefront, hostname branding |
 
@@ -65,7 +65,7 @@ Every screen is **assembled from blocks**, each pulled from its source layer (bu
 - **CRM:** AdminCN (shell + contacts) → CommerceO (customer all / overview / billing) → Studio Block (pipeline kanban, activity timeline) → Custom (credit-limit / store-credit, loyalty, segmentation).
 - **HR / Payroll:** AdminCN (shell + users app) → Studio Block (employee profile, onboarding multi-step form, timeline) → Studio Component (`datatable-04`) → Custom (payroll engine, commission engine + statements/payouts).
 - **Procurement:** AdminCN (shell) → CommerceO (vendor list / create / details) → Studio Block (PO multi-step wizard, PO kanban board) → Custom (GRN workflow, landed-cost allocator, supplier performance, OCR/AI document seam).
-- **Dashboard / Executive:** AdminCN (dashboard shell sales/finance/analytics) → Studio Block (statistics, widgets, charts) → Studio Component (number ticker) + Magic UI (KPI accents only) → Custom (correlated-insight cards, exception/KPI consolidation).
+- **Dashboard / Executive:** AdminCN (dashboard shell sales/finance/analytics) → Studio Block (statistics, widgets, charts) → Magic UI (number ticker / KPI accents only) → Custom (correlated-insight cards, exception/KPI consolidation).
 
 ---
 

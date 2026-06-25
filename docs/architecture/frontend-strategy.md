@@ -1,6 +1,6 @@
 # RetailOS Frontend Strategy (governance — official)
 
-- **Status:** GOVERNANCE — the official, binding RetailOS frontend strategy. **Docs-only; no UI is built during backend phases.** Locked into repository governance *before* Phase 4 implementation so every later UI surface is sourced and adapted the same way. Charter §5/§47; AGENTS.md §35.
+- **Status:** GOVERNANCE — the official, binding RetailOS frontend strategy. **Docs-only; no UI is built during backend phases.** Locked into repository governance *before* Phase 4 implementation so every later UI surface is sourced and adapted the same way. Charter §5/§47; `AGENTS.md` / `CLAUDE.md` frontend-governance bullet.
 - **What this doc owns:** the **sourcing & adaptation strategy** (where UI comes from, how it becomes owned RetailOS code, the preferred order, the build sequencing). It is the companion to — and does **not** duplicate — two existing artifacts, which remain authoritative for their own concern:
   - **The design *law*** lives in the **`retailos-design-language` skill** (`.agents/skills/retailos-design-language/SKILL.md`, PR #12) — color, typography, spacing, status chips, tables, offline UX, motion, accessibility, per-module device targets. **That skill governs every pixel; this doc governs every import.**
   - **The AdminCN sourcing detail** lives in **`ui-admin-shell-findings.md`** (PR #21) — what's registry-installable (Base UI, authenticated) vs Next-coupled, and what to port.
@@ -72,7 +72,7 @@ The pyramid above, made concrete. Pick the source by what's needed:
 | Commerce settings (store / checkout / payments / shipping / locations) | **CommerceO** (settings group) |
 | POS checkout / cart / product grid / order summary / payment dialog / receipt | **shadcn Studio** (eCommerce checkout/cart/product-list/order-summary blocks) + **CommerceO** (product-grid / order-items / cart patterns) — adapt to the POS path; **no Magic UI motion here** |
 | Polished primitive variants (buttons, inputs, selects, dialogs, tabs, steppers, badges, tooltips) | **shadcn Studio Components** (the default whenever more polished); **shadcn/ui** core (Base UI) as fallback |
-| Command palette (Cmd-K) | **shadcn** core (`@shadcn/command`) |
+| Command palette (Cmd-K) | **shadcn Studio Components** (~14 command variants); **shadcn/ui** core (`@shadcn/command`) as fallback |
 | Calendar | **shadcn Studio** / **shadcn** core |
 | Marketing / storefront sections | **Magic UI** (+ Magic UI Pro) |
 | Animations / motion / delight | **Magic UI** (marketing/onboarding/dashboards only — never POS) |
@@ -110,7 +110,7 @@ No imported block ships as-is. On import, each block:
 - **Is re-themed to RetailOS tokens** — blue accent + semantic palette + the 4-pt grid + radius scale; **never** ships a block's foreign colors/radii/fonts.
 - **Removes mock data** — all `fake-db` / seed / placeholder data stripped; real data via oRPC.
 - **Removes Next.js assumptions** — Server Actions, RSC, `app/` route targets, `nuqs`, middleware → ported to **TanStack Start** routes/loaders.
-- **Removes foreign auth assumptions** — Clerk (AdminCN's default) and any other → **Better Auth** (§6).
+- **Removes foreign auth assumptions** — neither template bundles an auth provider (verified: no `@clerk/*` dependency; Clerk is only AdminCN's *documented integration option*, and both ship auth screens as pure UI shells). All session/auth wiring → **Better Auth** (charter §6).
 - **Removes foreign routing assumptions** — Next App Router groups → TanStack Start file routes.
 
 ### The contract
@@ -186,7 +186,7 @@ A cashier mid-outage must know at a glance whether a sale is safe.
 
 ## 7. Future Build Strategy
 
-- **Backend phases continue first.** UI is **not** built during backend phases — no production UI until the APIs it binds are stable and approved (AGENTS.md §35).
+- **Backend phases continue first.** UI is **not** built during backend phases — no production UI until the APIs it binds are stable and approved (`AGENTS.md` / `CLAUDE.md` frontend-governance bullet).
 - **When UI work begins** (Phase 4+ surfaces, on a dedicated UI branch — never on a backend PR):
   1. **Import real blocks** from the preferred-order sources (§1) — don't recreate by hand.
   2. **Adapt them** — own in `packages/ui`, re-theme to RetailOS tokens, strip mock data + Next/auth/routing assumptions (§1).

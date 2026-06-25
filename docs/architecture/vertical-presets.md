@@ -52,7 +52,7 @@ All resolved through the **settings resolver / feature flags / RBAC** (location 
 
 | Concern | Authoritative source |
 |---|---|
-| Platform-first principle (the constitution) | `engineering-principles.md` (Group F) |
+| Platform-first principle (the constitution) | `engineering-principles.md` — platform-first principle (graduated via the process-freeze PR) |
 | Charter tenant/config/feature-flags/white-label | `retailos-master-charter.md` §8 / §10 / §11 |
 | Configuration over customization (design principle) | `.agents/skills/retailos-design-language/SKILL.md` (Core design principles) |
 | Frontend sourcing law | `frontend-strategy.md` |
