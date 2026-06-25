@@ -11,7 +11,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { actor, softDelete, tenantId, timestamps } from "./columns";
-import { REMOVAL_STRATEGIES } from "./product";
+import {
+  BLIND_CLOSE_MODES,
+  CASH_DRAWER_MODES,
+  REMOVAL_STRATEGIES,
+  SHIFT_ENFORCEMENT_MODES,
+} from "./product";
 
 // Tenant → Company → Location (charter §8). Location types cover retail stores,
 // warehouses, bonded warehouses, DCs, fulfilment centres — AND the internal
@@ -85,6 +90,16 @@ export const location = pgTable(
     // Location-level operational override (resolver §6). Removal strategy is
     // physical/operational, so it may resolve at the location level.
     removalStrategy: text("removal_strategy", { enum: REMOVAL_STRATEGIES }),
+    // Phase-4 Commit 4 — location-level cash-control toggles (resolver §6:
+    // location overrides the tenant default; NULL ⇒ resolve to tenant/platform).
+    // A multi-store chain sets these per store; a single store leaves them NULL
+    // and inherits the tenant/platform default. Same no-CHECK text-enum precedent
+    // as removalStrategy.
+    shiftEnforcement: text("shift_enforcement", {
+      enum: SHIFT_ENFORCEMENT_MODES,
+    }),
+    blindClose: text("blind_close", { enum: BLIND_CLOSE_MODES }),
+    cashDrawer: text("cash_drawer", { enum: CASH_DRAWER_MODES }),
     ...timestamps,
     ...actor,
     ...softDelete,

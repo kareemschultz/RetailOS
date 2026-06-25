@@ -41,6 +41,13 @@ export const DomainEventType = {
   // reserved for their own commits (not enumerated until something emits them).
   SaleRefunded: "sale.refunded",
   SaleVoided: "sale.voided",
+  // Phase 4 Commit 4 — configurable cash control (event-map-phase4.md). shift
+  // float issued (vault→drawer, no P&L) and the blind close (counted→vault,
+  // drawer cleared, over/short→shrinkage). Per-row functional twins reserved-
+  // null (single-currency default); P5 Accounting consumes them (posting-model
+  // §7/§8). expectedCash/overShort are system-computed (blind — never client).
+  ShiftOpened: "shift.opened",
+  ShiftClosed: "shift.closed",
 } as const;
 
 export type DomainEventType =

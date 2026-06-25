@@ -2,11 +2,14 @@ import { relations } from "drizzle-orm";
 import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import {
+  BLIND_CLOSE_MODES,
+  CASH_DRAWER_MODES,
   COSTING_METHODS,
   EXPIRY_POLICIES,
   OVERSELL_POLICIES,
   REMOVAL_STRATEGIES,
   RETURN_COSTING_POLICIES,
+  SHIFT_ENFORCEMENT_MODES,
 } from "./product";
 
 // Better Auth `organization` plugin tables (charter §6/§8). A RetailOS tenant
@@ -30,6 +33,16 @@ export const organization = pgTable("organization", {
   oversellPolicy: text("oversell_policy", { enum: OVERSELL_POLICIES }),
   expiryPolicy: text("expiry_policy", { enum: EXPIRY_POLICIES }),
   barcodeParserConfig: jsonb("barcode_parser_config"),
+  // Phase-4 Commit 4 — tenant-level cash-control toggles (resolver §6; platform
+  // default applies below these). NULL ⇒ fall through to the platform default
+  // (shift_enforcement=optional, blind_close=on, cash_drawer=on). Same text-enum
+  // (no-CHECK) precedent as costingMethod/oversellPolicy above; the resolver +
+  // Zod only ever write known values.
+  shiftEnforcement: text("shift_enforcement", {
+    enum: SHIFT_ENFORCEMENT_MODES,
+  }),
+  blindClose: text("blind_close", { enum: BLIND_CLOSE_MODES }),
+  cashDrawer: text("cash_drawer", { enum: CASH_DRAWER_MODES }),
   // Tax-identity SEAMS (charter §17 fiscal / §19 tax-invoice fields). Nullable,
   // expand-only: a tenant's VAT registration number + tax identification number
   // (TIN) for fiscal documents and tax filings (e.g. Guyana GRA tax-invoice +
