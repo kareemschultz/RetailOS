@@ -2996,10 +2996,21 @@ async function runCreateSaleMsp(
     locationId: string;
     salesRepId?: string;
     shiftId?: string;
+    terminalId?: string;
     tenders: TenderInput[];
   }
 ) {
   const location = await assertSaleLocation(tx, input.locationId);
+  // Resolve the shift per the configured shift_enforcement (Commit 4). Default
+  // 'optional' + no shiftId/terminalId → null (unchanged MSP behaviour). A
+  // provided shiftId must belong to the caller's terminal (Codex HIGH).
+  const resolvedShiftId = await resolveSaleShift(
+    tx,
+    ctx,
+    input.locationId,
+    input.shiftId,
+    input.terminalId
+  );
   const products = await tx
     .select()
     .from(schema.product)
@@ -3033,7 +3044,7 @@ async function runCreateSaleMsp(
           saleType: "sale",
           salesRepId: input.salesRepId ?? null,
           scale: subtotal.scale,
-          shiftId: input.shiftId ?? null,
+          shiftId: resolvedShiftId,
           status: "completed",
           subtotalMinor: subtotal.minor,
           taxMinor: 0,
@@ -3110,7 +3121,10 @@ async function runCreateSaleMsp(
         saleScale: subtotal.scale,
         settledAmountMinor: t.settledAmountMinor,
         settledFunctionalMinor: null,
-        shiftId: input.shiftId ?? null,
+        // The DB-resolved shift (what was actually written), never the raw
+        // client input — a `disabled` tenant stores null and must emit null,
+        // not a spurious/cross-tenant UUID to the P5 GL (Codex MEDIUM).
+        shiftId: resolvedShiftId,
         tenderCurrency: t.currency,
         tenderFxRateToFunctional: null,
         tenderId: tenderRow.id,
@@ -3179,7 +3193,8 @@ async function runCreateSaleMsp(
       saleType: "sale",
       salesRepId: input.salesRepId ?? null,
       scale: subtotal.scale,
-      shiftId: input.shiftId ?? null,
+      // DB-resolved shift (Codex MEDIUM) — matches the persisted sale row.
+      shiftId: resolvedShiftId,
       subtotalFunctionalMinor: null,
       subtotalMinor: subtotal.minor,
       taxBreakdown: [],
@@ -3403,6 +3418,7 @@ async function runRefund(
     lines: RefundLineInput[];
     originalSaleId: string;
     refundReason?: string;
+    terminalId?: string;
     tenders: TenderInput[];
   }
 ) {
@@ -3412,6 +3428,17 @@ async function runRefund(
       message: "Original sale not found in this tenant",
     });
   }
+  // Attach the refund to the CURRENT open shift at the caller's terminal — a
+  // cash refund pays cash OUT of THIS drawer now, so it must reduce that shift's
+  // expected cash (Codex HIGH). No terminal / no open shift → null (a refund
+  // outside a shift, e.g. back-office), unchanged for the Commit-3 tests.
+  const refundShiftId = await resolveSaleShift(
+    tx,
+    ctx,
+    original.locationId,
+    undefined,
+    input.terminalId
+  );
   if (original.saleType !== "sale") {
     throw new ORPCError("BAD_REQUEST", {
       message: "Only a sale can be refunded (not a return/exchange doc)",
@@ -3523,6 +3550,8 @@ async function runRefund(
           originalSaleId: original.id,
           saleType: "return",
           scale,
+          // The refund's cash leaves THIS shift's drawer (Codex HIGH).
+          shiftId: refundShiftId,
           status: "completed",
           subtotalMinor: -refundTotalMagnitude,
           taxMinor: 0,
@@ -3658,7 +3687,9 @@ async function runRefund(
       saleId: returnSale.id,
       saleType: "return",
       scale,
-      shiftId: original.shiftId,
+      // The shift the refund cash actually left (Codex HIGH/MEDIUM) — the
+      // current open shift, not the original sale's shift.
+      shiftId: refundShiftId,
       subtotalFunctionalMinor: null,
       subtotalMinor: refundTotalMagnitude,
       taxBreakdown: [],
@@ -3795,6 +3826,535 @@ const refundTenderSchema = z.object({
   method: z.enum(schema.TENDER_METHODS),
 });
 
+// ───────────────────────── Phase-4 Commit 4: configurable cash control ──────
+// Shift · Cash Drawer · Blind Close · Over/Short · X/Z. Behaviour is configured
+// via the settings resolver (resolveShiftSettings) — NO business-type branch.
+
+interface CashLineInput {
+  amountMinor: number;
+  currency: string;
+  scale: number;
+}
+
+type ShiftRow = typeof schema.shift.$inferSelect;
+
+function requireActor(ctx: RequestContext): string {
+  if (!ctx.actorUserId) {
+    throw new ORPCError("UNAUTHORIZED", { message: "No authenticated actor" });
+  }
+  return ctx.actorUserId;
+}
+
+// FOR UPDATE on the shift row BEFORE any status guard — close/movement is a
+// status-machine; the lock serializes concurrent closes (the Commit-3 race
+// lesson). RLS scopes the read to the tenant (a cross-tenant shiftId → none).
+async function loadShiftForUpdate(
+  tx: TenantTransaction,
+  shiftId: string
+): Promise<ShiftRow | undefined> {
+  return (
+    await tx
+      .select()
+      .from(schema.shift)
+      .where(eq(schema.shift.id, shiftId))
+      .for("update")
+  ).at(0);
+}
+
+// Gapless per-tenant Z-report number, serialized on the SAME advisory lock as
+// sale/return numbering (so all document numbering is gapless per tenant).
+async function allocateZReportNumber(
+  tx: TenantTransaction,
+  tenantId: string
+): Promise<string> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`docnum:${tenantId}`}, 0))`
+  );
+  const n =
+    ((
+      await tx
+        .select({ c: count() })
+        .from(schema.shift)
+        .where(eq(schema.shift.status, "closed"))
+    ).at(0)?.c ?? 0) + 1;
+  return `Z-${n}`;
+}
+
+// overShort = counted − expected, per (currency, scale) — never merge different
+// scales of one currency (Codex HIGH; mirrors computeExpectedCash's keying).
+function computeOverShort(
+  expected: services.CashAmount[],
+  counted: CashLineInput[]
+): services.CashAmount[] {
+  const keyOf = (r: { currency: string; scale: number }) =>
+    `${r.currency}:${r.scale}`;
+  const exp = new Map(expected.map((e) => [keyOf(e), e]));
+  const cnt = new Map(counted.map((c) => [keyOf(c), c]));
+  const out: services.CashAmount[] = [];
+  for (const key of new Set([...exp.keys(), ...cnt.keys()])) {
+    const e = exp.get(key);
+    const c = cnt.get(key);
+    const ref = e ?? c;
+    if (!ref) {
+      continue;
+    }
+    out.push({
+      amountMinor: (c?.amountMinor ?? 0) - (e?.amountMinor ?? 0),
+      currency: ref.currency,
+      scale: ref.scale,
+    });
+  }
+  return out;
+}
+
+function reservedFxTwin(rows: CashLineInput[] | services.CashAmount[]) {
+  return rows.map((r) => ({
+    amountMinor: r.amountMinor,
+    currency: r.currency,
+    // Functional twin reserved-null (single-currency default; P5 multi-currency).
+    fxRateToFunctional: null,
+    functionalAmountMinor: null,
+    scale: r.scale,
+  }));
+}
+
+// Resolve which shift a sale/return attaches to, per the configured
+// shift_enforcement (the platform seam — no business-type branch). `disabled` →
+// always null; `required` → a valid OPEN shift at this terminal+location is
+// mandatory; `optional` → attach if one is found, else null.
+//
+// A sale can only attach to ITS OWN terminal's open shift (the one-shift-per-
+// terminal design): a provided shiftId MUST belong to the caller's `terminalId`
+// (Codex HIGH — otherwise A could credit cash to B's drawer). When only
+// `terminalId` is given (refunds), the open shift for that terminal is
+// looked up. All reads are RLS-scoped (a cross-tenant id returns nothing → the
+// H1 read guard).
+async function resolveSaleShift(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  locationId: string,
+  shiftId: string | undefined,
+  terminalId: string | undefined
+): Promise<string | null> {
+  const settings = await services.resolveShiftSettings(tx, ctx, locationId);
+  if (settings.shiftEnforcement === "disabled") {
+    return null;
+  }
+  if (shiftId) {
+    if (!terminalId) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "terminalId is required to attach a sale to a shift",
+      });
+    }
+    const s = (
+      await tx
+        .select({
+          locationId: schema.shift.locationId,
+          status: schema.shift.status,
+          terminalId: schema.shift.terminalId,
+        })
+        .from(schema.shift)
+        .where(eq(schema.shift.id, shiftId))
+        .limit(1)
+    ).at(0);
+    if (!s) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "Shift not found in this tenant",
+      });
+    }
+    if (s.status !== "open") {
+      throw new ORPCError("BAD_REQUEST", { message: "Shift is closed" });
+    }
+    if (s.locationId !== locationId) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Shift belongs to a different location",
+      });
+    }
+    if (s.terminalId !== terminalId) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Shift belongs to a different terminal",
+      });
+    }
+    return shiftId;
+  }
+  // No explicit shiftId — find the open shift for the caller's terminal.
+  if (terminalId) {
+    const open = (
+      await tx
+        .select({ id: schema.shift.id })
+        .from(schema.shift)
+        .where(
+          and(
+            eq(schema.shift.terminalId, terminalId),
+            eq(schema.shift.locationId, locationId),
+            eq(schema.shift.status, "open")
+          )
+        )
+        .limit(1)
+    ).at(0);
+    if (open) {
+      return open.id;
+    }
+  }
+  if (settings.shiftEnforcement === "required") {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "An open shift is required for this sale (shift_enforcement=required)",
+    });
+  }
+  return null;
+}
+
+async function runOpenShift(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: {
+    idempotencyKey: string;
+    locationId: string;
+    openingFloat: CashLineInput[];
+    terminalId: string;
+  }
+) {
+  const cashier = requireActor(ctx);
+  const loc = await assertSaleLocation(tx, input.locationId);
+  const settings = await services.resolveShiftSettings(
+    tx,
+    ctx,
+    input.locationId
+  );
+  if (settings.shiftEnforcement === "disabled") {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "Shifts are disabled for this location (shift_enforcement=disabled)",
+    });
+  }
+  if (settings.cashDrawer === "off" && input.openingFloat.length > 0) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Cash drawer is disabled (cash_drawer=off) — no opening float",
+    });
+  }
+  // One open shift per terminal (the partial unique index is the DB backstop).
+  const existingOpen = (
+    await tx
+      .select({ id: schema.shift.id })
+      .from(schema.shift)
+      .where(
+        and(
+          eq(schema.shift.terminalId, input.terminalId),
+          eq(schema.shift.status, "open")
+        )
+      )
+      .limit(1)
+  ).at(0);
+  if (existingOpen) {
+    throw new ORPCError("CONFLICT", {
+      message: "An open shift already exists for this terminal",
+    });
+  }
+  const shiftRow = firstOrThrow(
+    (
+      await tx
+        .insert(schema.shift)
+        .values({
+          cashierUserId: cashier,
+          companyId: loc.companyId,
+          createdBy: cashier,
+          locationId: input.locationId,
+          status: "open",
+          tenantId: ctx.tenantId,
+          terminalId: input.terminalId,
+        })
+        .returning()
+    ).at(0)
+  );
+  for (const f of input.openingFloat) {
+    await tx.insert(schema.cashMovement).values({
+      amountMinor: f.amountMinor,
+      createdBy: cashier,
+      currency: f.currency,
+      scale: f.scale,
+      shiftId: shiftRow.id,
+      tenantId: ctx.tenantId,
+      type: "open_float",
+    });
+  }
+  await services.recordAudit(tx, ctx, {
+    action: "pos.open_shift",
+    after: shiftRow,
+    entityId: shiftRow.id,
+    entityType: "shift",
+  });
+  await services.emitEvent(tx, ctx, {
+    payload: {
+      cashierUserId: cashier,
+      companyId: loc.companyId,
+      functionalCurrency: null,
+      functionalScale: null,
+      locationId: input.locationId,
+      openedAt: shiftRow.openedAt.toISOString(),
+      openedBy: cashier,
+      openingFloat: reservedFxTwin(input.openingFloat),
+      shiftId: shiftRow.id,
+      terminalId: input.terminalId,
+    },
+    type: services.DomainEventType.ShiftOpened,
+  });
+  return {
+    shiftId: shiftRow.id,
+    status: shiftRow.status,
+    terminalId: input.terminalId,
+  };
+}
+
+async function runCashMovement(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: {
+    amountMinor: number;
+    currency: string;
+    idempotencyKey: string;
+    reason?: string;
+    scale: number;
+    shiftId: string;
+    terminalId: string;
+    type: "pay_in" | "pay_out" | "drop";
+  }
+) {
+  const cashier = requireActor(ctx);
+  const shiftRow = await loadShiftForUpdate(tx, input.shiftId);
+  if (!shiftRow) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Shift not found in this tenant",
+    });
+  }
+  // You can only act on a shift through ITS OWN terminal (Codex HIGH) — else a
+  // cashier could post a drop to a colleague's open drawer.
+  if (shiftRow.terminalId !== input.terminalId) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Shift belongs to a different terminal",
+    });
+  }
+  if (shiftRow.status !== "open") {
+    throw new ORPCError("CONFLICT", { message: "Shift is already closed" });
+  }
+  const settings = await services.resolveShiftSettings(
+    tx,
+    ctx,
+    shiftRow.locationId
+  );
+  if (settings.cashDrawer === "off") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Cash drawer is disabled (cash_drawer=off)",
+    });
+  }
+  const movement = firstOrThrow(
+    (
+      await tx
+        .insert(schema.cashMovement)
+        .values({
+          amountMinor: input.amountMinor,
+          createdBy: cashier,
+          currency: input.currency,
+          reason: input.reason ?? null,
+          scale: input.scale,
+          shiftId: shiftRow.id,
+          tenantId: ctx.tenantId,
+          type: input.type,
+        })
+        .returning()
+    ).at(0)
+  );
+  await services.recordAudit(tx, ctx, {
+    action: "pos.cash_movement",
+    after: movement,
+    entityId: movement.id,
+    entityType: "cash_movement",
+  });
+  return { cashMovementId: movement.id, shiftId: shiftRow.id };
+}
+
+async function runCloseShift(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: {
+    countedCash: CashLineInput[];
+    idempotencyKey: string;
+    shiftId: string;
+    terminalId: string;
+  }
+) {
+  const cashier = requireActor(ctx);
+  // FOR UPDATE before the status guard — a second concurrent close re-reads
+  // 'closed' and fails here (exactly one winner).
+  const shiftRow = await loadShiftForUpdate(tx, input.shiftId);
+  if (!shiftRow) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Shift not found in this tenant",
+    });
+  }
+  // A shift can only be closed through ITS OWN terminal (Codex HIGH) — else a
+  // cashier could close a colleague's drawer with an empty count.
+  if (shiftRow.terminalId !== input.terminalId) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Shift belongs to a different terminal",
+    });
+  }
+  if (shiftRow.status !== "open") {
+    throw new ORPCError("CONFLICT", { message: "Shift is already closed" });
+  }
+  const settings = await services.resolveShiftSettings(
+    tx,
+    ctx,
+    shiftRow.locationId
+  );
+  // BLIND: the system computes expected (the input carries only counted).
+  const expectedCash = await services.computeExpectedCash(tx, ctx, shiftRow.id);
+  const overShort = computeOverShort(expectedCash, input.countedCash);
+  for (const c of input.countedCash) {
+    await tx.insert(schema.cashMovement).values({
+      amountMinor: c.amountMinor,
+      createdBy: cashier,
+      currency: c.currency,
+      scale: c.scale,
+      shiftId: shiftRow.id,
+      tenantId: ctx.tenantId,
+      type: "close_count",
+    });
+  }
+  const zReportNumber = await allocateZReportNumber(tx, ctx.tenantId);
+  const closed = firstOrThrow(
+    (
+      await tx
+        .update(schema.shift)
+        .set({
+          closedAt: new Date(),
+          status: "closed",
+          updatedBy: cashier,
+          zReportNumber,
+        })
+        .where(eq(schema.shift.id, shiftRow.id))
+        .returning()
+    ).at(0)
+  );
+  const movements = await tx
+    .select()
+    .from(schema.cashMovement)
+    .where(eq(schema.cashMovement.shiftId, shiftRow.id));
+  await services.recordAudit(tx, ctx, {
+    action: "pos.close_shift",
+    after: { expectedCash, overShort, shift: closed },
+    before: shiftRow,
+    entityId: shiftRow.id,
+    entityType: "shift",
+  });
+  await services.emitEvent(tx, ctx, {
+    payload: {
+      cashMovements: movements.map((m) => ({
+        amountMinor: m.amountMinor,
+        currency: m.currency,
+        fxRateToFunctional: null,
+        functionalAmountMinor: null,
+        scale: m.scale,
+        type: m.type,
+      })),
+      cashierUserId: closed.cashierUserId,
+      closedAt: (closed.closedAt ?? new Date()).toISOString(),
+      closedBy: cashier,
+      companyId: closed.companyId,
+      countedCash: reservedFxTwin(input.countedCash),
+      expectedCash: reservedFxTwin(expectedCash),
+      functionalCurrency: null,
+      functionalScale: null,
+      locationId: closed.locationId,
+      overShort: reservedFxTwin(overShort),
+      shiftId: closed.id,
+      terminalId: closed.terminalId,
+      zReportId: zReportNumber,
+    },
+    type: services.DomainEventType.ShiftClosed,
+  });
+  return {
+    blindClose: settings.blindClose,
+    expectedCash,
+    overShort,
+    shiftId: closed.id,
+    status: closed.status,
+    zReportNumber,
+  };
+}
+
+async function loadShiftReadable(tx: TenantTransaction, shiftId: string) {
+  const shiftRow = (
+    await tx
+      .select()
+      .from(schema.shift)
+      .where(eq(schema.shift.id, shiftId))
+      .limit(1)
+  ).at(0);
+  if (!shiftRow) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Shift not found in this tenant",
+    });
+  }
+  return shiftRow;
+}
+
+async function runXReport(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  shiftId: string
+) {
+  const shiftRow = await loadShiftReadable(tx, shiftId);
+  const expectedCash = await services.computeExpectedCash(tx, ctx, shiftId);
+  const movements = await tx
+    .select()
+    .from(schema.cashMovement)
+    .where(eq(schema.cashMovement.shiftId, shiftId));
+  return {
+    cashMovements: movements,
+    expectedCash,
+    openedAt: shiftRow.openedAt.toISOString(),
+    shiftId,
+    status: shiftRow.status,
+    terminalId: shiftRow.terminalId,
+  };
+}
+
+async function runZReport(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  shiftId: string
+) {
+  const shiftRow = await loadShiftReadable(tx, shiftId);
+  if (shiftRow.status !== "closed") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Shift is not closed — no Z report yet (use xReport)",
+    });
+  }
+  const expectedCash = await services.computeExpectedCash(tx, ctx, shiftId);
+  const countedRows = await tx
+    .select({
+      amountMinor: schema.cashMovement.amountMinor,
+      currency: schema.cashMovement.currency,
+      scale: schema.cashMovement.scale,
+    })
+    .from(schema.cashMovement)
+    .where(
+      and(
+        eq(schema.cashMovement.shiftId, shiftId),
+        eq(schema.cashMovement.type, "close_count")
+      )
+    );
+  const overShort = computeOverShort(expectedCash, countedRows);
+  return {
+    countedCash: countedRows,
+    expectedCash,
+    overShort,
+    shiftId,
+    zReportNumber: shiftRow.zReportNumber,
+  };
+}
+
 export const posRouter = {
   createSale: tenantProcedure
     .input(
@@ -3804,6 +4364,9 @@ export const posRouter = {
         salesRepId: z.string().min(1).optional(),
         customerId: z.string().uuid().optional(),
         shiftId: z.string().uuid().optional(),
+        // The cashier's terminal. Required to attach a sale to a shift (so a
+        // sale can only ever credit ITS OWN terminal's open drawer — Codex HIGH).
+        terminalId: z.string().min(1).optional(),
         lines: z
           .array(
             z.object({
@@ -3853,6 +4416,9 @@ export const posRouter = {
         lines: z.array(refundLineSchema).min(1),
         originalSaleId: z.string().uuid(),
         refundReason: z.string().optional(),
+        // The cashier's terminal — the refund attaches to its open shift so the
+        // cash-out is reflected in that drawer's expected cash (Codex HIGH).
+        terminalId: z.string().min(1).optional(),
         tenders: z.array(refundTenderSchema),
       })
     )
@@ -3891,6 +4457,121 @@ export const posRouter = {
           input,
           () => runVoid(tx, ctx, input)
         );
+      });
+    }),
+
+  // Cash control (Commit 4). Open a drawer session at a terminal with a float.
+  openShift: tenantProcedure
+    .input(
+      z.object({
+        idempotencyKey: z.string().min(1),
+        locationId: z.string().uuid(),
+        openingFloat: z
+          .array(
+            z.object({
+              amountMinor: z.number().int().min(0),
+              currency: z.string().length(3),
+              scale: z.number().int().min(0).default(2),
+            })
+          )
+          .default([]),
+        terminalId: z.string().min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.open_shift");
+        return services.runIdempotent(
+          tx,
+          ctx,
+          input.idempotencyKey,
+          input,
+          () => runOpenShift(tx, ctx, input)
+        );
+      });
+    }),
+
+  // Pay-in / pay-out / drop during a shift (gated by cash_drawer=on).
+  cashMovement: tenantProcedure
+    .input(
+      z.object({
+        amountMinor: z.number().int().min(0),
+        currency: z.string().length(3),
+        idempotencyKey: z.string().min(1),
+        reason: z.string().optional(),
+        scale: z.number().int().min(0).default(2),
+        shiftId: z.string().uuid(),
+        terminalId: z.string().min(1),
+        type: z.enum(["pay_in", "pay_out", "drop"]),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.cash_movement");
+        return services.runIdempotent(
+          tx,
+          ctx,
+          input.idempotencyKey,
+          input,
+          () => runCashMovement(tx, ctx, input)
+        );
+      });
+    }),
+
+  // BLIND close — the input carries ONLY countedCash; the system computes
+  // expected + over/short (the cashier never supplies or sees expected).
+  closeShift: tenantProcedure
+    .input(
+      z.object({
+        countedCash: z
+          .array(
+            z.object({
+              amountMinor: z.number().int().min(0),
+              currency: z.string().length(3),
+              scale: z.number().int().min(0).default(2),
+            })
+          )
+          .default([]),
+        idempotencyKey: z.string().min(1),
+        shiftId: z.string().uuid(),
+        terminalId: z.string().min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.close_shift");
+        return services.runIdempotent(
+          tx,
+          ctx,
+          input.idempotencyKey,
+          input,
+          () => runCloseShift(tx, ctx, input)
+        );
+      });
+    }),
+
+  // Mid-shift X-report snapshot (read-only; does NOT close).
+  xReport: tenantProcedure
+    .input(z.object({ shiftId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        return runXReport(tx, ctx, input.shiftId);
+      });
+    }),
+
+  // Z-report — final settlement of a closed shift (read-only).
+  zReport: tenantProcedure
+    .input(z.object({ shiftId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        return runZReport(tx, ctx, input.shiftId);
       });
     }),
 };

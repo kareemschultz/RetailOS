@@ -40,6 +40,21 @@ export const EXPIRY_POLICIES = [
   "hard-block",
   "advisory",
 ] as const;
+// Phase-4 Commit 4 — configurable cash-control toggles (platform-first: the
+// generic retail core specializes through config, never an architecture fork).
+// Resolved via the settings resolver (location → tenant → platform default).
+// Extensible value sets ⇒ text({ enum }) + CHECK, never pgEnum (charter §33).
+export const SHIFT_ENFORCEMENT_MODES = [
+  "required",
+  "optional",
+  "disabled",
+] as const;
+export const BLIND_CLOSE_MODES = ["on", "off"] as const;
+export const CASH_DRAWER_MODES = ["on", "off"] as const;
+export type ShiftEnforcementMode = (typeof SHIFT_ENFORCEMENT_MODES)[number];
+export type BlindCloseMode = (typeof BLIND_CLOSE_MODES)[number];
+export type CashDrawerMode = (typeof CASH_DRAWER_MODES)[number];
+
 export const UOM_KINDS = ["count", "weight", "volume", "length"] as const;
 export const UOM_ROLES = ["purchase", "stock", "sale", "reporting"] as const;
 export const BARCODE_SYMBOLOGIES = [

@@ -89,6 +89,9 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.category);
         await tx.delete(schema.brand);
         await tx.delete(schema.unitOfMeasure);
+        // Cash control (Commit 4): cash_movement → shift → location/company.
+        await tx.delete(schema.cashMovement);
+        await tx.delete(schema.shift);
         await tx.delete(schema.location);
         await tx.delete(schema.company);
       });
@@ -2971,5 +2974,514 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         admin
       )
     ).rejects.toThrow();
+  });
+
+  // ─────────────────── Phase-4 Commit 4: configurable cash control ──────────
+
+  // Seed a sellable location with one AVCO product/sku carrying stock, so a
+  // cash sale can be attached to a shift. Returns ids used by the cash tests.
+  async function seedCashFixture(tag: string) {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: `${tag}Co` },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: `${tag}Store`, type: "store" },
+      admin
+    );
+    const each = await call(
+      appRouter.catalog.uomCreate,
+      { code: `${tag}-EA`, name: "Each" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      {
+        baseUomId: each.id,
+        costingMethod: "avco",
+        currency: "USD",
+        name: `${tag}P`,
+        priceMinor: 2000,
+        sku: `${tag}-P`,
+      },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { baseUomId: each.id, code: `${tag}-P-EA`, productId: product.id },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 5,
+        skuId: sku.id,
+        unitCostMinor: 100,
+      },
+      admin
+    );
+    return { company, location, product, sku };
+  }
+
+  it("Commit 4: openShift creates a drawer; a second open on the same terminal is rejected", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const { location } = await seedCashFixture("ShOpen");
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "sh-open-1",
+        locationId: location.id,
+        openingFloat: [{ amountMinor: 10_000, currency: "USD", scale: 2 }],
+        terminalId: "T-OPEN-1",
+      },
+      admin
+    );
+    expect(opened.status).toBe("open");
+    // Same terminal, still open → rejected (one open shift per terminal).
+    await expect(
+      call(
+        appRouter.pos.openShift,
+        {
+          idempotencyKey: "sh-open-1b",
+          locationId: location.id,
+          openingFloat: [],
+          terminalId: "T-OPEN-1",
+        },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
+  it("Commit 4: BLIND close computes expected + over/short EXACTLY (float + cash sale + pay-out)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const { location, product, sku } = await seedCashFixture("ShClose");
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "sh-close-open",
+        locationId: location.id,
+        openingFloat: [{ amountMinor: 10_000, currency: "USD", scale: 2 }],
+        terminalId: "T-CLOSE-1",
+      },
+      admin
+    );
+    // A cash sale attached to the shift: 2 @ 2000 = 4000, paid 4000 cash (no change).
+    await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "sh-close-sale",
+        lines: [{ productId: product.id, qty: 2, skuId: sku.id }],
+        locationId: location.id,
+        shiftId: opened.shiftId,
+        terminalId: "T-CLOSE-1",
+        tenders: [{ amountMinor: 4000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    // A pay-out of 500 leaves the drawer.
+    await call(
+      appRouter.pos.cashMovement,
+      {
+        amountMinor: 500,
+        currency: "USD",
+        idempotencyKey: "sh-close-payout",
+        scale: 2,
+        shiftId: opened.shiftId,
+        terminalId: "T-CLOSE-1",
+        type: "pay_out",
+      },
+      admin
+    );
+    // Expected = 10000 float + 4000 cash sale − 500 pay-out = 13500.
+    // Counted 13000 (blind) → over/short = 13000 − 13500 = −500 (short).
+    const closed = await call(
+      appRouter.pos.closeShift,
+      {
+        countedCash: [{ amountMinor: 13_000, currency: "USD", scale: 2 }],
+        idempotencyKey: "sh-close-do",
+        shiftId: opened.shiftId,
+        terminalId: "T-CLOSE-1",
+      },
+      admin
+    );
+    expect(closed.status).toBe("closed");
+    expect(closed.zReportNumber.startsWith("Z-")).toBe(true);
+    const exp = closed.expectedCash.find((c) => c.currency === "USD");
+    expect(exp?.amountMinor).toBe(13_500);
+    const os = closed.overShort.find((c) => c.currency === "USD");
+    expect(os?.amountMinor).toBe(-500);
+    // shift.closed event carries the system-computed expected + over/short.
+    const events = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(eq(schema.outboxEvent.type, "shift.closed"))
+    );
+    expect(events.length).toBeGreaterThan(0);
+  });
+
+  it("Commit 4: shift_enforcement toggle — disabled ⇒ sale shiftId null; required ⇒ sale without an open shift rejected", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const { location, product, sku } = await seedCashFixture("ShTog");
+    // Location-level override: disabled → sale ignores any shiftId, stores null.
+    await withTenant(db, ORG, (tx) =>
+      tx
+        .update(schema.location)
+        .set({ shiftEnforcement: "disabled" })
+        .where(eq(schema.location.id, location.id))
+    );
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "tog-disabled",
+        // A bogus shiftId is ignored entirely when disabled.
+        lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+        locationId: location.id,
+        shiftId: "00000000-0000-0000-0000-000000000000",
+        tenders: [{ amountMinor: 2000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const saleRow = await withTenant(db, ORG, (tx) =>
+      tx.select().from(schema.sale).where(eq(schema.sale.id, sale.saleId))
+    );
+    expect(saleRow.at(0)?.shiftId).toBeNull();
+    // Now require an open shift; a sale with none is rejected.
+    await withTenant(db, ORG, (tx) =>
+      tx
+        .update(schema.location)
+        .set({ shiftEnforcement: "required" })
+        .where(eq(schema.location.id, location.id))
+    );
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "tog-required",
+          lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+          locationId: location.id,
+          tenders: [{ amountMinor: 2000, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
+  it("Commit 4: concurrent closeShift — exactly one winner (FOR UPDATE)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const { location } = await seedCashFixture("ShRace");
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "race-open",
+        locationId: location.id,
+        openingFloat: [{ amountMinor: 5000, currency: "USD", scale: 2 }],
+        terminalId: "T-RACE-1",
+      },
+      admin
+    );
+    // DIFFERENT idempotency keys → both run concurrently (not collapsed); the
+    // FOR UPDATE lock serializes them and exactly one close commits.
+    const results = await Promise.allSettled([
+      call(
+        appRouter.pos.closeShift,
+        {
+          countedCash: [{ amountMinor: 5000, currency: "USD", scale: 2 }],
+          idempotencyKey: "race-close-a",
+          shiftId: opened.shiftId,
+          terminalId: "T-RACE-1",
+        },
+        admin
+      ),
+      call(
+        appRouter.pos.closeShift,
+        {
+          countedCash: [{ amountMinor: 5000, currency: "USD", scale: 2 }],
+          idempotencyKey: "race-close-b",
+          shiftId: opened.shiftId,
+          terminalId: "T-RACE-1",
+        },
+        admin
+      ),
+    ]);
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    expect(fulfilled.length).toBe(1);
+  });
+
+  it("Commit 4: cross-tenant shift access is rejected (H1)", async () => {
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    // Tenant B opens a shift.
+    const companyB = await call(
+      appRouter.company.create,
+      { name: "ShH1Co" },
+      adminB
+    );
+    const locationB = await call(
+      appRouter.location.create,
+      { companyId: companyB.id, name: "ShH1Store", type: "store" },
+      adminB
+    );
+    const openedB = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "h1-open-b",
+        locationId: locationB.id,
+        openingFloat: [],
+        terminalId: "T-H1-B",
+      },
+      adminB
+    );
+    // Tenant A cannot close or move cash on tenant B's shift (RLS read → none).
+    await expect(
+      call(
+        appRouter.pos.closeShift,
+        {
+          countedCash: [],
+          idempotencyKey: "h1-close-a",
+          shiftId: openedB.shiftId,
+          terminalId: "T-H1-A",
+        },
+        admin
+      )
+    ).rejects.toThrow();
+    await expect(
+      call(
+        appRouter.pos.cashMovement,
+        {
+          amountMinor: 100,
+          currency: "USD",
+          idempotencyKey: "h1-mv-a",
+          scale: 2,
+          shiftId: openedB.shiftId,
+          terminalId: "T-H1-A",
+          type: "pay_in",
+        },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
+  it("Commit 4: a cash refund during a shift REDUCES expected cash (Codex HIGH-1)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const { location, product, sku } = await seedCashFixture("ShRef");
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "ref-open",
+        locationId: location.id,
+        openingFloat: [{ amountMinor: 10_000, currency: "USD", scale: 2 }],
+        terminalId: "T-REF-1",
+      },
+      admin
+    );
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "ref-sale",
+        lines: [{ productId: product.id, qty: 2, skuId: sku.id }],
+        locationId: location.id,
+        shiftId: opened.shiftId,
+        terminalId: "T-REF-1",
+        tenders: [{ amountMinor: 4000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const origLines = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.saleLine)
+        .where(eq(schema.saleLine.saleId, sale.saleId))
+    );
+    const line = origLines.at(0);
+    // Cash refund of 1 @ 2000 at the SAME terminal → attaches to the open shift.
+    await call(
+      appRouter.pos.refund,
+      {
+        idempotencyKey: "ref-refund",
+        lines: [{ originalSaleLineId: line?.id ?? "", qty: 1 }],
+        originalSaleId: sale.saleId,
+        terminalId: "T-REF-1",
+        tenders: [{ amountMinor: 2000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    // Expected = 10000 float + 4000 cash sale − 2000 cash refund = 12000.
+    const x = await call(
+      appRouter.pos.xReport,
+      { shiftId: opened.shiftId },
+      admin
+    );
+    expect(x.expectedCash.find((c) => c.currency === "USD")?.amountMinor).toBe(
+      12_000
+    );
+  });
+
+  it("Commit 4: same currency / different scale stays in separate buckets (Codex HIGH-2)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const { location } = await seedCashFixture("ShScale");
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "scale-open",
+        locationId: location.id,
+        openingFloat: [{ amountMinor: 10_000, currency: "USD", scale: 2 }],
+        terminalId: "T-SCALE-1",
+      },
+      admin
+    );
+    // A pay-in in USD at scale 0 (whole dollars) must NOT merge with scale-2.
+    await call(
+      appRouter.pos.cashMovement,
+      {
+        amountMinor: 10,
+        currency: "USD",
+        idempotencyKey: "scale-payin",
+        scale: 0,
+        shiftId: opened.shiftId,
+        terminalId: "T-SCALE-1",
+        type: "pay_in",
+      },
+      admin
+    );
+    const x = await call(
+      appRouter.pos.xReport,
+      { shiftId: opened.shiftId },
+      admin
+    );
+    const usd = x.expectedCash.filter((c) => c.currency === "USD");
+    expect(usd.length).toBe(2);
+    expect(
+      x.expectedCash.find((c) => c.currency === "USD" && c.scale === 2)
+        ?.amountMinor
+    ).toBe(10_000);
+    expect(
+      x.expectedCash.find((c) => c.currency === "USD" && c.scale === 0)
+        ?.amountMinor
+    ).toBe(10);
+  });
+
+  it("Commit 4: a sale cannot attach to another terminal's open shift (Codex HIGH-3)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const { location, product, sku } = await seedCashFixture("ShXTerm");
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "xterm-open",
+        locationId: location.id,
+        openingFloat: [],
+        terminalId: "T-XA",
+      },
+      admin
+    );
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "xterm-sale",
+          lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+          locationId: location.id,
+          shiftId: opened.shiftId,
+          terminalId: "T-XB",
+          tenders: [{ amountMinor: 2000, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
+  it("Commit 4: cash movement / close from a different terminal is rejected (Codex HIGH-4)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const { location } = await seedCashFixture("ShXMv");
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "xmv-open",
+        locationId: location.id,
+        openingFloat: [],
+        terminalId: "T-XMV-A",
+      },
+      admin
+    );
+    await expect(
+      call(
+        appRouter.pos.cashMovement,
+        {
+          amountMinor: 100,
+          currency: "USD",
+          idempotencyKey: "xmv-mv",
+          scale: 2,
+          shiftId: opened.shiftId,
+          terminalId: "T-XMV-B",
+          type: "drop",
+        },
+        admin
+      )
+    ).rejects.toThrow();
+    await expect(
+      call(
+        appRouter.pos.closeShift,
+        {
+          countedCash: [],
+          idempotencyKey: "xmv-close",
+          shiftId: opened.shiftId,
+          terminalId: "T-XMV-B",
+        },
+        admin
+      )
+    ).rejects.toThrow();
+  });
+
+  it("Commit 4: an invalid toggle value is rejected by the DB CHECK (Codex HIGH-5)", async () => {
+    const { location } = await seedCashFixture("ShChk");
+    await expect(
+      withTenant(db, ORG, (tx) =>
+        tx.execute(
+          sql`UPDATE location SET shift_enforcement = 'requird' WHERE id = ${location.id}`
+        )
+      )
+    ).rejects.toThrow();
+  });
+
+  it("Commit 4: sale.created carries the DB-resolved shiftId, not client input (Codex MEDIUM)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const { location, product, sku } = await seedCashFixture("ShEvt");
+    // Disabled ⇒ the row stores shift_id=null even if the client sends a UUID;
+    // the event must mirror the row, not echo the client's (cross-tenant) input.
+    await withTenant(db, ORG, (tx) =>
+      tx
+        .update(schema.location)
+        .set({ shiftEnforcement: "disabled" })
+        .where(eq(schema.location.id, location.id))
+    );
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "evt-sale",
+        lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+        locationId: location.id,
+        shiftId: "00000000-0000-0000-0000-000000000000",
+        terminalId: "T-EVT",
+        tenders: [{ amountMinor: 2000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const events = await withTenant(db, ORG, (tx) =>
+      tx
+        .select()
+        .from(schema.outboxEvent)
+        .where(eq(schema.outboxEvent.type, "sale.created"))
+    );
+    const mine = events.find(
+      (e) => (e.payload as { saleId?: string }).saleId === sale.saleId
+    );
+    expect((mine?.payload as { shiftId: string | null }).shiftId).toBeNull();
   });
 });

@@ -25,6 +25,10 @@ export const ROLE_PERMISSIONS = {
     "bond.release",
     "bond.approve_release",
     "pos.create_sale",
+    // Cash control (Commit 4) — open/close own drawer + cash movements.
+    "pos.open_shift",
+    "pos.cash_movement",
+    "pos.close_shift",
     // Returns/voids (Commit 3). Sensitive (§19/§22 manager step-up): granted to
     // admin + manager, NOT the base cashier — a cashier rings sales, a manager
     // authorizes refunds/voids.
@@ -41,6 +45,9 @@ export const ROLE_PERMISSIONS = {
     "inventory.transfer",
     "inventory.transfer_receive",
     "pos.create_sale",
+    "pos.open_shift",
+    "pos.cash_movement",
+    "pos.close_shift",
     "pos.refund",
     "pos.void_sale",
     "reports.view",
@@ -66,7 +73,12 @@ export const ROLE_PERMISSIONS = {
     "inventory.transfer_receive",
     "reports.view",
   ],
-  cashier: ["pos.create_sale"],
+  cashier: [
+    "pos.create_sale",
+    "pos.open_shift",
+    "pos.cash_movement",
+    "pos.close_shift",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type TenantRole = keyof typeof ROLE_PERMISSIONS;

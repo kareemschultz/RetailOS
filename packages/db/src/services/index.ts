@@ -10,6 +10,7 @@ export * from "./inventory";
 export * from "./money";
 export * from "./outbox";
 export * from "./rounding";
+export * from "./shift";
 export * from "./stock-ledger";
 export * from "./transfer";
 export * from "./types";
