@@ -16,6 +16,7 @@ const CASHIER = "u_cashier_e2e";
 // A second tenant, for the cross-tenant FK-bypass regression test.
 const ORG_B = "org_e2e_b";
 const ADMIN_B = "u_admin_e2e_b";
+const STORED_VALUE_TENDER_RESERVED_RE = /Stored-value tenders are reserved/;
 
 function makeCtx(userId: string, organizationId: string | null): Context {
   return {
@@ -2149,6 +2150,39 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(tenders.length).toBe(1);
     expect(tenders.at(0)?.changeMinor).toBe(1000);
     expect(tenders.at(0)?.settledAmountMinor).toBe(4000);
+    const receipt = await call(
+      appRouter.pos.receipt,
+      { saleId: sale.saleId },
+      admin
+    );
+    expect(receipt).toMatchObject({ receiptVersion: 1, schemaVersion: 1 });
+    expect(receipt.totals).toMatchObject({
+      discountMinor: 0,
+      subtotalMinor: 4000,
+      taxMinor: 0,
+      totalMinor: 4000,
+    });
+    expect(receipt.payments.summary).toMatchObject({
+      balanceDueMinor: 0,
+      changeMinor: 1000,
+      settledMinor: 4000,
+      tenderedMinor: 5000,
+    });
+    expect(receipt.lines).toHaveLength(2);
+    expect(receipt.lines.every((line) => "lineTotalMinor" in line)).toBe(true);
+    expect(receipt.fiscal).toMatchObject({
+      documentId: null,
+      fiscalNumber: null,
+      provider: null,
+      qrPayload: null,
+    });
+    await expect(
+      call(
+        appRouter.pos.receipt,
+        { saleId: sale.saleId },
+        { context: makeCtx(ADMIN_B, ORG_B) }
+      )
+    ).rejects.toThrow();
 
     // sale.created carries the reserved-nullable functional/commission keys
     // PRESENT (toHaveProperty — so a refactor can't silently drop them); a
@@ -2164,7 +2198,10 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
           )
         )
     );
-    const evt = saleEvents.at(-1)?.payload as Record<string, unknown>;
+    const evt = saleEvents
+      .map((event) => event.payload as Record<string, unknown>)
+      .find((payload) => payload.saleId === sale.saleId);
+    expect(evt).toBeTruthy();
     for (const key of [
       "functionalCurrency",
       "fxRateToFunctional",
@@ -2189,6 +2226,37 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         )
     );
     expect(payEvents.length).toBeGreaterThan(0);
+    const payEvt = payEvents
+      .map((event) => event.payload as Record<string, unknown>)
+      .find((payload) => payload.saleId === sale.saleId);
+    expect(payEvt).toBeTruthy();
+    expect(payEvt).toMatchObject({
+      amountFunctionalMinor: null,
+      amountMinor: 5000,
+      currency: "USD",
+      fxRateUsed: null,
+      paymentId: tenders.at(0)?.id,
+      saleId: sale.saleId,
+      scale: 2,
+      sourceId: sale.saleId,
+      sourceType: "sale",
+      tenderId: tenders.at(0)?.id,
+      tenderType: "cash",
+    });
+    for (const key of [
+      "amountMinor",
+      "currency",
+      "scale",
+      "amountFunctionalMinor",
+      "fxRateUsed",
+      "occurredAt",
+      "paymentId",
+      "saleId",
+      "tenderId",
+      "tenderType",
+    ]) {
+      expect(payEvt).toHaveProperty(key);
+    }
 
     // Idempotent replay: same key ⇒ same sale, valuation NOT applied twice.
     const replay = await call(
@@ -2212,6 +2280,36 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         .where(eq(schema.avgCost.skuId, avcoSku.id))
     );
     expect(avcoAfter.at(0)?.qtyOnHand).toBe(3);
+
+    const splitSale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "msp-split",
+        lines: [{ productId: avcoProduct.id, qty: 1, skuId: avcoSku.id }],
+        locationId: location.id,
+        tenders: [
+          { amountMinor: 600, currency: "USD", method: "card" },
+          { amountMinor: 400, currency: "USD", method: "mobile_money" },
+        ],
+      },
+      admin
+    );
+    expect(splitSale.totalMinor).toBe(1000);
+    const splitReceipt = await call(
+      appRouter.pos.receipt,
+      { saleId: splitSale.saleId },
+      admin
+    );
+    expect(splitReceipt.payments.items.map((p) => p.method).sort()).toEqual([
+      "card",
+      "mobile_money",
+    ]);
+    expect(splitReceipt.payments.summary).toMatchObject({
+      balanceDueMinor: 0,
+      changeMinor: 0,
+      settledMinor: 1000,
+      tenderedMinor: 1000,
+    });
   });
 
   it("MSP: rejects a line with no skuId (#8/INV-P4-8), underpayment, card-overpay-tiny-cash change, and non-sellable location (INV-P4-7)", async () => {
@@ -2291,7 +2389,24 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       )
     ).rejects.toThrow();
 
-    // (d) Non-sellable location → reject. Flip isSellable (the location.create
+    // (d) Stored-value / voucher tender is a reserved seam until the liability
+    // ledger lands — it must not settle a sale silently.
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "g-store-credit",
+          lines: [{ productId: product.id, qty: 1, skuId: sku.id }],
+          locationId: location.id,
+          tenders: [
+            { amountMinor: 500, currency: "USD", method: "store_credit" },
+          ],
+        },
+        admin
+      )
+    ).rejects.toThrow(STORED_VALUE_TENDER_RESERVED_RE);
+
+    // (e) Non-sellable location → reject. Flip isSellable (the location.create
     // router doesn't expose it; sellability is set by location type/flags).
     await withTenant(db, ORG, (tx) =>
       tx
@@ -2481,6 +2596,22 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     const fifoLine = origLines.find((l) => l.skuId === fifoSku.id);
     expect(avcoLine?.cogsMinor).toBe(300);
     expect(fifoLine?.cogsMinor).toBe(101);
+
+    await expect(
+      call(
+        appRouter.pos.refund,
+        {
+          idempotencyKey: "ret-refund-store-credit-blocked",
+          lines: [{ originalSaleLineId: avcoLine?.id ?? "", qty: 1 }],
+          originalSaleId: sale.saleId,
+          refundReason: "blocked stored-value refund",
+          tenders: [
+            { amountMinor: 500, currency: "USD", method: "store_credit" },
+          ],
+        },
+        admin
+      )
+    ).rejects.toThrow(STORED_VALUE_TENDER_RESERVED_RE);
 
     // Refund 2 of 3 on each. restockedValue = mulDivRound(cogs, 2, 3, half_even):
     // AVCO → round(600/3)=200; FIFO → round(202/3)=67 (odd ⇒ remainder split).
