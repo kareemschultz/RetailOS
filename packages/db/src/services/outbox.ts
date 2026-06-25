@@ -31,10 +31,16 @@ export const DomainEventType = {
   InventoryBondReceived: "inventory.bond_received",
   InventoryBondReleased: "inventory.bond_released",
   SaleCreated: "sale.created",
-  // Phase 4 (MSP) — a tender settling against a sale (event-map-phase4.md). The
-  // refund/void/shift/stored-value event types are reserved for their own
-  // commits; not enumerated until something emits them (Phase-2 lesson).
+  // Phase 4 (MSP) — a tender settling against a sale (event-map-phase4.md).
   PaymentReceived: "payment.received",
+  // Phase 4 Commit 3 — returns/voids (event-map-phase4.md). A refund reverses a
+  // sale proportionally (carries originalSaleId/per-line originalSaleLineId +
+  // restockedValueMinor); a void fully reverses the original (parks on
+  // originalSaleId, no amounts). Exchange = a linked refund + sale sharing an
+  // exchangeGroupId — NOT a distinct event. The shift/stored-value types stay
+  // reserved for their own commits (not enumerated until something emits them).
+  SaleRefunded: "sale.refunded",
+  SaleVoided: "sale.voided",
 } as const;
 
 export type DomainEventType =
