@@ -13,6 +13,14 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Phase 4 Commit 6 — Number-Block Leasing (in progress, 2026-06-25)
+- **Branch:** `phase-4-commit-6-number-leasing` off clean `master` (`407b542`).
+- **Scope:** backend-only distributed number leasing. Architecture/governance/UI strategy remain frozen; no frontend work.
+- **Invariant:** global disjointness under concurrency, replay, expiry, and reclaim. Leased numbers are never reminted; unused tails are recorded as skipped usage rows for fiscal gap auditability.
+- **Implementation status:** added `number_lease` + `number_lease_usage` schema/migration with fail-closed RLS, composite FKs, allocation request hashing, idempotency key uniqueness, and a trigger backstop rejecting overlapping ranges per tenant/block. Added allocator service using advisory locks + `number_block.next`, replay-safe allocation, cursor-based consumption with duplicate-retry recognition, explicit skipped-number reporting, expiry/terminal-guarded reclaim, and minimal POS API routes for allocate/current/consume/skip/reclaim.
+- **Codex review:** initial independent review found 0 CRITICAL / 4 HIGH (allocation mismatch replay, consume/skip retry, block scope mismatch, reclaim ownership/expiry). All four were folded with regression tests; focused confirmation review pending.
+- **Verification so far:** `bun run check`, `bun run check-types`, `bun run check:mojibake`, default `bun run test`, and real Postgres verification are green. Fresh disposable DB `retailos_commit6_number_leasing_fresh` was bootstrapped via `roles.sql`, migrated from scratch with `bun -F @RetailOS/db db:migrate`, then tested with DB env vars: db **92/92** and api **40/40** ran with no skips.
+
 ### 🧭 PHASE 3 — RESUME HERE (cold-session actionable)
 - **master HEAD = `dbe77e2`** (post-PR #16). **Commits 0+1+2 MERGED, all CI-green.** **COMMIT 3 IMPLEMENTED on branch `phase-3-commit-3` (off `dbe77e2`) — STOPPED for owner review, NOT merged.** This commit touches frozen `costing.ts` (additively) → owner routes it through Codex before merge.
 - **✅ COMMIT 3 (transfer VALUE conservation) — DONE on branch, all gates green:**

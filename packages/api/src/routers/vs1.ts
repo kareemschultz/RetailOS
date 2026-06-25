@@ -4616,6 +4616,103 @@ export const posRouter = {
       });
     }),
 
+  numberLeaseAllocate: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid(),
+        deviceId: z.string().min(1).nullable().optional(),
+        docType: z.string().min(1),
+        expiresAt: z.string().datetime().nullable().optional(),
+        fiscalYear: z.number().int().nullable().optional(),
+        idempotencyKey: z.string().min(1),
+        leaseSize: z.number().int().positive().max(10_000),
+        locationId: z.string().uuid().nullable().optional(),
+        series: z.string().min(1).nullable().optional(),
+        terminalId: z.string().min(1),
+        ttlMinutes: z.number().int().positive().nullable().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        return services.allocateNumberLease(tx, ctx, {
+          ...input,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+        });
+      });
+    }),
+
+  numberLeaseCurrent: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid().nullable().optional(),
+        docType: z.string().min(1).nullable().optional(),
+        locationId: z.string().uuid().nullable().optional(),
+        series: z.string().min(1).nullable().optional(),
+        terminalId: z.string().min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        return services.getCurrentNumberLease(tx, ctx, input);
+      });
+    }),
+
+  numberLeaseConsume: tenantProcedure
+    .input(
+      z.object({
+        leaseId: z.string().uuid(),
+        number: z.number().int().positive(),
+        sourceId: z.string().uuid().nullable().optional(),
+        sourceType: z.string().min(1).nullable().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        return services.consumeNumberFromLease(tx, ctx, input);
+      });
+    }),
+
+  numberLeaseReportSkipped: tenantProcedure
+    .input(
+      z.object({
+        fromNumber: z.number().int().positive(),
+        leaseId: z.string().uuid(),
+        reason: z.string().min(1),
+        sourceId: z.string().uuid().nullable().optional(),
+        sourceType: z.string().min(1).nullable().optional(),
+        toNumber: z.number().int().positive(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        return services.reportSkippedNumbers(tx, ctx, input);
+      });
+    }),
+
+  numberLeaseReclaim: tenantProcedure
+    .input(
+      z.object({
+        leaseId: z.string().uuid(),
+        reason: z.string().min(1),
+        terminalId: z.string().min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        return services.reclaimNumberLease(tx, ctx, input);
+      });
+    }),
+
   // Backend receipt read model. The frontend renders this model directly and
   // must not recompute sale/payment totals.
   receipt: tenantProcedure
