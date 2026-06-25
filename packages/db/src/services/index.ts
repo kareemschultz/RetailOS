@@ -9,6 +9,7 @@ export * from "./idempotency";
 export * from "./inventory";
 export * from "./money";
 export * from "./outbox";
+export * from "./receipt";
 export * from "./rounding";
 export * from "./shift";
 export * from "./stock-ledger";

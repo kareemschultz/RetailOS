@@ -2743,6 +2743,33 @@ interface SettledTender extends TenderInput {
   settledAmountMinor: number;
 }
 
+const SETTLING_TENDER_METHODS = [
+  "cash",
+  "card",
+  "mobile_money",
+  "bank_transfer",
+] as const satisfies readonly TenderMethod[];
+
+const STORED_VALUE_TENDER_METHODS = [
+  "store_credit",
+  "gift_card",
+] as const satisfies readonly TenderMethod[];
+
+function assertConfiguredSaleTender(method: TenderMethod): void {
+  if ((SETTLING_TENDER_METHODS as readonly string[]).includes(method)) {
+    return;
+  }
+  if ((STORED_VALUE_TENDER_METHODS as readonly string[]).includes(method)) {
+    throw new ORPCError("BAD_REQUEST", {
+      message:
+        "Stored-value tenders are reserved as a voucher/store-credit seam; balance liability ledger is not implemented yet",
+    });
+  }
+  throw new ORPCError("BAD_REQUEST", {
+    message: `Tender method is not configured for POS settlement: ${method}`,
+  });
+}
+
 // Location must exist in the tenant (RLS-scoped read — FK checks bypass RLS) AND
 // be sellable (INV-P4-7): a sale cannot ring against a non-sellable location
 // (bonded / in-transit / quarantine / damaged).
@@ -2826,6 +2853,7 @@ function settleTenders(
   total: ReturnType<typeof services.money>
 ): SettledTender[] {
   for (const t of tenders) {
+    assertConfiguredSaleTender(t.method);
     if (t.currency !== total.currency) {
       throw new ORPCError("BAD_REQUEST", {
         message:
@@ -3088,8 +3116,11 @@ async function runCreateSaleMsp(
     );
     eventTenders.push({
       amountMinor: t.amountMinor,
+      currency: t.currency,
+      fxRateUsed: null,
       fxRateToSale: null,
       method: t.method,
+      scale: subtotal.scale,
       settledAmountMinor: t.settledAmountMinor,
       settledFunctionalMinor: null,
       tenderCurrency: t.currency,
@@ -3108,6 +3139,8 @@ async function runCreateSaleMsp(
         commissionFunctionalMinor: null,
         commissionMinor: null,
         companyId: location.companyId,
+        currency: t.currency,
+        fxRateUsed: null,
         fxRateToSale: null,
         functionalCurrency: null,
         functionalScale: null,
@@ -3116,19 +3149,24 @@ async function runCreateSaleMsp(
         paymentId: tenderRow.id,
         realizedFxGainLossFunctionalMinor: null,
         receivedBy: ctx.actorUserId,
+        scale: subtotal.scale,
         saleCurrency: subtotal.currency,
         saleId: sale.id,
         saleScale: subtotal.scale,
+        sourceId: sale.id,
+        sourceType: "sale",
         settledAmountMinor: t.settledAmountMinor,
         settledFunctionalMinor: null,
         // The DB-resolved shift (what was actually written), never the raw
         // client input — a `disabled` tenant stores null and must emit null,
         // not a spurious/cross-tenant UUID to the P5 GL (Codex MEDIUM).
         shiftId: resolvedShiftId,
+        terminalId: input.terminalId ?? null,
         tenderCurrency: t.currency,
         tenderFxRateToFunctional: null,
         tenderId: tenderRow.id,
         tenderScale: subtotal.scale,
+        tenderType: t.method,
       },
     });
   }
@@ -3517,6 +3555,9 @@ async function runRefund(
 
   // Refund tenders = money returned to the customer; a refund MUST be fully
   // tendered back (the refunded amount).
+  for (const t of input.tenders) {
+    assertConfiguredSaleTender(t.method);
+  }
   const tenderedBack = input.tenders.reduce((s, t) => s + t.amountMinor, 0);
   if (tenderedBack !== refundTotalMagnitude) {
     throw new ORPCError("BAD_REQUEST", {
@@ -4572,6 +4613,24 @@ export const posRouter = {
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "reports.view");
         return runZReport(tx, ctx, input.shiftId);
+      });
+    }),
+
+  // Backend receipt read model. The frontend renders this model directly and
+  // must not recompute sale/payment totals.
+  receipt: tenantProcedure
+    .input(z.object({ saleId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        const receipt = await services.buildSaleReceipt(tx, ctx, input.saleId);
+        if (!receipt) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Sale receipt not found in this tenant",
+          });
+        }
+        return receipt;
       });
     }),
 };
