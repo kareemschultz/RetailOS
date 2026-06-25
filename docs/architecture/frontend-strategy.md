@@ -20,17 +20,18 @@ The backend is unchanged and is the source of truth for all data, identity, and 
 ### We do NOT rebuild UI from scratch. We do NOT fork AdminCN.
 RetailOS UI is **composition-first and owned-in-repo** (shadcn philosophy). We assemble screens from existing, vetted source material and adapt it — we never hand-roll generic React, and we never carry a foreign app shell.
 
-**Source material (all already wired):** the configured **MCP + registries** — **shadcn Studio** (`@ss-blocks`/`@ss-components`/`@ss-themes`, authenticated `EMAIL`+`LICENSE_KEY`), the **shadcn registries** (`@shadcn` core), **Magic UI** (`@magicui`/`@magicui-pro`), **AdminCN source blocks/layouts**, **ReUI** (`@reui`), and any compatible registry component.
+**Source material (all already wired):** the configured **MCP + registries** — **shadcn Studio** (`@ss-blocks`/`@ss-components`/`@ss-themes`, authenticated `EMAIL`+`LICENSE_KEY`), the **shadcn registries** (`@shadcn` core), **Magic UI** (`@magicui`/`@magicui-pro`), the **AdminCN** and **CommerceO** template sources (Pro downloads, **gitignored** — mined, never forked, never committed), **ReUI** (`@reui`), and any compatible registry component.
 
-### The 5-layer frontend stack (sourcing by role, then preference)
+### The 6-layer frontend stack (sourcing by role, then preference)
 
-RetailOS UI is composed from **five layers**. Each layer has a distinct **role**; when a surface needs something, take it from the highest layer that covers it and only descend when the layer above doesn't. This is stronger than any single template — we move fast on owned, vetted source and stay cohesive because everything is normalized through the design-language skill and wired to our backend.
+RetailOS UI is composed from **six layers**. Each layer has a distinct **role**; when a surface needs something, take it from the highest layer that covers it and only descend when the layer above doesn't. This is stronger than any single template — we move fast on owned, vetted source and stay cohesive because everything is normalized through the design-language skill and wired to our backend. The two templates (**AdminCN**, **CommerceO**) are the **same vendor's shadcn-studio Pro stack** — both **Base UI** (`@base-ui/react`) **+ shadcn style `base-vega` + Tailwind v4 + Next 16 / React 19 + pnpm, all-mock (`fake-db` + `'use server'`), zero Radix, zero bundled auth** (verified 2026-06-25 by read-only ZIP inspection) — so they compose cleanly once ported to our stack.
 
-1. **AdminCN — application shell & visual language (the skin).** The app frame and overall look: layout, sidebar, header, breadcrumbs, search bar, dashboard layouts, analytics pages, tables/charts/cards, settings patterns, theme system, navigation, responsive behavior, dark/light, density. AdminCN-the-template is a Next download **we never fork** — its compositions map to the authenticated Studio `application-shell`/`dashboard-shell`/chart blocks, which install in our `base`/Base UI style (`ui-admin-shell-findings.md`).
-2. **shadcn Studio — feature blocks AND polished component variants (first-class source, not a fallback).** Whenever AdminCN doesn't already have it, go to Studio. Studio is the **preferred source for both** (a) **application/workflow blocks** — checkout, cart, product grid, order summary, payment dialog, receipt, multi-step forms, wizards, CRM pipelines, rich forms, dashboard widgets, empty states, auth (2FA/verify-email), timeline, activity feeds, calendar, kanban, command menus, data tables; **and** (b) **polished primitive variants** — buttons, inputs, selects, dialogs, drawers, cards, tabs, steppers, badges, tooltips, typography, spinners. **Use a Studio variant whenever it is more polished than the base shadcn/ui primitive** — Studio is not merely "blocks AdminCN lacks."
-3. **shadcn/ui — base primitives.** The low-level layer (Button, Input, Select, Combobox, Dialog, Drawer, Popover, Tooltip, Table, Sheet, Accordion, Checkbox, Switch, Toast, Tabs) when Studio/AdminCN doesn't provide a better variant. Keep accessibility and **Base UI** compatibility.
-4. **Magic UI — tasteful motion only.** Marketing/storefront, onboarding, auth success, KPI accents, subtle dashboard polish, command-palette feel. **Never** on the POS checkout, accounting, or any high-frequency data-entry path (speed rule).
-5. **RetailOS custom — ERP-specific surfaces no registry covers.** The `gaps-and-custom.md` set: stock-ledger / FIFO-layer viewer, bonded-vs-released view, bond-release workflow, fiscal/thermal receipt preview, cash-drawer & shift-close panel, split/multi-currency payment pad, bin/zone scan UI, landed-cost allocator, commission engine, offline-status indicator, barcode/label designer — built on shadcn/Base UI primitives, owned in `packages/ui`.
+1. **AdminCN — application shell & visual language (the skin).** The app frame and overall look: layout, sidebar, header, breadcrumbs, command palette, search bar, dashboard layouts (9 variants: sales/finance/logistics/analytics/orders/payments/ecommerce/campaign/productivity), the **11 datatable patterns**, **RBAC** (`roles`/`permissions`/`users`), form wizards, charts/cards/statistics/widgets, settings, the theme customizer, navigation, responsive behavior, dark/light, density. AdminCN-the-template is a Next 16 download **we never fork** — its compositions also map to the authenticated Studio `application-shell`/`dashboard-shell`/chart blocks, which install in our `base`/Base UI style (`ui-admin-shell-findings.md`).
+2. **CommerceO — retail & commerce workflows (first-class source for the commerce surfaces).** The same vendor's e-commerce admin template, and the **primary visual reference for RetailOS's retail/commerce screens**: **Products** (list + multi-section add incl. an **inventory** section, categories, discount-coupons/pricing), **Orders** (list / detail / tracking — `order-items-table`, `customer-details`, `shipping-activity`), **Customers** (all / overview / billing / security — CRM-shaped), **Vendors** (list / create / details — procurement/suppliers), and commerce **Settings** (store / checkout / payments / shipping / locations / reviews / referrals). Its highest-reuse asset is the **per-entity TanStack table pattern** (`data-table` + `<entity>-table` + `row-actions` + `table-toolbar` + `table-pagination`) repeated across every list surface, plus the **add-via-sheet** pattern. Like AdminCN it is a Next 16 download **we never fork** — we mine `src/views`/`src/components` and adapt. *Deltas to reconcile when combining with AdminCN (verified):* CommerceO uses `@remixicon/react` icons → **normalize to lucide/Phosphor**; `zod@4` vs AdminCN `zod@3` → **align to the RetailOS-pinned zod**; baseColor `zinc` vs `neutral` → **re-theme both to RetailOS tokens**.
+3. **shadcn Studio — feature blocks AND polished component variants (first-class source, not a fallback).** Whenever AdminCN/CommerceO don't already have it, go to Studio. Studio is the **preferred source for both** (a) **application/workflow blocks** — checkout, cart, product grid, order summary, payment dialog, receipt, multi-step forms, wizards, CRM pipelines, rich forms, dashboard widgets, empty states, auth (2FA/verify-email), timeline, activity feeds, calendar, kanban, command menus, data tables; **and** (b) **polished primitive variants** — buttons, inputs, selects, dialogs, drawers, cards, tabs, steppers, badges, tooltips, typography, spinners. **Use a Studio variant whenever it is more polished than the base shadcn/ui primitive** — Studio is not merely "blocks the templates lack."
+4. **shadcn/ui — base primitives.** The low-level layer (Button, Input, Select, Combobox, Dialog, Drawer, Popover, Tooltip, Table, Sheet, Accordion, Checkbox, Switch, Toast, Tabs) when Studio/AdminCN/CommerceO don't provide a better variant. Keep accessibility and **Base UI** compatibility.
+5. **Magic UI — tasteful motion only.** Marketing/storefront, onboarding, auth success, KPI accents, subtle dashboard polish, command-palette feel. **Never** on the POS checkout, accounting, or any high-frequency data-entry path (speed rule).
+6. **RetailOS custom — ERP-specific surfaces no registry covers.** The `gaps-and-custom.md` set: stock-ledger / FIFO-layer viewer, bonded-vs-released view, bond-release workflow, fiscal/thermal receipt preview, cash-drawer & shift-close panel, split/multi-currency payment pad, bin/zone scan UI, landed-cost allocator, commission engine, offline-status indicator, barcode/label designer — built on shadcn/Base UI primitives, owned in `packages/ui`.
 
 ### Source Priority Matrix (per-need — so we don't guess)
 
@@ -39,11 +40,17 @@ The pyramid above, made concrete. Pick the source by what's needed:
 | Need | Source |
 |---|---|
 | Dashboard layout / shell | **AdminCN** layouts (via shadcn Studio `application-shell` / `dashboard-shell` blocks) |
-| Tables / data grids | **shadcn Studio** (DataTable blocks) + `@reui` for data-dense grids |
-| Forms / wizards | **shadcn Studio** (Form Layout, Multi-step Form) |
+| Tables / data grids | **shadcn Studio** (DataTable blocks) + **AdminCN** (11 datatable patterns) + **CommerceO** (per-entity `data-table`/`row-actions`/`table-toolbar` pattern) + `@reui` for data-dense grids |
+| Forms / wizards | **shadcn Studio** (Form Layout, Multi-step Form) + **AdminCN** (form-wizard icons/numbered) |
 | Charts | **AdminCN** chart compositions (Recharts via `@shadcn/chart` / Studio Charts) |
-| KPI / statistics / widgets | **shadcn Studio** (Statistics, Widgets) |
-| POS checkout / cart / product grid / order summary / payment dialog / receipt | **shadcn Studio** (eCommerce checkout/cart/product-list/order-summary blocks) — adapt to the POS path; **no Magic UI motion here** |
+| KPI / statistics / widgets | **shadcn Studio** (Statistics, Widgets) + **AdminCN** (statistics/widgets) |
+| RBAC / user & role admin | **AdminCN** (`roles` / `permissions` / `users` apps) |
+| Product catalog / product create (multi-section) / categories / coupons | **CommerceO** (products: list + add incl. **inventory**/pricing/organize/image, categories, discount-coupons) |
+| Orders / order detail / order tracking | **CommerceO** (order: list / details / tracking — `order-items-table`, `customer-details`, `shipping-activity`) |
+| Customer list / customer profile (CRM) | **CommerceO** (customer: all / overview / billing / security) + **shadcn Studio** (pipeline / activity feed) |
+| Vendors / suppliers | **CommerceO** (vendor: list / create / details) |
+| Commerce settings (store / checkout / payments / shipping / locations) | **CommerceO** (settings group) |
+| POS checkout / cart / product grid / order summary / payment dialog / receipt | **shadcn Studio** (eCommerce checkout/cart/product-list/order-summary blocks) + **CommerceO** (product-grid / order-items / cart patterns) — adapt to the POS path; **no Magic UI motion here** |
 | Polished primitive variants (buttons, inputs, selects, dialogs, tabs, steppers, badges, tooltips) | **shadcn Studio** when its variant is more polished; **shadcn** core (Base UI) otherwise |
 | Command palette (Cmd-K) | **shadcn** core (`@shadcn/command`) |
 | Calendar | **shadcn Studio** / **shadcn** core |
@@ -53,28 +60,13 @@ The pyramid above, made concrete. Pick the source by what's needed:
 | Kanban / board · timeline · activity feed | **shadcn Studio** (Kanban / Timeline blocks) |
 | ERP-specific workflows + the ~13 gaps | **Custom** (`gaps-and-custom.md`) |
 
-> "AdminCN" in this matrix means **the AdminCN compositions sourced via the authenticated Studio blocks** (`ui-admin-shell-findings.md`): AdminCN-the-template is a Next download we never fork — its layouts map to Studio `application-shell`/`dashboard-shell`/chart blocks, which install in our `base`/Base UI style.
+> "AdminCN" / "CommerceO" in this matrix mean **the template compositions we mine and adapt** — both are Next 16 downloads we **never fork**. AdminCN's layouts also map to authenticated Studio `application-shell`/`dashboard-shell`/chart blocks that install in our `base`/Base UI style (`ui-admin-shell-findings.md`); CommerceO's commerce surfaces are mined from its `src/views`/`src/components` (Base UI, `base-vega`) and re-themed to RetailOS tokens. Every cell still becomes owned, oRPC-wired code (see "Every imported block becomes owned").
 
 ### UI Source Registry (per-module — source recorded BEFORE anyone builds)
 
-For every major module, the intended source is fixed here so a UI session **follows the registry instead of re-deciding** where to pull from. **Primary** = the layer that frames/drives most of the screen; **Secondary** = the layer filling specific blocks/variants; **Custom** = the RetailOS-specific ERP logic no registry covers (`gaps-and-custom.md`). Every screen is **composed of blocks** (§7 "build layers, not pages"), so a module almost always draws from several layers.
+For every major module the intended source is fixed **before** a UI session starts, so the session **follows the registry instead of re-deciding** where to pull from. The **authoritative, full per-module registry** — with **Primary / Secondary / Studio Components / Custom Components** for every module — lives in **[`ui-source-registry.md`](./ui-source-registry.md)** (single owner; the table is not duplicated here, to avoid drift). Quick read of the columns: **Primary** = the layer that frames/drives most of the screen; **Secondary** = the layer filling specific blocks/variants; **Custom** = the RetailOS-specific ERP logic no registry covers (`gaps-and-custom.md`). Every screen is **composed of blocks** (§7 "build layers, not pages"), so a module almost always draws from several layers.
 
-| Module | Primary | Secondary | Custom (RetailOS-specific) |
-|---|---|---|---|
-| Dashboard | AdminCN | Studio | KPI widgets, correlated-insight cards |
-| POS | Studio (checkout/cart/product-grid/order-summary) + AdminCN shell | shadcn primitives | split/multi-currency payment pad, offline-status, fiscal/thermal receipt, shift close, business logic |
-| Inventory | AdminCN | Studio (kanban/filters/calendar/timeline) | stock-ledger / FIFO-layer viewer, bonded-vs-released, bin/zone scan |
-| CRM | AdminCN (CRM shell) | Studio (pipeline/contact cards/notes/activity feed) | CRM logic, credit/loyalty |
-| Procurement | AdminCN | Studio | PO/GRN/landed-cost workflows |
-| Accounting | AdminCN | Studio | journals / GL / reconciliation, tax engine |
-| HR / Payroll | Studio (employee profile/timeline/wizard) | AdminCN | payroll engine, commission engine |
-| Warehousing | AdminCN | Studio | hierarchy (Warehouse→Zone→Aisle→Rack→Bin), pick/pack/scan |
-| Reports | AdminCN | Studio | custom analytics, read-model views |
-| Settings | AdminCN | shadcn primitives | tenant config (white-label tokens, density) |
-| Auth / Onboarding | Studio (auth + multi-step) | Magic UI (success/delight) | tenant-branded login (hostname-resolved) |
-| Marketing / Storefront | Magic UI (+ Pro) | Studio (eCommerce) | — |
-
-> Composition example (POS) — *blocks, not a page:* **AdminCN App Shell** ▸ Product Search (Studio) ▸ Product Grid (Studio) ▸ Cart (Studio) ▸ Order Summary (Studio) ▸ Tender Dialog (Studio) ▸ Receipt Preview (Studio) ▸ **RetailOS POS business logic (custom)**. The backend doesn't care where a block came from — every block is normalized, owned, and wired to oRPC.
+> Composition example (POS) — *blocks, not a page:* **AdminCN App Shell** ▸ Product Search (Studio) ▸ Product Grid (CommerceO / Studio) ▸ Cart (Studio) ▸ Order Summary (CommerceO / Studio) ▸ Tender Dialog (Studio) ▸ Receipt Preview (custom) ▸ **RetailOS POS business logic (custom)**. The backend doesn't care where a block came from — every block is normalized, owned, and wired to oRPC.
 
 ### Every imported block becomes owned, adapted code
 
@@ -100,7 +92,7 @@ No imported block ships as-is. On import, each block:
 - **Removes foreign routing assumptions** — Next App Router groups → TanStack Start file routes.
 
 ### The contract
-> **AdminCN is the visual target. The RetailOS backend remains authoritative.** We match the look; we keep our stack.
+> **AdminCN + CommerceO are the visual targets. The RetailOS backend remains authoritative.** We match the look; we keep our stack.
 
 ---
 
@@ -216,7 +208,9 @@ The shadcn-studio MCP is **already wired** (server in the agent config; `.claude
 | Concern | Authoritative source |
 |---|---|
 | Design law (color/type/spacing/states/offline/motion/a11y/device targets) | `.agents/skills/retailos-design-language/SKILL.md` (PR #12) |
+| **Per-module UI source registry** (Primary / Secondary / Studio Components / Custom) | `docs/architecture/ui-source-registry.md` |
 | AdminCN: what's installable vs Next-coupled, what to port | `docs/architecture/ui-admin-shell-findings.md` (PR #21) |
+| CommerceO + AdminCN: verified ZIP facts (framework, Base UI primitive, mock/Next layers to strip) | this doc §1 (6-layer stack) — verified 2026-06-25 |
 | Component catalog + per-surface picks | `docs/architecture/ui-inventory/` (`INDEX.md`, `retailos-surface-map.md`) |
 | Custom RetailOS components | `docs/architecture/ui-inventory/gaps-and-custom.md` |
 | Charter UI/UX, component sourcing, motion, registry/MCP auth | charter §5 |
