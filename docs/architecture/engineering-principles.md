@@ -76,6 +76,17 @@ Why it matters: a phase is a *time slice*; a product is a *durable thing with an
 
 **Ship the smallest valuable thing (owner directive 2026-06-24).** The next slice is not chosen by asking *"what's next in the roadmap?"* but *"what is the smallest valuable thing we can ship?"* — and, once a pilot deployment exists, **let the first real customer drive the slice order, not the original phase sequence.** This is exactly what re-sequenced Phase 4 (Minimum Sellable POS → Returns/Refunds/Voids before shift/cash) and deferred the Exchange Settlement Engine. The architecture is strong enough that **customer value, not planning order, drives implementation** — the roadmap is a default, not a mandate; a customer need re-sequences it.
 
+### 🔒 Platform first: default to the broadest common denominator (owner directive 2026-06-24)
+
+RetailOS is a **configurable retail/business platform** — for supermarkets, mini-marts, pharmacies, hardware, electronics, boutiques, wholesalers/distributors, restaurants/hospitality, service businesses, and future vertical packs — **not a POS for one store type.** A pilot customer determines **configuration defaults**, never the architecture. The load-bearing rule:
+
+> **Default to the broadest common denominator. Specialize through configuration, onboarding presets, feature flags, RBAC, templates, and vertical packs — NEVER through architecture forks** (unless legally or technically required).
+
+- **The two-paths rule:** if one path solves a *specific customer's* workflow and another solves the *general* workflow with configuration, **default to the general one** unless the specific is legally/technically required. RetailOS is a **platform first, implementation second**.
+- **We already have the machinery to do this without forking:** the **settings resolver** (per-tenant/company/location/role), **RBAC/entitlements**, **feature flags**, and **tenant/company/location config**. Behavior is chosen by *configuration*, resolved at the appropriate scope — not by a business-type branch in the code or a separate edition.
+- **No `RestaurantEdition` / `PharmacyEdition` forks.** Like Odoo: **Core + Modules**, never per-vertical editions. Vertical packs (pharmacy FEFO, hospitality tables/checks, liquor, automotive, agriculture) are **configuration + optional modules layered on the generic spine**, added when their customer arrives — never a fork of the core.
+- **Build the spine with config seams.** Every cash-control / workflow feature ships with toggles (e.g. shift enforcement required/optional/disabled, blind-close on/off, cash-drawer on/off, X/Z on/off, oversell policy, returns policy, fiscal mode, offline mode) resolved through the settings resolver, so a single-store owner-operator can simplify/disable what a multi-register chain enables — same code, different config.
+
 ---
 
 ## G. Cross-references
