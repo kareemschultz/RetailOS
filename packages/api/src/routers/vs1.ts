@@ -2903,6 +2903,179 @@ function settleTenders(
   return settled;
 }
 
+// ── Pre-sale QUOTE (read-only preview; item 2 frontend-readiness) ────────────
+// A cart preview the cashier UI renders WITHOUT computing any money itself. It
+// MUST stay identical to what pos.createSale will charge, so it calls the SAME
+// priceMspLines + settleTenders the sale calls — never a re-derivation (a parallel
+// formula would silently drift). It performs NO writes (no sale/invoice/tender/
+// ledger/number/outbox): pure SELECTs through the same RLS-scoped tx.
+
+// Tender preview. Reuses settleTenders verbatim; underpayment / cash-overpayment
+// are FLAGGED (settleable=false + the exact reason createSale would reject with),
+// not thrown — a preview must tolerate an incomplete payment.
+function previewTenders(
+  tenders: TenderInput[],
+  total: ReturnType<typeof services.money>
+) {
+  const tenderedMinor = tenders.reduce((sum, t) => sum + t.amountMinor, 0);
+  try {
+    const settled = settleTenders(tenders, total);
+    const settledMinor = settled.reduce(
+      (sum, t) => sum + t.settledAmountMinor,
+      0
+    );
+    const changeMinor = settled.reduce(
+      (sum, t) => sum + (t.changeMinor ?? 0),
+      0
+    );
+    return {
+      items: settled.map((t) => ({
+        amountMinor: t.amountMinor,
+        changeMinor: t.changeMinor ?? 0,
+        currency: t.currency,
+        method: t.method,
+        settledAmountMinor: t.settledAmountMinor,
+      })),
+      settleable: true,
+      settlementError: null as string | null,
+      summary: {
+        balanceDueMinor: 0,
+        changeMinor,
+        settledMinor,
+        tenderedMinor,
+      },
+      underpaid: false,
+    };
+  } catch (error) {
+    const settlementError =
+      error instanceof ORPCError
+        ? error.message
+        : "Tenders cannot settle this sale";
+    return {
+      items: tenders.map((t) => ({
+        amountMinor: t.amountMinor,
+        changeMinor: 0,
+        currency: t.currency,
+        method: t.method,
+        settledAmountMinor: null as number | null,
+      })),
+      settleable: false,
+      settlementError,
+      summary: {
+        balanceDueMinor: Math.max(total.minor - tenderedMinor, 0),
+        changeMinor: 0,
+        settledMinor: 0,
+        tenderedMinor,
+      },
+      underpaid: tenderedMinor < total.minor,
+    };
+  }
+}
+
+async function buildSaleQuote(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: {
+    lines: MspLineInput[];
+    locationId: string;
+    shiftId?: string;
+    terminalId?: string;
+    tenders?: TenderInput[];
+  }
+) {
+  // Same sellable-location gate the sale enforces (INV-P4-7) — the preview must
+  // refuse exactly what the sale would refuse.
+  await assertSaleLocation(tx, input.locationId);
+  // Same shift/terminal enforcement createSale runs (resolveSaleShift): if the
+  // tenant requires an open shift, or a provided shiftId is closed/foreign, the
+  // sale would reject — so the quote must too, or a green preview could be
+  // rejected at submit for a shift reason (Codex HIGH — quote/createSale drift).
+  // Read-only: resolveSaleShift only SELECTs shift rows + location settings.
+  await resolveSaleShift(
+    tx,
+    ctx,
+    input.locationId,
+    input.shiftId,
+    input.terminalId
+  );
+  const products = await tx
+    .select()
+    .from(schema.product)
+    .where(
+      inArray(
+        schema.product.id,
+        input.lines.map((line) => line.productId)
+      )
+    );
+  // SAME pricing + SKU-tuple validation the sale uses (no drift).
+  const { priced, subtotal } = await priceMspLines(tx, products, input.lines);
+  const productById = new Map(products.map((p) => [p.id, p]));
+  const skuRows = priced.length
+    ? await tx
+        .select({ code: schema.sku.code, id: schema.sku.id })
+        .from(schema.sku)
+        .where(
+          inArray(
+            schema.sku.id,
+            priced.map((p) => p.skuId)
+          )
+        )
+    : [];
+  const skuCodeById = new Map(skuRows.map((s) => [s.id, s.code]));
+  const lines = priced.map((p) => {
+    const lineTotal = services.multiplyMoney(
+      services.money(p.unitPriceMinor, subtotal.currency, subtotal.scale),
+      p.qty
+    );
+    return {
+      // Reserved seams mirror createSale (tax/discount = 0 in the MSP slice).
+      discountMinor: 0,
+      lineTotalMinor: lineTotal.minor,
+      productId: p.productId,
+      productName: productById.get(p.productId)?.name ?? null,
+      qty: p.qty,
+      skuCode: skuCodeById.get(p.skuId) ?? null,
+      skuId: p.skuId,
+      taxMinor: 0,
+      taxRateId: null as string | null,
+      unitPriceMinor: p.unitPriceMinor,
+    };
+  });
+  const payments =
+    input.tenders && input.tenders.length > 0
+      ? previewTenders(input.tenders, subtotal)
+      : {
+          items: [],
+          settleable: false,
+          settlementError: null as string | null,
+          summary: {
+            balanceDueMinor: subtotal.minor,
+            changeMinor: 0,
+            settledMinor: 0,
+            tenderedMinor: 0,
+          },
+          underpaid: true,
+        };
+  return {
+    currency: subtotal.currency,
+    lines,
+    payments,
+    scale: subtotal.scale,
+    schemaVersion: 1 as const,
+    taxBreakdown: [] as Array<{
+      baseMinor: number | null;
+      taxMinor: number;
+      taxRateId: string | null;
+    }>,
+    totals: {
+      discountMinor: 0,
+      subtotalMinor: subtotal.minor,
+      taxMinor: 0,
+      totalMinor: subtotal.minor,
+    },
+  };
+}
+
 type SaleRow = typeof schema.sale.$inferSelect;
 
 // One sale line: insert it, deduct stock through the ledger (the only mutator),
@@ -4710,6 +4883,139 @@ export const posRouter = {
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "pos.create_sale");
         return services.reclaimNumberLease(tx, ctx, input);
+      });
+    }),
+
+  // ── POS item search (item 1 frontend-readiness) ──────────────────────────
+  // Cashier-safe, SALE-LINE-READY catalog read: returns skuId + price so the POS
+  // never needs the admin `catalog.skuList` (products.create-gated). Gated on
+  // pos.create_sale; exposes only cashier-relevant fields (no costing/policy
+  // internals). SKU-level: one row per sellable SKU matching name/code/barcode.
+  itemSearch: tenantProcedure
+    .input(
+      z.object({
+        // Optional terminal location — reserved for a future cheap on-hand
+        // summary join; unused today (stock display is a deferred enhancement).
+        locationId: z.string().uuid().optional(),
+        limit: z.number().int().min(1).max(50).default(20),
+        q: z.string().min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        const term = `%${input.q}%`;
+        // Exact barcode-scan match (barcode value is unique per tenant).
+        const skuIdsByBarcode = tx
+          .select({ skuId: schema.barcode.skuId })
+          .from(schema.barcode)
+          .where(eq(schema.barcode.value, input.q));
+        const rows = await tx
+          .select({
+            currency: schema.product.currency,
+            isActive: schema.sku.isActive,
+            matchedBarcode: schema.barcode.value,
+            priceMinor: schema.product.priceMinor,
+            productCode: schema.product.sku,
+            productId: schema.product.id,
+            productName: schema.product.name,
+            scale: schema.product.scale,
+            skuCode: schema.sku.code,
+            skuId: schema.sku.id,
+            skuName: schema.sku.name,
+            trackingMode: schema.product.trackingMode,
+          })
+          .from(schema.sku)
+          .innerJoin(
+            schema.product,
+            eq(schema.sku.productId, schema.product.id)
+          )
+          // matchedBarcode = the scanned code, when q is this SKU's barcode.
+          .leftJoin(
+            schema.barcode,
+            and(
+              eq(schema.barcode.skuId, schema.sku.id),
+              eq(schema.barcode.value, input.q)
+            )
+          )
+          .where(
+            and(
+              // Sellable only: product live, sku active + live.
+              isNull(schema.product.deletedAt),
+              isNull(schema.sku.deletedAt),
+              eq(schema.sku.isActive, true),
+              or(
+                ilike(schema.product.name, term),
+                ilike(schema.product.sku, term),
+                ilike(schema.sku.code, term),
+                ilike(schema.sku.name, term),
+                inArray(schema.sku.id, skuIdsByBarcode)
+              )
+            )
+          )
+          .limit(input.limit);
+        return rows.map((r) => ({
+          currency: r.currency,
+          // Sale-line-ready: productId + skuId feed pos.createSale directly.
+          displayName: r.skuName
+            ? `${r.productName} — ${r.skuName}`
+            : r.productName,
+          matchedBarcode: r.matchedBarcode,
+          priceMinor: Number(r.priceMinor),
+          productCode: r.productCode,
+          productId: r.productId,
+          productName: r.productName,
+          scale: r.scale,
+          sellable: r.isActive,
+          skuCode: r.skuCode,
+          skuId: r.skuId,
+          skuName: r.skuName,
+          trackingMode: r.trackingMode,
+        }));
+      });
+    }),
+
+  // ── Pre-sale cart/tender quote (item 2 frontend-readiness) ───────────────
+  // Read-only preview of an uncommitted cart. Reuses the SAME priceMspLines +
+  // settleTenders as pos.createSale (so the quote can never drift from the
+  // charge). Creates NO sale/invoice/tender/stock/number/outbox. The frontend
+  // renders these totals directly and never computes money locally.
+  quote: tenantProcedure
+    .input(
+      z.object({
+        locationId: z.string().uuid(),
+        lines: z
+          .array(
+            z.object({
+              productId: z.string().uuid(),
+              qty: z.number().int().positive(),
+              skuId: z.string().uuid(),
+              unitPriceMinor: z.number().int().min(0).optional(),
+            })
+          )
+          .min(1),
+        // Mirror createSale's shift inputs so the preview applies the same
+        // shift_enforcement (a green quote can't be rejected by the sale for a
+        // shift reason).
+        shiftId: z.string().uuid().optional(),
+        terminalId: z.string().min(1).optional(),
+        tenders: z
+          .array(
+            z.object({
+              amountMinor: z.number().int().min(0),
+              currency: z.string().length(3),
+              method: z.enum(schema.TENDER_METHODS),
+            })
+          )
+          .optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        return buildSaleQuote(tx, ctx, input);
       });
     }),
 

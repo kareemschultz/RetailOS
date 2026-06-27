@@ -17,6 +17,7 @@ const CASHIER = "u_cashier_e2e";
 const ORG_B = "org_e2e_b";
 const ADMIN_B = "u_admin_e2e_b";
 const STORED_VALUE_TENDER_RESERVED_RE = /Stored-value tenders are reserved/;
+const UNDERPAYMENT_RE = /Underpayment/;
 
 function makeCtx(userId: string, organizationId: string | null): Context {
   return {
@@ -3614,5 +3615,334 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       (e) => (e.payload as { saleId?: string }).saleId === sale.saleId
     );
     expect((mine?.payload as { shiftId: string | null }).shiftId).toBeNull();
+  });
+
+  // ── Frontend-readiness slice: POS item search + pre-sale quote ────────────
+  // Seed a sellable product+sku+location with stock; returns the ids a POS line
+  // needs. Setup runs as ADMIN (full perms); the assertions run as CASHIER.
+  const seedSellable = async (suffix: string) => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: `Co-${suffix}` },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: `Store-${suffix}`, type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      {
+        sku: `FR-${suffix}`,
+        name: `Prod ${suffix}`,
+        priceMinor: 1000,
+        currency: "USD",
+      },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: `FR-${suffix}-EA`, productId: product.id },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 10,
+        skuId: sku.id,
+        unitCostMinor: 500,
+      },
+      admin
+    );
+    return {
+      admin,
+      locationId: location.id,
+      productId: product.id,
+      skuId: sku.id,
+    };
+  };
+
+  it("POS item search: a cashier finds sellable items, receives skuId, and matches a scanned barcode", async () => {
+    const { admin, skuId } = await seedSellable("search");
+    await call(
+      appRouter.catalog.barcodeCreate,
+      { skuId, value: "BC-SEARCH-001" },
+      admin
+    );
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+
+    // By name.
+    const byName = await call(
+      appRouter.pos.itemSearch,
+      { q: "Prod search" },
+      cashier
+    );
+    const hit = byName.find((r) => r.skuId === skuId);
+    expect(hit).toBeDefined();
+    expect(hit?.skuId).toBe(skuId);
+    expect(hit?.priceMinor).toBe(1000);
+    expect(hit?.currency).toBe("USD");
+    expect(hit?.scale).toBe(2);
+    expect(hit?.sellable).toBe(true);
+    expect(hit?.matchedBarcode).toBeNull();
+
+    // By scanned barcode — exact match surfaces matchedBarcode.
+    const byBarcode = await call(
+      appRouter.pos.itemSearch,
+      { q: "BC-SEARCH-001" },
+      cashier
+    );
+    const scanned = byBarcode.find((r) => r.skuId === skuId);
+    expect(scanned?.matchedBarcode).toBe("BC-SEARCH-001");
+  });
+
+  it("POS item search: a cashier is blocked from admin catalog.skuList and the DTO leaks no admin internals", async () => {
+    const { productId } = await seedSellable("guard");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+
+    // Admin-only catalog API (products.create) — cashier forbidden.
+    await expect(
+      call(appRouter.catalog.skuList, { productId }, cashier)
+    ).rejects.toThrow();
+
+    // But the cashier-safe POS search works and exposes only POS fields.
+    const results = await call(
+      appRouter.pos.itemSearch,
+      { q: "Prod guard" },
+      cashier
+    );
+    expect(results.length).toBeGreaterThan(0);
+    const row = results[0] as Record<string, unknown>;
+    expect(row).not.toHaveProperty("costingMethod");
+    expect(row).not.toHaveProperty("oversellPolicy");
+    expect(row).not.toHaveProperty("returnCostingPolicy");
+    expect(row).not.toHaveProperty("removalStrategy");
+  });
+
+  it("quote totals match pos.createSale for the same cart", async () => {
+    const { locationId, productId, skuId } = await seedSellable("match");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const lines = [{ productId, qty: 3, skuId }];
+    const tenders = [
+      { amountMinor: 3000, currency: "USD", method: "cash" as const },
+    ];
+
+    const quote = await call(
+      appRouter.pos.quote,
+      { lines, locationId, tenders },
+      cashier
+    );
+    expect(quote.totals.subtotalMinor).toBe(3000);
+    expect(quote.totals.totalMinor).toBe(3000);
+    expect(quote.payments.settleable).toBe(true);
+    expect(quote.payments.summary.balanceDueMinor).toBe(0);
+    expect(quote.payments.summary.changeMinor).toBe(0);
+
+    // The committed sale charges exactly what the quote previewed.
+    const sale = await call(
+      appRouter.pos.createSale,
+      { idempotencyKey: "match-key", lines, locationId, tenders },
+      cashier
+    );
+    expect(quote.totals.totalMinor).toBe(sale.totalMinor);
+  });
+
+  it("quote computes cash change on overpayment", async () => {
+    const { locationId, productId, skuId } = await seedSellable("change");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const quote = await call(
+      appRouter.pos.quote,
+      {
+        lines: [{ productId, qty: 2, skuId }],
+        locationId,
+        tenders: [{ amountMinor: 2500, currency: "USD", method: "cash" }],
+      },
+      cashier
+    );
+    expect(quote.totals.totalMinor).toBe(2000);
+    expect(quote.payments.settleable).toBe(true);
+    expect(quote.payments.summary.changeMinor).toBe(500);
+    expect(quote.payments.summary.balanceDueMinor).toBe(0);
+  });
+
+  it("quote flags underpayment consistently with createSale (which rejects it)", async () => {
+    const { locationId, productId, skuId } = await seedSellable("under");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const lines = [{ productId, qty: 2, skuId }];
+    const tenders = [
+      { amountMinor: 1500, currency: "USD", method: "cash" as const },
+    ];
+
+    const quote = await call(
+      appRouter.pos.quote,
+      { lines, locationId, tenders },
+      cashier
+    );
+    expect(quote.payments.settleable).toBe(false);
+    expect(quote.payments.underpaid).toBe(true);
+    expect(quote.payments.summary.balanceDueMinor).toBe(500);
+    expect(quote.payments.settlementError).toMatch(UNDERPAYMENT_RE);
+
+    // The same cart through createSale is rejected — the quote flag is honest.
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        { idempotencyKey: "under-key", lines, locationId, tenders },
+        cashier
+      )
+    ).rejects.toThrow();
+  });
+
+  it("quote creates no sale/invoice/tender/stock/outbox records", async () => {
+    const { locationId, productId, skuId } = await seedSellable("noop");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const counts = () =>
+      withTenant(db, ORG, async (tx) => ({
+        invoices: (
+          await tx.select({ id: schema.invoice.id }).from(schema.invoice)
+        ).length,
+        ledger: (
+          await tx
+            .select({ id: schema.stockLedger.id })
+            .from(schema.stockLedger)
+        ).length,
+        outbox: (
+          await tx
+            .select({ id: schema.outboxEvent.id })
+            .from(schema.outboxEvent)
+        ).length,
+        sales: (await tx.select({ id: schema.sale.id }).from(schema.sale))
+          .length,
+        tenders: (await tx.select({ id: schema.tender.id }).from(schema.tender))
+          .length,
+      }));
+
+    const before = await counts();
+    await call(
+      appRouter.pos.quote,
+      {
+        lines: [{ productId, qty: 1, skuId }],
+        locationId,
+        tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+      },
+      cashier
+    );
+    const after = await counts();
+    expect(after).toEqual(before);
+  });
+
+  it("quote enforces tenant isolation — a cross-tenant sku is rejected", async () => {
+    const { locationId, productId } = await seedSellable("iso");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+
+    // A sku that belongs to a DIFFERENT tenant (ORG_B).
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const companyB = await call(
+      appRouter.company.create,
+      { name: "Co iso B" },
+      adminB
+    );
+    const productB = await call(
+      appRouter.product.create,
+      { sku: "ISO-B", name: "Prod iso B", priceMinor: 1000, currency: "USD" },
+      adminB
+    );
+    const skuB = await call(
+      appRouter.catalog.skuCreate,
+      { code: "ISO-B-EA", productId: productB.id },
+      adminB
+    );
+    expect(companyB.id).toBeDefined();
+
+    // ORG's cashier cannot quote against ORG_B's sku (RLS-scoped visibility).
+    await expect(
+      call(
+        appRouter.pos.quote,
+        { lines: [{ productId, qty: 1, skuId: skuB.id }], locationId },
+        cashier
+      )
+    ).rejects.toThrow();
+  });
+
+  it("quote applies the same shift enforcement as createSale (rejects an invalid shiftId)", async () => {
+    const { locationId, productId, skuId } = await seedSellable("shift");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const lines = [{ productId, qty: 1, skuId }];
+    // A shiftId that does not resolve must be rejected by resolveSaleShift in
+    // BOTH the quote and the sale — no green-preview-then-submit-rejection drift.
+    const bogusShift = "00000000-0000-0000-0000-000000000000";
+    await expect(
+      call(
+        appRouter.pos.quote,
+        { lines, locationId, shiftId: bogusShift, terminalId: "T-shift" },
+        cashier
+      )
+    ).rejects.toThrow();
+    await expect(
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: "shift-drift-key",
+          lines,
+          locationId,
+          shiftId: bogusShift,
+          terminalId: "T-shift",
+          tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+        },
+        cashier
+      )
+    ).rejects.toThrow();
+  });
+
+  it("quote succeeds with a valid open shift exactly as createSale does", async () => {
+    const { admin, locationId, productId, skuId } =
+      await seedSellable("shiftok");
+    const terminalId = "T-shiftok";
+    // Open a real shift on this terminal (the context createSale will accept).
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "shiftok-open",
+        locationId,
+        openingFloat: [{ amountMinor: 0, currency: "USD", scale: 2 }],
+        terminalId,
+      },
+      admin
+    );
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const lines = [{ productId, qty: 1, skuId }];
+    const tenders = [
+      { amountMinor: 1000, currency: "USD", method: "cash" as const },
+    ];
+
+    // Valid open shift → quote is settleable (the same context the sale accepts).
+    const quote = await call(
+      appRouter.pos.quote,
+      { lines, locationId, shiftId: opened.shiftId, terminalId, tenders },
+      cashier
+    );
+    expect(quote.payments.settleable).toBe(true);
+    expect(quote.totals.totalMinor).toBe(1000);
+
+    // createSale with the SAME shift context succeeds — positive symmetry.
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "shiftok-sale",
+        lines,
+        locationId,
+        shiftId: opened.shiftId,
+        terminalId,
+        tenders,
+      },
+      cashier
+    );
+    expect(sale.totalMinor).toBe(1000);
   });
 });
