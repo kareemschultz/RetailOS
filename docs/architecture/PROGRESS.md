@@ -13,6 +13,14 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Phase 4 — Frontend-Readiness slice 3: POS location picker (in progress, 2026-06-27)
+- **Branch:** `phase-4-pos-location-list` off clean `master` (`d5446c6`, post-#35). The THIRD frontend-unblocking backend read — same class as `pos.itemSearch` (createSale needed `skuId` the FE couldn't get → itemSearch; now quote/createSale need `locationId` the FE couldn't get → this). Backend read only; no frontend code; architecture/UI strategy stay frozen.
+- **Scope (one PR, one endpoint):** **`pos.locationList`** — cashier-safe (`pos.create_sale`, NOT any `products.*`/admin grant), tenant-scoped (RLS), returns ONLY **sellable + non-archived** locations (a non-sellable one is refused by `assertSaleLocation`/INV-P4-7, so the picker only ever offers a location `pos.quote`/`pos.createSale` will accept) with ONLY POS-picker fields `{id, displayName, companyId, type, isSellable, isBonded, isTransit}` — no shift/cash/costing/hierarchy internals, no mutation. Returns `{autoSelect, locations[]}` where **`autoSelect` = exactly one eligible location** → single-store tenant skips the dropdown (login→auto→POS); multi-store gets a picker. Same contract, business-size-adaptive UX (small↔enterprise, one codebase).
+- **Tests (real Postgres):** +1 router test in `vs1.integration.test.ts` — fresh tenant (deterministic count); sellable-only (excludes a direct-inserted non-sellable bonded location); `autoSelect` true at 1 store → false at 2; DTO leaks no management/hierarchy/cash internals; **no-membership caller is rejected** (cashier gate is real).
+- **Codex adversarial review (tenant-isolation / cashier-safety / DTO-leak / autoSelect / sale-location consistency / test rigor):** 0 CRIT; **1 HIGH + 1 LOW, both folded.** HIGH — an `includeArchived` flag (reflexively mirrored from admin `*.list`) let a cashier surface retired-but-sellable locations, contradicting the contract → **removed entirely; non-archived is now unconditional.** LOW — added the missing permission-denial regression. Tenant-isolation, gating, leak, autoSelect, and filter-consistency all came back CLEAN.
+- **Verification:** check · check-types · mojibake green; disposable PG18 (`roles.sql`→`db:migrate` 0000→22→test as `retailos_app`): full gate **7/7 turbo tasks, api 50/50**, zero skips.
+- **Status:** review folded + re-verified → opening PR → **STOP** (no merge without owner approval; frontend MSP does not start until this merges).
+
 ### Phase 4 — Frontend-Readiness slice (POS item DTO + cart quote) (in progress, 2026-06-27)
 - **Branch:** `phase-4-frontend-readiness` off clean `master` (`483ec4a`, post-#34). Narrow frontend-unblocking backend slice; NOT a broad Phase-4 reopen. No frontend code.
 - **Scope (one PR, two endpoints):**

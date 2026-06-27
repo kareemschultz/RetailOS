@@ -4976,6 +4976,47 @@ export const posRouter = {
       });
     }),
 
+  // ── POS location picker (frontend-readiness) ────────────────────────────
+  // Cashier-safe, SELL-FROM-READY location read: pos.quote/pos.createSale both
+  // REQUIRE a locationId, but a cashier must never reach the admin catalog or
+  // location-management reads. Gated on pos.create_sale; tenant-scoped (RLS);
+  // returns ONLY SELLABLE, non-archived locations — a non-sellable one would be
+  // refused by assertSaleLocation (INV-P4-7), so the picker only ever offers a
+  // location the sale will accept — with ONLY the fields the picker needs (no
+  // shift/cash/costing/hierarchy internals, no mutation).
+  // autoSelect ⇔ exactly one eligible location: a single-store tenant skips the
+  // dropdown (login → auto-selected → POS); a multi-store tenant gets a picker.
+  // Same contract, business-size-adaptive UX (small ↔ enterprise, one codebase).
+  locationList: tenantProcedure.input(z.object({})).handler(({ context }) => {
+    const ctx = context.requestContext;
+    return withTenant(db, ctx.tenantId, async (tx) => {
+      await assertPermission(tx, ctx, "pos.create_sale");
+      const locations = await tx
+        .select({
+          companyId: schema.location.companyId,
+          displayName: schema.location.name,
+          id: schema.location.id,
+          isBonded: schema.location.isBonded,
+          isSellable: schema.location.isSellable,
+          isTransit: schema.location.isTransit,
+          type: schema.location.type,
+        })
+        .from(schema.location)
+        // SELLABLE + non-archived UNCONDITIONALLY — no includeArchived escape
+        // hatch (Codex HIGH): a cashier picker must never surface a retired
+        // location, and the admin-list affordance has no place on a cashier
+        // read. assertSaleLocation accepts exactly this set (sellable), so the
+        // picker only ever offers a location pos.quote/createSale will accept.
+        .where(
+          and(
+            eq(schema.location.isSellable, true),
+            isNull(schema.location.deletedAt)
+          )
+        );
+      return { autoSelect: locations.length === 1, locations };
+    });
+  }),
+
   // ── Pre-sale cart/tender quote (item 2 frontend-readiness) ───────────────
   // Read-only preview of an uncommitted cart. Reuses the SAME priceMspLines +
   // settleTenders as pos.createSale (so the quote can never drift from the

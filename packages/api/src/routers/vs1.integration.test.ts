@@ -3725,6 +3725,91 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(row).not.toHaveProperty("removalStrategy");
   });
 
+  it("POS location picker: cashier-safe, sellable-only, autoSelect on a single store", async () => {
+    // A dedicated tenant so the autoSelect (exactly-one) count is deterministic
+    // and not polluted by locations the other tests seed into ORG.
+    const ORG_C = "org_e2e_loc";
+    await db
+      .insert(schema.organization)
+      .values([{ id: ORG_C, name: "E2E Tenant Loc" }])
+      .onConflictDoNothing();
+    await withTenant(db, ORG_C, (tx) =>
+      tx
+        .insert(schema.membership)
+        .values([
+          { tenantId: ORG_C, userId: ADMIN, role: "tenant_admin" },
+          { tenantId: ORG_C, userId: CASHIER, role: "cashier" },
+        ])
+        .onConflictDoNothing()
+    );
+    // Hermetic: clear this tenant's locations/companies before counting.
+    await withTenant(db, ORG_C, async (tx) => {
+      await tx.delete(schema.location);
+      await tx.delete(schema.company);
+    });
+
+    const admin = { context: makeCtx(ADMIN, ORG_C) };
+    const cashier = { context: makeCtx(CASHIER, ORG_C) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "LocCo" },
+      admin
+    );
+
+    // One sellable store (via the router) + one NON-sellable bonded location
+    // (direct insert — location.create has no isSellable input, it defaults true).
+    const store = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Main Store", type: "store" },
+      admin
+    );
+    await withTenant(db, ORG_C, (tx) =>
+      tx.insert(schema.location).values({
+        tenantId: ORG_C,
+        companyId: company.id,
+        name: "Bond Room",
+        type: "bonded",
+        isSellable: false,
+        isBonded: true,
+        createdBy: ADMIN,
+      })
+    );
+
+    // Cashier lists POS locations: sellable-only, exactly one ⇒ autoSelect.
+    const single = await call(appRouter.pos.locationList, {}, cashier);
+    expect(single.autoSelect).toBe(true);
+    expect(single.locations).toHaveLength(1);
+    const row = single.locations[0] as Record<string, unknown>;
+    expect(row.id).toBe(store.id);
+    expect(row.displayName).toBe("Main Store");
+    expect(row.companyId).toBe(company.id);
+    expect(row.isSellable).toBe(true);
+    // The POS DTO leaks no management/hierarchy/cash internals.
+    expect(row).not.toHaveProperty("parentLocationId");
+    expect(row).not.toHaveProperty("shiftEnforcement");
+    expect(row).not.toHaveProperty("cashDrawer");
+    expect(row).not.toHaveProperty("blindClose");
+    expect(row).not.toHaveProperty("removalStrategy");
+    expect(row).not.toHaveProperty("maxWeight");
+
+    // A second sellable store ⇒ picker (autoSelect false), still sellable-only.
+    await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Branch Store", type: "store" },
+      admin
+    );
+    const many = await call(appRouter.pos.locationList, {}, cashier);
+    expect(many.autoSelect).toBe(false);
+    expect(many.locations).toHaveLength(2);
+    expect(many.locations.every((l) => l.isSellable)).toBe(true);
+
+    // Cashier-safe gate is real: a caller with no membership (and so no
+    // pos.create_sale grant) in this tenant is rejected, not served an empty list.
+    await expect(
+      call(appRouter.pos.locationList, {}, { context: makeCtx(ADMIN_B, ORG_C) })
+    ).rejects.toThrow();
+  });
+
   it("quote totals match pos.createSale for the same cart", async () => {
     const { locationId, productId, skuId } = await seedSellable("match");
     const cashier = { context: makeCtx(CASHIER, ORG) };
