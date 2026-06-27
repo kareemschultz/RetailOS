@@ -1,4 +1,5 @@
 import { Toaster } from "@RetailOS/ui/components/sonner";
+import { TooltipProvider } from "@RetailOS/ui/components/tooltip";
 import type { QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import {
@@ -11,7 +12,7 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import type { orpc } from "@/utils/orpc";
 
-import Header from "../components/header";
+import { ThemeProvider } from "../components/theme-provider";
 
 import appCss from "../index.css?url";
 export interface RouterAppContext {
@@ -22,23 +23,14 @@ export interface RouterAppContext {
 export const Route = createRootRouteWithContext<RouterAppContext>()({
   head: () => ({
     meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "My App",
-      },
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      // Tell the UA which color schemes we support so native controls + the
+      // scrollbar match the active theme.
+      { name: "color-scheme", content: "light dark" },
+      { title: "RetailOS" },
     ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
 
   component: RootDocument,
@@ -46,16 +38,24 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   return (
-    <html className="dark" lang="en">
+    // suppressHydrationWarning: next-themes sets the `class`/`style` on <html>
+    // before React hydrates, which would otherwise trip a hydration mismatch.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
-          <Header />
-          <Outlet />
-        </div>
-        <Toaster richColors />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          disableTransitionOnChange
+          enableSystem
+        >
+          <TooltipProvider>
+            <Outlet />
+          </TooltipProvider>
+          <Toaster richColors />
+        </ThemeProvider>
         <TanStackRouterDevtools position="bottom-left" />
         <ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />
         <Scripts />
