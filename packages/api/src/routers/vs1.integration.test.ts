@@ -3899,4 +3899,50 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       )
     ).rejects.toThrow();
   });
+
+  it("quote succeeds with a valid open shift exactly as createSale does", async () => {
+    const { admin, locationId, productId, skuId } =
+      await seedSellable("shiftok");
+    const terminalId = "T-shiftok";
+    // Open a real shift on this terminal (the context createSale will accept).
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "shiftok-open",
+        locationId,
+        openingFloat: [{ amountMinor: 0, currency: "USD", scale: 2 }],
+        terminalId,
+      },
+      admin
+    );
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const lines = [{ productId, qty: 1, skuId }];
+    const tenders = [
+      { amountMinor: 1000, currency: "USD", method: "cash" as const },
+    ];
+
+    // Valid open shift → quote is settleable (the same context the sale accepts).
+    const quote = await call(
+      appRouter.pos.quote,
+      { lines, locationId, shiftId: opened.shiftId, terminalId, tenders },
+      cashier
+    );
+    expect(quote.payments.settleable).toBe(true);
+    expect(quote.totals.totalMinor).toBe(1000);
+
+    // createSale with the SAME shift context succeeds — positive symmetry.
+    const sale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "shiftok-sale",
+        lines,
+        locationId,
+        shiftId: opened.shiftId,
+        terminalId,
+        tenders,
+      },
+      cashier
+    );
+    expect(sale.totalMinor).toBe(1000);
+  });
 });
