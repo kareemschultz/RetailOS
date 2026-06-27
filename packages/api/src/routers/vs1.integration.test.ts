@@ -3810,6 +3810,97 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).rejects.toThrow();
   });
 
+  it("POS sale lookup: cashier-safe, recent-first, bounded, leaks no line/COGS internals", async () => {
+    const { locationId, productId, skuId } = await seedSellable("salesearch");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const lines = [{ productId, qty: 1, skuId }];
+    const tenders = [
+      { amountMinor: 1000, currency: "USD", method: "cash" as const },
+    ];
+    // Two sales so we can assert recency ordering + presence.
+    const first = await call(
+      appRouter.pos.createSale,
+      { idempotencyKey: "ss-1", lines, locationId, tenders },
+      cashier
+    );
+    const second = await call(
+      appRouter.pos.createSale,
+      { idempotencyKey: "ss-2", lines, locationId, tenders },
+      cashier
+    );
+
+    const recent = await call(appRouter.pos.saleSearch, {}, cashier);
+    // Both sales are findable.
+    expect(recent.some((s) => s.id === first.saleId)).toBe(true);
+    expect(recent.some((s) => s.id === second.saleId)).toBe(true);
+    // Result is recency-ordered (createdAt non-increasing) — robust even if two
+    // fast sales share a timestamp (no strict second-before-first dependency).
+    const times = recent.map((s) => Date.parse(s.createdAt));
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+
+    const row = recent.find((s) => s.id === second.saleId) as Record<
+      string,
+      unknown
+    >;
+    expect(row.number).toBe(second.number);
+    expect(row.totalMinor).toBe(1000);
+    expect(row.currency).toBe("USD");
+    expect(row.status).toBeDefined();
+    // No line/COGS/margin/rep internals — the sale-only select cannot leak them.
+    expect(row).not.toHaveProperty("cogsMinor");
+    expect(row).not.toHaveProperty("lines");
+    expect(row).not.toHaveProperty("subtotalMinor");
+    expect(row).not.toHaveProperty("salesRepId");
+    expect(row).not.toHaveProperty("customerId");
+
+    // Number search actually FILTERS: every returned row matches q, and a
+    // non-matching query returns NOTHING (not just "the sale happens to appear").
+    const byNumber = await call(
+      appRouter.pos.saleSearch,
+      { q: second.number },
+      cashier
+    );
+    expect(byNumber.some((s) => s.id === second.saleId)).toBe(true);
+    expect(byNumber.every((s) => s.number.includes(second.number))).toBe(true);
+    const noMatch = await call(
+      appRouter.pos.saleSearch,
+      { q: "NO-SUCH-SALE-NUMBER-ZZZ" },
+      cashier
+    );
+    expect(noMatch).toHaveLength(0);
+
+    // Bounded: limit is honored, and the hard max (50) is enforced by validation.
+    const limited = await call(appRouter.pos.saleSearch, { limit: 1 }, cashier);
+    expect(limited.length).toBeLessThanOrEqual(1);
+    await expect(
+      call(appRouter.pos.saleSearch, { limit: 51 }, cashier)
+    ).rejects.toThrow();
+
+    // Recency floor (Codex HIGH): a sale older than the 30-day window is NOT
+    // findable — even by its exact number — so scripted searches cannot walk the
+    // full history. Backdate the first sale and confirm it drops out while the
+    // recent one stays findable.
+    await withTenant(db, ORG, (tx) =>
+      tx
+        .update(schema.sale)
+        .set({ createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) })
+        .where(eq(schema.sale.id, first.saleId))
+    );
+    const afterBackdate = await call(
+      appRouter.pos.saleSearch,
+      { q: first.number },
+      cashier
+    );
+    expect(afterBackdate.some((s) => s.id === first.saleId)).toBe(false);
+    const stillRecent = await call(appRouter.pos.saleSearch, {}, cashier);
+    expect(stillRecent.some((s) => s.id === second.saleId)).toBe(true);
+
+    // A no-membership caller (no pos.create_sale in this tenant) is rejected.
+    await expect(
+      call(appRouter.pos.saleSearch, {}, { context: makeCtx(ADMIN_B, ORG) })
+    ).rejects.toThrow();
+  });
+
   it("quote totals match pos.createSale for the same cart", async () => {
     const { locationId, productId, skuId } = await seedSellable("match");
     const cashier = { context: makeCtx(CASHIER, ORG) };
