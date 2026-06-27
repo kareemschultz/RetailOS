@@ -27,7 +27,7 @@ CREATE TABLE "number_lease" (
 	CONSTRAINT "number_lease_idempotency_uq" UNIQUE("tenant_id","idempotency_key"),
 	CONSTRAINT "number_lease_status_chk" CHECK ("number_lease"."status" IN ('active','exhausted','expired','reclaimed','voided')),
 	CONSTRAINT "number_lease_range_chk" CHECK ("number_lease"."range_end" >= "number_lease"."range_start"),
-	CONSTRAINT "number_lease_next_chk" CHECK ("number_lease"."next_number" >= "number_lease"."range_start" AND "number_lease"."next_number" <= "number_lease"."range_end" + 1),
+	CONSTRAINT "number_lease_next_chk" CHECK ("number_lease"."next_number" >= "number_lease"."range_start" AND "number_lease"."next_number" - 1 <= "number_lease"."range_end"),
 	CONSTRAINT "number_lease_consumed_chk" CHECK ("number_lease"."consumed_through" IS NULL OR ("number_lease"."consumed_through" >= "number_lease"."range_start" - 1 AND "number_lease"."consumed_through" <= "number_lease"."range_end"))
 );
 --> statement-breakpoint
@@ -80,14 +80,18 @@ BEGIN
     hashtextextended('number_lease:' || NEW.tenant_id || ':' || NEW.number_block_id::text, 0)
   );
 
+  -- int8range with explicit bigint casts so `range_end + 1` cannot overflow int4
+  -- even if a lease row carries an int4-max ceiling (e.g. a block created by the
+  -- legacy count-based allocator). The backstop must never raise "integer out of
+  -- range"; it must cleanly accept or reject.
   IF EXISTS (
     SELECT 1
     FROM number_lease existing
     WHERE existing.tenant_id = NEW.tenant_id
       AND existing.number_block_id = NEW.number_block_id
       AND existing.id <> NEW.id
-      AND int4range(existing.range_start, existing.range_end + 1, '[)')
-        && int4range(NEW.range_start, NEW.range_end + 1, '[)')
+      AND int8range(existing.range_start::bigint, existing.range_end::bigint + 1, '[)')
+        && int8range(NEW.range_start::bigint, NEW.range_end::bigint + 1, '[)')
   ) THEN
     RAISE EXCEPTION 'number lease range overlaps existing lease'
       USING ERRCODE = '23514';

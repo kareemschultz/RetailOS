@@ -3785,7 +3785,7 @@
         },
         "number_lease_next_chk": {
           "name": "number_lease_next_chk",
-          "value": "\"number_lease\".\"next_number\" >= \"number_lease\".\"range_start\" AND \"number_lease\".\"next_number\" <= \"number_lease\".\"range_end\" + 1"
+          "value": "\"number_lease\".\"next_number\" >= \"number_lease\".\"range_start\" AND \"number_lease\".\"next_number\" - 1 <= \"number_lease\".\"range_end\""
         },
         "number_lease_consumed_chk": {
           "name": "number_lease_consumed_chk",

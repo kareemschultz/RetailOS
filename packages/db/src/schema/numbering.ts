@@ -161,9 +161,12 @@ export const numberLease = pgTable(
       "number_lease_range_chk",
       sql`${table.rangeEnd} >= ${table.rangeStart}`
     ),
+    // `next_number - 1 <= range_end` is the overflow-safe form of
+    // `next_number <= range_end + 1`: it never evaluates `range_end + 1`, so it
+    // cannot raise int4 overflow even when range_end is at the int4 ceiling.
     check(
       "number_lease_next_chk",
-      sql`${table.nextNumber} >= ${table.rangeStart} AND ${table.nextNumber} <= ${table.rangeEnd} + 1`
+      sql`${table.nextNumber} >= ${table.rangeStart} AND ${table.nextNumber} - 1 <= ${table.rangeEnd}`
     ),
     check(
       "number_lease_consumed_chk",

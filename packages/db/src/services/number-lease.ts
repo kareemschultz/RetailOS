@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
 import {
   type NumberLeaseStatus,
   numberBlock,
@@ -11,7 +11,13 @@ import { hashPayload } from "./idempotency";
 import type { ServiceContext } from "./types";
 
 const DEFAULT_LEASE_TTL_MINUTES = 24 * 60;
-const DEFAULT_LEASE_RANGE_END = 2_147_483_647;
+// Capped strictly below int4 max (2_147_483_647). A lease's exhausted cursor is
+// `range_end + 1`, and the overlap invariant computes `range_end + 1`; if a block
+// ceiling were int4 max, those `+ 1` expressions would overflow int4 at the very
+// top of the block. The headroom keeps `range_end + 1` (and `next_number`) inside
+// int4 for every lease the service creates. The DB-level CHECK/trigger are also
+// hardened to be overflow-proof regardless of how a block row was created.
+const DEFAULT_LEASE_RANGE_END = 2_000_000_000;
 
 export class NumberLeaseConflictError extends Error {
   constructor(message: string) {
@@ -418,9 +424,15 @@ export async function getCurrentNumberLease(
   _ctx: ServiceContext,
   input: CurrentNumberLeaseInput
 ): Promise<NumberLeaseRow | null> {
+  // Only a lease that is still active AND not yet past its expiry window is a
+  // usable "current" lease. A time-expired (but not yet status-flipped) lease
+  // would be rejected by consume's assertLeaseUsable, so handing it back as
+  // "current" would just make the client fail downstream — return null instead
+  // so the client knows to allocate a fresh lease.
   const filters = [
     eq(numberLease.terminalId, input.terminalId),
     eq(numberLease.status, "active"),
+    gt(numberLease.expiresAt, new Date()),
   ];
   if (input.companyId) {
     filters.push(eq(numberLease.companyId, input.companyId));

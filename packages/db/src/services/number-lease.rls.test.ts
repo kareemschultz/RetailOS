@@ -24,6 +24,8 @@ const url = process.env.RLS_TEST_DATABASE_URL;
 const TENANT = "number_lease_tenant";
 const OTHER_TENANT = "number_lease_other";
 const RACE_WIDTH = 8;
+const OVERLAP_REJECTION = /number lease range overlaps existing lease/;
+const INT_OVERFLOW = /out of range/;
 
 function required<T>(row: T | undefined, what: string): T {
   if (!row) {
@@ -541,6 +543,90 @@ describe.skipIf(!url)("number lease allocator (RLS + disjointness)", () => {
         )
       )
     ).rejects.toBeInstanceOf(NumberLeaseConflictError);
+  });
+
+  it("overlap backstop and next-cursor CHECK do not overflow at the int4 ceiling", async () => {
+    const INT4_MAX = 2_147_483_647;
+    // A block carrying the int4-max ceiling (as the legacy count-based allocator
+    // could create). The hardened trigger/CHECK must evaluate without raising
+    // "integer out of range".
+    const block = await withTenant(db, TENANT, async (tx) =>
+      required(
+        (
+          await tx
+            .insert(numberBlock)
+            .values({
+              companyId,
+              docType: "ceiling-receipt",
+              next: INT4_MAX - 10,
+              rangeEnd: INT4_MAX,
+              rangeStart: 1,
+              tenantId: TENANT,
+            })
+            .returning()
+        ).at(0),
+        "ceiling block"
+      )
+    );
+
+    // A lease whose range_end is exactly int4 max. Pre-fix, the trigger's
+    // int4range(range_start, range_end + 1) and the CHECK next_number <= range_end + 1
+    // would both overflow int4 here. Post-fix this inserts cleanly.
+    const lease = await withTenant(db, TENANT, async (tx) =>
+      required(
+        (
+          await tx
+            .insert(numberLease)
+            .values({
+              companyId,
+              docType: "ceiling-receipt",
+              expiresAt: new Date(Date.now() + 60_000),
+              idempotencyKey: "ceiling-lease",
+              nextNumber: INT4_MAX - 5,
+              numberBlockId: block.id,
+              rangeEnd: INT4_MAX,
+              rangeStart: INT4_MAX - 5,
+              requestHash: "ceiling-lease-hash",
+              terminalId: "term-ceiling",
+              tenantId: TENANT,
+            })
+            .returning()
+        ).at(0),
+        "ceiling lease"
+      )
+    );
+    expect(lease.rangeEnd).toBe(INT4_MAX);
+
+    // An overlapping lease must still be rejected by the backstop trigger — a
+    // clean rejection, NOT an integer-overflow crash. Drizzle wraps the pg error,
+    // so inspect the whole error chain: it must carry the trigger's overlap
+    // message and must NOT be "integer out of range".
+    let caught: unknown;
+    try {
+      await withTenant(db, TENANT, (tx) =>
+        tx.insert(numberLease).values({
+          companyId,
+          docType: "ceiling-receipt",
+          expiresAt: new Date(Date.now() + 60_000),
+          idempotencyKey: "ceiling-lease-overlap",
+          nextNumber: INT4_MAX - 3,
+          numberBlockId: block.id,
+          rangeEnd: INT4_MAX - 1,
+          rangeStart: INT4_MAX - 3,
+          requestHash: "ceiling-lease-overlap-hash",
+          terminalId: "term-ceiling-2",
+          tenantId: TENANT,
+        })
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeDefined();
+    const chain = `${(caught as Error)?.message ?? ""} ${
+      ((caught as { cause?: Error })?.cause as Error)?.message ?? ""
+    }`;
+    expect(chain).toMatch(OVERLAP_REJECTION);
+    expect(chain).not.toMatch(INT_OVERFLOW);
   });
 
   it("tenant isolation and composite FK guards hold", async () => {
