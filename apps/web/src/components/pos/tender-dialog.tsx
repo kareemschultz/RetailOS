@@ -64,6 +64,11 @@ export function TenderDialog({
   const amountFieldId = useId();
   const [method, setMethod] = useState<TenderMethod>("cash");
   const [amountText, setAmountText] = useState("");
+  // ONE idempotency key per checkout ATTEMPT, minted when the dialog opens and
+  // reused for every retry of THIS sale — so a double-click or a retry after a
+  // lost response collapses to a SINGLE sale on the backend (Codex HIGH). A new
+  // dialog-open is a new logical sale and gets a new key.
+  const [idempotencyKey, setIdempotencyKey] = useState("");
 
   // Default the amount to the exact total (a single DTO value) when the dialog
   // opens, so non-cash methods are one tap and cash starts at exact.
@@ -73,6 +78,13 @@ export function TenderDialog({
       setMethod("cash");
     }
   }, [open, quote.totals.totalMinor, quote.scale]);
+
+  // Mint a fresh idempotency key on each open (client-only; no SSR mismatch).
+  useEffect(() => {
+    if (open) {
+      setIdempotencyKey(crypto.randomUUID());
+    }
+  }, [open]);
 
   const amountMinor = toMinor(amountText, quote.scale);
   const tenders =
@@ -95,13 +107,16 @@ export function TenderDialog({
   const settleable = payments?.settleable ?? false;
 
   function pay() {
-    if (!(tenders && settleable)) {
+    // Guard against double-submission: no tender/unsettleable, an in-flight
+    // sale, or a not-yet-minted key all short-circuit. The stable key is the
+    // real protection (the backend collapses a duplicate); this is belt-and-braces.
+    if (!(tenders && settleable) || saleMutation.isPending || !idempotencyKey) {
       return;
     }
     saleMutation.mutate(
       {
         locationId,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey,
         lines,
         tenders,
       },
