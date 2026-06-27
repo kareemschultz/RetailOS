@@ -13,6 +13,17 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Phase 4 — Frontend-Readiness slice (POS item DTO + cart quote) (in progress, 2026-06-27)
+- **Branch:** `phase-4-frontend-readiness` off clean `master` (`483ec4a`, post-#34). Narrow frontend-unblocking backend slice; NOT a broad Phase-4 reopen. No frontend code.
+- **Scope (one PR, two endpoints):**
+  - **`pos.itemSearch`** — cashier-safe (`pos.create_sale`, NOT `products.create`), SALE-LINE-READY catalog read returning `skuId` + price + sellable so the POS never calls the admin `catalog.skuList`. SKU-level rows (productId, skuId, displayName, productName, skuCode/skuName, matchedBarcode on scan, priceMinor/currency/scale, trackingMode, sellable). Sellable-only filter (product live, sku active+live). Exposes NO admin internals (no costing/oversell/policy fields).
+  - **`pos.quote`** — read-only pre-sale cart/tender preview. Reuses the SAME `priceMspLines` + `settleTenders` `pos.createSale` uses (literally the same code path → cannot drift). Returns receipt-preview-compatible `{currency, scale, lines[], taxBreakdown[], totals{subtotal/discount/tax/total}, payments{items, summary{tendered/settled/change/balanceDue}, settleable, underpaid, settlementError}}`. Underpayment / cash-overpayment are FLAGGED (not thrown). Creates NO sale/invoice/tender/stock/number/outbox (pure SELECTs).
+- **Deferred (NOT built; tracking only):** lease↔createSale binding, offline queue, expiry sweeper, fiscal provider/fiscal_document, exchange settlement, commission, gift-card/store-credit ledger, accounting/GL. Stock-availability summary on item search deferred (no cheap unified on-hand read; D5 allows oversell anyway).
+- **Tests (real Postgres):** 7 new router tests in `vs1.integration.test.ts` — cashier search returns skuId + barcode match; cashier blocked from admin `skuList` + DTO leaks no internals; quote totals == createSale totals (same cart); cash overpayment/change; underpayment flagged consistently with createSale's rejection; quote mutates nothing (sale/invoice/tender/ledger/outbox counts unchanged); cross-tenant sku rejected.
+- **Codex adversarial review (frontend-duplication / quote-drift / admin-leak / quote-mutation):** 1 HIGH, folded. **HIGH** — `pos.quote` skipped the `resolveSaleShift` shift/terminal enforcement `pos.createSale` runs, so a green preview could be rejected at submit for a shift reason (quote/createSale drift). **Fix:** `pos.quote` now accepts optional `shiftId`/`terminalId` and runs the SAME `resolveSaleShift` (read-only — SELECTs shift rows only, no mutation) before pricing/settlement; +1 regression test proving quote and createSale reject an invalid shiftId identically. Q1/Q3/Q4 came back clean (itemSearch returns skuId+price with no admin-internal leak; quote is SELECT-only).
+- **Verification:** check · check-types · mojibake green; disposable PG18 (roles→migrate 0000→0021→test as `retailos_app`): **api 48/48, db 93/93**, zero skips.
+- **Status:** review folded + re-verified → opening PR → STOP (no merge without owner approval).
+
 ### Phase 4 Commit 6 — Number-Block Leasing (in progress, 2026-06-25)
 - **Branch:** `phase-4-commit-6-number-leasing` off clean `master` (`407b542`).
 - **Scope:** backend-only distributed number leasing. Architecture/governance/UI strategy remain frozen; no frontend work.
