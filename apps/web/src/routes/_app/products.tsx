@@ -4,7 +4,7 @@ import { Input } from "@RetailOS/ui/components/input";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Package, Search } from "lucide-react";
+import { Package, Search, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { formatMoney } from "@/lib/format";
@@ -34,13 +34,31 @@ const SKELETON_KEYS = ["a", "b", "c", "d", "e"] as const;
 
 function CatalogContent({
   isLoading,
+  isError,
+  errorMessage,
   rows,
   query,
 }: {
   isLoading: boolean;
+  isError: boolean;
+  errorMessage?: string;
   rows: ProductRow[];
   query: string;
 }) {
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+        <div className="flex size-11 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+          <TriangleAlert className="size-5" />
+        </div>
+        <p className="font-medium">Couldn’t load products</p>
+        <p className="text-muted-foreground text-sm">
+          {errorMessage ?? "Check your connection or permissions and retry."}
+        </p>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-px">
@@ -103,7 +121,8 @@ function CatalogContent({
 
 function ProductsScreen() {
   const [query, setQuery] = useState("");
-  const products = useQuery(orpc.product.list.queryOptions({ input: {} }));
+  // product.catalog returns a display-safe DTO (no internal costing/policy fields).
+  const products = useQuery(orpc.product.catalog.queryOptions({ input: {} }));
 
   const filtered = useMemo(() => {
     const rows = products.data ?? [];
@@ -138,13 +157,15 @@ function ProductsScreen() {
 
       <Card className="overflow-hidden p-0 shadow-sm">
         <CatalogContent
+          errorMessage={products.error?.message}
+          isError={products.isError}
           isLoading={products.isLoading}
           query={query}
           rows={filtered}
         />
       </Card>
 
-      {!products.isLoading && filtered.length > 0 ? (
+      {!(products.isLoading || products.isError) && filtered.length > 0 ? (
         <p className="text-muted-foreground text-sm">
           {filtered.length} product{filtered.length === 1 ? "" : "s"}
           {query ? ` matching “${query}”` : ""}

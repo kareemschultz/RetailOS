@@ -7,6 +7,7 @@ import {
   type LucideIcon,
   Package,
   Receipt,
+  TriangleAlert,
   Wallet,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -18,37 +19,7 @@ export const Route = createFileRoute("/_app/dashboard")({
   component: DashboardScreen,
 });
 
-type CurrencyTotal = {
-  currency: string;
-  scale: number;
-  totalMinor: number;
-} | null;
-
-// Pick the currency with the most activity as the headline figure; summing
-// minor units across currencies would be meaningless (charter §12).
-function topByValue(
-  rows: { currency: string; scale: number; valueMinor: number }[]
-): CurrencyTotal {
-  if (rows.length === 0) {
-    return null;
-  }
-  const byCurrency = new Map<
-    string,
-    { currency: string; scale: number; totalMinor: number }
-  >();
-  for (const row of rows) {
-    const existing = byCurrency.get(row.currency) ?? {
-      currency: row.currency,
-      scale: row.scale,
-      totalMinor: 0,
-    };
-    existing.totalMinor += row.valueMinor;
-    byCurrency.set(row.currency, existing);
-  }
-  return [...byCurrency.values()].sort(
-    (a, b) => b.totalMinor - a.totalMinor
-  )[0];
-}
+const SKELETON_KEYS = ["a", "b", "c", "d"] as const;
 
 function KpiCard({
   label,
@@ -82,38 +53,13 @@ function KpiCard({
 }
 
 function DashboardScreen() {
-  const sales = useQuery(orpc.reports.salesBasic.queryOptions({ input: {} }));
-  const valuation = useQuery(
-    orpc.reports.valuation.queryOptions({ input: {} })
+  // All KPI aggregation is server-side (reports.dashboardSummary). The client
+  // only renders the returned figures — no money arithmetic in the browser.
+  const summary = useQuery(
+    orpc.reports.dashboardSummary.queryOptions({ input: {} })
   );
-  const lowStock = useQuery(orpc.reports.lowStock.queryOptions({ input: {} }));
 
-  const salesTop = topByValue(
-    (sales.data?.byCurrency ?? []).map((r) => ({
-      currency: r.currency,
-      scale: r.scale,
-      valueMinor: r.totalMinor,
-    }))
-  );
-  const transactions = (sales.data?.byCurrency ?? []).reduce(
-    (sum, r) => sum + r.saleCount,
-    0
-  );
-  const inventoryTop = topByValue([
-    ...(valuation.data?.avco ?? []).map((r) => ({
-      currency: r.currency,
-      scale: r.scale,
-      valueMinor: r.totalValueMinor,
-    })),
-    ...(valuation.data?.fifo ?? []).map((r) => ({
-      currency: String(r.currency),
-      scale: Number(r.scale),
-      valueMinor: Number(r.totalValueMinor),
-    })),
-  ]);
-  const lowStockCount = lowStock.data?.length ?? 0;
-
-  const loading = sales.isLoading || valuation.isLoading || lowStock.isLoading;
+  const data = summary.data;
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
@@ -124,24 +70,39 @@ function DashboardScreen() {
         </p>
       </div>
 
-      {loading ? (
+      {summary.isError ? (
+        <Card className="border-destructive/30 shadow-sm">
+          <CardContent className="flex items-center gap-3 p-5 text-sm">
+            <TriangleAlert className="size-5 shrink-0 text-destructive" />
+            <div>
+              <p className="font-medium">Couldn’t load dashboard data</p>
+              <p className="text-muted-foreground">
+                {summary.error.message}. Check your connection or permissions
+                and retry.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {summary.isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {["a", "b", "c", "d"].map((k) => (
+          {SKELETON_KEYS.map((k) => (
             <Skeleton className="h-28 rounded-2xl" key={k} />
           ))}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
-            hint={salesTop ? "Completed sales" : "No sales yet"}
+            hint={data?.sales ? "Completed sales" : "No sales yet"}
             icon={Wallet}
             label="Total Sales"
             value={
-              salesTop
+              data?.sales
                 ? formatMoney(
-                    salesTop.totalMinor,
-                    salesTop.currency,
-                    salesTop.scale
+                    data.sales.totalMinor,
+                    data.sales.currency,
+                    data.sales.scale
                   )
                 : "—"
             }
@@ -150,27 +111,29 @@ function DashboardScreen() {
             hint="All time"
             icon={Receipt}
             label="Transactions"
-            value={transactions}
+            value={data?.transactionCount ?? 0}
           />
           <KpiCard
-            hint={inventoryTop ? "On hand, at cost" : "No stock valued"}
+            hint={data?.inventoryValue ? "On hand, at cost" : "No stock valued"}
             icon={Package}
             label="Inventory Value"
             value={
-              inventoryTop
+              data?.inventoryValue
                 ? formatMoney(
-                    inventoryTop.totalMinor,
-                    inventoryTop.currency,
-                    inventoryTop.scale
+                    data.inventoryValue.totalValueMinor,
+                    data.inventoryValue.currency,
+                    data.inventoryValue.scale
                   )
                 : "—"
             }
           />
           <KpiCard
-            hint={lowStockCount > 0 ? "Need reordering" : "All stocked"}
+            hint={
+              (data?.lowStockCount ?? 0) > 0 ? "Need reordering" : "All stocked"
+            }
             icon={AlertTriangle}
             label="Low-Stock Items"
-            value={lowStockCount}
+            value={data?.lowStockCount ?? 0}
           />
         </div>
       )}
