@@ -13,6 +13,14 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### 🚀 FIRST DEPLOYMENT — LIVE (2026-06-28)
+**RetailOS is live at https://retailos.karetechsolutions.com (api: retailos-api.karetechsolutions.com).** Branch `feat/deploy-server-image-and-auth` (PR #44) — deployed FROM the branch; merge to make `master` match prod.
+- **Infra:** `retailos-web:3001` + `retailos-server:3000` containers on the `pangolin` network (Traefik/SSL via Pangolin resources 68/69). `retailos` DB migrated on `postgres-central` (48 tables, RLS forced; runtime connects as `retailos_app`, `bypassrls=false`). All secrets in **Infisical** `/credentials/retailos` (DATABASE_URL/auth/cross-subdomain); deploy via `infisical run` (never on disk/git). NTFY-notified.
+- **Auth verified live:** sign-in 200, `activeOrganizationId` auto-set (the #41 hook), cross-subdomain cookie `.karetechsolutions.com` (web ↔ api). `pos.itemSearch` returns seeded products authed.
+- **Deploy bugs found+fixed (in PR #44):** web image never baked `VITE_SERVER_URL` (Vite reads `.env`, gitignored ⇒ write it from the build arg); compose runtime-secret wiring (`${VAR}` via `infisical run`, no infisical-entrypoint in the images); server image `node_modules` (Bun isolated-install symlink tree + root `.bun` store); **`/` showed the Better-T-Stack scaffold + sign-in went to scaffold `/dashboard` ⇒ `/`→`/pos` redirect + sign-in/up→`/pos`.**
+- **Demo seed (one-off script, removed):** `admin@retailos.demo` / `retailos-demo-2026` → org `org_retailos_demo` + Main Store + 3 products + 300 units stock.
+- **Follow-ups:** merge PR #44; formalize the demo seed into a committed `seedDemo` if repeatable demo tenants are wanted; the scaffold `_auth/dashboard` + `healthCheck`/`privateData` endpoints are now unreachable (harmless; can be removed in a cleanup).
+
 ### First-deployment prep — server image + cross-subdomain auth (in PR, 2026-06-28)
 - **Why:** RetailOS is on a VPS (no `localhost` for the owner) and the **backend was never containerized** (prod compose built web only; `retailos` DB on `postgres-central` is empty). So "view a working RetailOS at a URL" = its **first real deployment**. This PR is **steps 1–2 only** (reversible, repo-only, zero production touch); steps 3–6 (DB migrate/seed, container run, Pangolin DNS) are **owner-supervised**, gated on creds.
 - **Branch:** `feat/deploy-server-image-and-auth` off `master = d7b8653`.
