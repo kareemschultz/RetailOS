@@ -25,11 +25,18 @@ networks:
     driver: bridge
 
 services:
+  # ── Web client (TanStack Start SSR). Pangolin resource `retailos` → this. ──
   app:
+    # Explicit container_name — a generic `app` on the shared `pangolin` network
+    # collides in Docker DNS (lessons-learned). Traefik targets it by this name.
+    container_name: retailos-web
     build:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
+        # The browser-baked API origin. For the split-subdomain deploy this is the
+        # server's public origin (https://retailos-api.<domain>); the cross-subdomain
+        # cookie (packages/auth) shares the session between the two subdomains.
         VITE_SERVER_URL: ${VITE_SERVER_URL:-http://localhost:3000}
     init: true
     environment:
@@ -49,6 +56,35 @@ services:
           cpus: "1.00"
           memory: 512M
     # Cap log growth on the shared host (charter §26).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── API server (Hono + oRPC + Better Auth). Pangolin resource `retailos-api`
+  # → this; serves /rpc and /api/auth/* on port 3000. ──
+  server:
+    container_name: retailos-server
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    init: true
+    environment:
+      # Same Infisical machine-identity pull as web — resolves DATABASE_URL,
+      # BETTER_AUTH_SECRET, BETTER_AUTH_URL, CORS_ORIGIN, AUTH_COOKIE_DOMAIN, etc.
+      INFISICAL_DOMAIN: https://infisical.karetechsolutions.com
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID}
+      INFISICAL_ENV: prod
+      INFISICAL_PATH: /credentials/retailos
+      INFISICAL_TOKEN: ${INFISICAL_TOKEN}
+    networks: [pangolin, retailos-internal]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
     logging:
       driver: json-file
       options:

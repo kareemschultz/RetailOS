@@ -16,6 +16,10 @@ export const env = createEnv({
     DEPLOYMENT_MODE: z
       .enum(["saas", "dedicated", "managed", "self-hosted"])
       .default("saas"),
+    // Optional root cookie domain (e.g. "karetechsolutions.com") so the Better
+    // Auth session cookie is shared across same-site subdomains (web ↔ api).
+    // Env-driven; never hardcoded (§9). Unset ⇒ host-only cookie (local dev).
+    AUTH_COOKIE_DOMAIN: z.string().optional(),
   },
   runtimeEnv: process.env,
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
