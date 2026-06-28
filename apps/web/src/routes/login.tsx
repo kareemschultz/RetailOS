@@ -27,41 +27,38 @@ function RouteComponent() {
   const isSignIn = mode === "signin";
 
   return (
-    <div className="h-dvh lg:grid lg:grid-cols-6">
-      {/* Product preview — sourced from shadcn Studio login-page-02, re-themed
-          to RetailOS tokens; the preview is a real RetailOS POS, light + dark. */}
-      <div className="max-lg:hidden lg:col-span-3 xl:col-span-4">
-        <div className="relative z-1 flex h-full items-center justify-center overflow-hidden bg-muted px-6">
-          <div className="ro-rise relative shrink rounded-[20px] p-2.5 shadow-xl outline-2 outline-border -outline-offset-[2px]">
-            <img
-              alt="RetailOS point of sale ringing up a live sale"
-              className="max-h-[28rem] w-full rounded-lg object-contain dark:hidden"
-              height={900}
-              src="/pos-preview-light.png"
-              width={1440}
-            />
-            <img
-              alt="RetailOS point of sale ringing up a live sale"
-              className="hidden max-h-[28rem] w-full rounded-lg object-contain dark:inline-block"
-              height={900}
-              src="/pos-preview-dark.png"
-              width={1440}
-            />
-            <BorderBeam borderWidth={2} duration={8} size={120} />
-          </div>
+    <div className="grid min-h-dvh lg:grid-cols-2">
+      {/* Product preview — fills the left half on lg+. shadcn Studio
+          login-page-02 structure (framed preview + BorderBeam + background
+          shape), re-themed to RetailOS. The light POS shot is used in both
+          themes so the bright screen pops against the panel. */}
+      <div className="relative hidden overflow-hidden bg-muted px-8 lg:flex lg:items-center lg:justify-center">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 [background:radial-gradient(60%_55%_at_50%_38%,color-mix(in_oklch,var(--brand)_20%,transparent),transparent_72%)]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute opacity-60 mix-blend-luminosity"
+        >
+          <AuthBackgroundShape />
+        </div>
 
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -z-1 opacity-70"
-          >
-            <AuthBackgroundShape />
-          </div>
+        <div className="ro-rise relative z-10 w-full max-w-2xl rounded-2xl bg-card p-2 shadow-2xl ring-1 ring-black/5 dark:ring-white/10">
+          <img
+            alt="RetailOS point of sale ringing up a live sale"
+            className="w-full rounded-xl object-contain"
+            height={900}
+            src="/pos-preview-light.png"
+            width={1440}
+          />
+          <BorderBeam borderWidth={2} duration={9} size={140} />
         </div>
       </div>
 
-      {/* Auth form — right column. */}
-      <div className="flex h-full flex-col items-center justify-center py-10 sm:px-5 lg:col-span-3 xl:col-span-2">
-        <div className="ro-rise w-full max-w-md px-6">
+      {/* Auth form — fills the right half on lg+, the only column on mobile. */}
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-6 py-12">
+        <div className="ro-rise w-full max-w-sm">
           <div className="flex flex-col gap-6">
             <Wordmark />
 
@@ -78,7 +75,7 @@ function RouteComponent() {
 
             {isSignIn ? <SignInForm /> : <SignUpForm />}
 
-            <p className="text-center text-muted-foreground">
+            <p className="text-center text-muted-foreground text-sm">
               {isSignIn ? "New to RetailOS? " : "Already have an account? "}
               <button
                 className="font-medium text-foreground underline-offset-4 hover:underline"
