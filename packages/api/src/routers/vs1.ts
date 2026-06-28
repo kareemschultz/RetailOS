@@ -5,6 +5,7 @@ import { ORPCError } from "@orpc/server";
 import {
   and,
   count,
+  desc,
   eq,
   gte,
   ilike,
@@ -4143,6 +4144,29 @@ function reservedFxTwin(rows: CashLineInput[] | services.CashAmount[]) {
 // `terminalId` is given (refunds), the open shift for that terminal is
 // looked up. All reads are RLS-scoped (a cross-tenant id returns nothing → the
 // H1 read guard).
+// The single open-shift lookup, shared so the sale/refund WRITE path
+// (resolveSaleShift) and the saleDetail READ (refundShiftSatisfied) can never
+// disagree about what "an open shift at this terminal+location" means.
+async function findOpenShift(
+  tx: TenantTransaction,
+  terminalId: string,
+  locationId: string
+): Promise<string | undefined> {
+  return (
+    await tx
+      .select({ id: schema.shift.id })
+      .from(schema.shift)
+      .where(
+        and(
+          eq(schema.shift.terminalId, terminalId),
+          eq(schema.shift.locationId, locationId),
+          eq(schema.shift.status, "open")
+        )
+      )
+      .limit(1)
+  ).at(0)?.id;
+}
+
 async function resolveSaleShift(
   tx: TenantTransaction,
   ctx: RequestContext,
@@ -4193,21 +4217,9 @@ async function resolveSaleShift(
   }
   // No explicit shiftId — find the open shift for the caller's terminal.
   if (terminalId) {
-    const open = (
-      await tx
-        .select({ id: schema.shift.id })
-        .from(schema.shift)
-        .where(
-          and(
-            eq(schema.shift.terminalId, terminalId),
-            eq(schema.shift.locationId, locationId),
-            eq(schema.shift.status, "open")
-          )
-        )
-        .limit(1)
-    ).at(0);
-    if (open) {
-      return open.id;
+    const openId = await findOpenShift(tx, terminalId, locationId);
+    if (openId) {
+      return openId;
     }
   }
   if (settings.shiftEnforcement === "required") {
@@ -4217,6 +4229,29 @@ async function resolveSaleShift(
     });
   }
   return null;
+}
+
+// Read-only, non-throwing mirror of resolveSaleShift's REQUIRED-path precondition
+// (the part runRefund enforces before a cash refund): can a refund's cash-out
+// attach to an open shift right now? Used by saleDetail so `canRefund` never
+// promises a refund the shift gate would reject (#20 availability↔enforcement —
+// the Codex HIGH). `optional`/`disabled` enforcement ⇒ always satisfiable;
+// `required` ⇒ needs an open shift at the caller's terminal (no terminal ⇒ not
+// satisfiable, exactly as runRefund rejects a no-terminal refund under required).
+async function refundShiftSatisfied(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  locationId: string,
+  terminalId: string | undefined
+): Promise<boolean> {
+  const settings = await services.resolveShiftSettings(tx, ctx, locationId);
+  if (settings.shiftEnforcement !== "required") {
+    return true;
+  }
+  if (!terminalId) {
+    return false;
+  }
+  return Boolean(await findOpenShift(tx, terminalId, locationId));
 }
 
 async function runOpenShift(
@@ -5075,6 +5110,147 @@ export const posRouter = {
           });
         }
         return receipt;
+      });
+    }),
+
+  // ── POS sale lookup (frontend-readiness) ─────────────────────────────────
+  // Cashier-safe, OPERATIONAL "find a recent sale" read so a cashier can locate
+  // a sale to REPRINT (pos.receipt) or hand to REFUND/VOID (pos.refund/void).
+  // Gated on pos.create_sale (the base cashier grant — finding/reprinting; the
+  // refund/void ACTIONS stay separately gated). Tenant-scoped (RLS). Returns
+  // ONLY the sale-level fields needed to FIND a sale (number, when, total,
+  // status, type, location) — never line/COGS/margin internals (those live on
+  // sale_line, not sale, so this sale-only select cannot leak them).
+  // BOUNDED on purpose: a RECENCY FLOOR (last 30 days) + most-recent-first + a
+  // hard limit (max 50) + optional number match + optional location scope — an
+  // operational find, NOT a reporting export. The recency floor is load-bearing:
+  // without it the limit only caps a PAGE, and a cashier could script number
+  // searches to walk the tenant's entire history 50 rows at a time (Codex HIGH).
+  saleSearch: tenantProcedure
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(50).default(20),
+        // Optional scope to the cashier's terminal location (the frontend passes
+        // its active locationId); RLS already bounds results to the tenant.
+        locationId: z.string().uuid().optional(),
+        q: z.string().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        const conditions = [
+          // Recency floor — the load-bearing bound (Codex HIGH): even scripted
+          // `q` searches can only reach the last 30 days, so this is an
+          // OPERATIONAL find, never a full-history enumeration/export. (A longer
+          // per-tenant refund window is a future settings-resolver concern.)
+          gte(schema.sale.createdAt, sql`now() - interval '30 days'`),
+          input.locationId
+            ? eq(schema.sale.locationId, input.locationId)
+            : null,
+          input.q ? ilike(schema.sale.number, `%${input.q}%`) : null,
+        ].filter((condition): condition is SQL => condition != null);
+        const rows = await tx
+          .select({
+            createdAt: schema.sale.createdAt,
+            currency: schema.sale.currency,
+            id: schema.sale.id,
+            locationId: schema.sale.locationId,
+            number: schema.sale.number,
+            saleType: schema.sale.saleType,
+            scale: schema.sale.scale,
+            status: schema.sale.status,
+            totalMinor: schema.sale.totalMinor,
+          })
+          .from(schema.sale)
+          .where(conditions.length ? and(...conditions) : undefined)
+          // Server-authoritative recency (§14); bounded by limit.
+          .orderBy(desc(schema.sale.createdAt))
+          .limit(input.limit);
+        return rows.map((r) => ({
+          createdAt: r.createdAt.toISOString(),
+          currency: r.currency,
+          id: r.id,
+          locationId: r.locationId,
+          number: r.number,
+          saleType: r.saleType,
+          scale: r.scale,
+          status: r.status,
+          totalMinor: Number(r.totalMinor),
+        }));
+      });
+    }),
+
+  // ── POS sale detail (frontend-readiness) ─────────────────────────────────
+  // Per-sale read for the post-sale ACTION view: the full display (reuses the
+  // receipt read model — named lines/totals/status, receipt-safe, no COGS), plus
+  // per-line refund-state and `availableActions`. Cashier-safe gate
+  // (pos.create_sale — a cashier opens a sale to reprint it); the refund/void
+  // ACTIONS stay separately gated. `availableActions` is computed SERVER-SIDE
+  // from the caller's REAL grants AND the sale's state — principle #20 (Action
+  // Availability): the backend decides the actions, the frontend renders exactly
+  // those, and pos.refund/pos.void independently RE-AUTHORIZE on invoke
+  // (verified — assertPermission in both handlers). UI visibility is never the
+  // guard. The flags mirror the EXACT runVoid/runRefund guards so a rendered
+  // action cannot be rejected at submit for a reason the detail view never
+  // showed (no availability↔enforcement drift).
+  saleDetail: tenantProcedure
+    .input(
+      z.object({
+        saleId: z.string().uuid(),
+        // The cashier's terminal — needed so `canRefund` reflects the shift
+        // precondition pos.refund enforces under shift_enforcement=required.
+        terminalId: z.string().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        const detail = await services.buildSaleDetail(tx, ctx, input.saleId);
+        if (!detail) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Sale not found in this tenant",
+          });
+        }
+        // Authorization layer (principle #20): availableActions = caller role
+        // grant ∧ sale state. canVoid mirrors runVoid (sale-type "sale",
+        // completed, no prior returns — voiding a refunded sale double-restocks);
+        // canRefund mirrors runRefund (completed sale, refundable qty remaining);
+        // canReprint needs only the base cashier gate.
+        const role = await services.resolveTenantRole(tx, ctx.actorUserId);
+        const can = (permission: string) =>
+          services.roleHasPermission(role, permission);
+        const isPlainSale = detail.flags.saleType === "sale";
+        const isCompleted = detail.flags.status === "completed";
+        // A cash refund must attach to an open shift when the location requires
+        // one — fold the same precondition into canRefund so the read agrees
+        // with what runRefund will accept (no availability↔enforcement drift).
+        const shiftOk = await refundShiftSatisfied(
+          tx,
+          ctx,
+          detail.receipt.location.id,
+          input.terminalId
+        );
+        return {
+          availableActions: {
+            canRefund:
+              can("pos.refund") &&
+              isCompleted &&
+              isPlainSale &&
+              detail.flags.hasRefundableRemaining &&
+              shiftOk,
+            canReprint: can("pos.create_sale"),
+            canVoid:
+              can("pos.void_sale") &&
+              isCompleted &&
+              isPlainSale &&
+              !detail.flags.hasPriorReturns,
+          },
+          receipt: detail.receipt,
+          refundState: detail.refundState,
+        };
       });
     }),
 };

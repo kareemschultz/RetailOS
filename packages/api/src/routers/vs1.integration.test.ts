@@ -18,6 +18,12 @@ const ORG_B = "org_e2e_b";
 const ADMIN_B = "u_admin_e2e_b";
 const STORED_VALUE_TENDER_RESERVED_RE = /Stored-value tenders are reserved/;
 const UNDERPAYMENT_RE = /Underpayment/;
+// #20 corollary: the action endpoints must independently reject an ungranted
+// caller (availableActions:false is meaningless unless enforcement matches).
+const MISSING_REFUND_PERM_RE = /Missing permission: pos\.refund/;
+const MISSING_VOID_PERM_RE = /Missing permission: pos\.void_sale/;
+const SALE_NOT_FOUND_RE = /Sale not found in this tenant/;
+const SHIFT_REQUIRED_RE = /open shift is required/i;
 
 function makeCtx(userId: string, organizationId: string | null): Context {
   return {
@@ -3810,6 +3816,97 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).rejects.toThrow();
   });
 
+  it("POS sale lookup: cashier-safe, recent-first, bounded, leaks no line/COGS internals", async () => {
+    const { locationId, productId, skuId } = await seedSellable("salesearch");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const lines = [{ productId, qty: 1, skuId }];
+    const tenders = [
+      { amountMinor: 1000, currency: "USD", method: "cash" as const },
+    ];
+    // Two sales so we can assert recency ordering + presence.
+    const first = await call(
+      appRouter.pos.createSale,
+      { idempotencyKey: "ss-1", lines, locationId, tenders },
+      cashier
+    );
+    const second = await call(
+      appRouter.pos.createSale,
+      { idempotencyKey: "ss-2", lines, locationId, tenders },
+      cashier
+    );
+
+    const recent = await call(appRouter.pos.saleSearch, {}, cashier);
+    // Both sales are findable.
+    expect(recent.some((s) => s.id === first.saleId)).toBe(true);
+    expect(recent.some((s) => s.id === second.saleId)).toBe(true);
+    // Result is recency-ordered (createdAt non-increasing) — robust even if two
+    // fast sales share a timestamp (no strict second-before-first dependency).
+    const times = recent.map((s) => Date.parse(s.createdAt));
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+
+    const row = recent.find((s) => s.id === second.saleId) as Record<
+      string,
+      unknown
+    >;
+    expect(row.number).toBe(second.number);
+    expect(row.totalMinor).toBe(1000);
+    expect(row.currency).toBe("USD");
+    expect(row.status).toBeDefined();
+    // No line/COGS/margin/rep internals — the sale-only select cannot leak them.
+    expect(row).not.toHaveProperty("cogsMinor");
+    expect(row).not.toHaveProperty("lines");
+    expect(row).not.toHaveProperty("subtotalMinor");
+    expect(row).not.toHaveProperty("salesRepId");
+    expect(row).not.toHaveProperty("customerId");
+
+    // Number search actually FILTERS: every returned row matches q, and a
+    // non-matching query returns NOTHING (not just "the sale happens to appear").
+    const byNumber = await call(
+      appRouter.pos.saleSearch,
+      { q: second.number },
+      cashier
+    );
+    expect(byNumber.some((s) => s.id === second.saleId)).toBe(true);
+    expect(byNumber.every((s) => s.number.includes(second.number))).toBe(true);
+    const noMatch = await call(
+      appRouter.pos.saleSearch,
+      { q: "NO-SUCH-SALE-NUMBER-ZZZ" },
+      cashier
+    );
+    expect(noMatch).toHaveLength(0);
+
+    // Bounded: limit is honored, and the hard max (50) is enforced by validation.
+    const limited = await call(appRouter.pos.saleSearch, { limit: 1 }, cashier);
+    expect(limited.length).toBeLessThanOrEqual(1);
+    await expect(
+      call(appRouter.pos.saleSearch, { limit: 51 }, cashier)
+    ).rejects.toThrow();
+
+    // Recency floor (Codex HIGH): a sale older than the 30-day window is NOT
+    // findable — even by its exact number — so scripted searches cannot walk the
+    // full history. Backdate the first sale and confirm it drops out while the
+    // recent one stays findable.
+    await withTenant(db, ORG, (tx) =>
+      tx
+        .update(schema.sale)
+        .set({ createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) })
+        .where(eq(schema.sale.id, first.saleId))
+    );
+    const afterBackdate = await call(
+      appRouter.pos.saleSearch,
+      { q: first.number },
+      cashier
+    );
+    expect(afterBackdate.some((s) => s.id === first.saleId)).toBe(false);
+    const stillRecent = await call(appRouter.pos.saleSearch, {}, cashier);
+    expect(stillRecent.some((s) => s.id === second.saleId)).toBe(true);
+
+    // A no-membership caller (no pos.create_sale in this tenant) is rejected.
+    await expect(
+      call(appRouter.pos.saleSearch, {}, { context: makeCtx(ADMIN_B, ORG) })
+    ).rejects.toThrow();
+  });
+
   it("quote totals match pos.createSale for the same cart", async () => {
     const { locationId, productId, skuId } = await seedSellable("match");
     const cashier = { context: makeCtx(CASHIER, ORG) };
@@ -4029,5 +4126,280 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       cashier
     );
     expect(sale.totalMinor).toBe(1000);
+  });
+
+  // ── pos.saleDetail (frontend-readiness): cashier-safe per-sale read whose
+  // availableActions reflect BOTH the caller's grant AND the sale's state, and
+  // whose action endpoints (pos.refund/pos.void) independently re-authorize (#20).
+  it("pos.saleDetail: availableActions reflect role grant AND sale state; endpoints re-authorize (#20)", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+
+    const company = await call(
+      appRouter.company.create,
+      { name: "SD Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "SD Store", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      { currency: "USD", name: "SD Prod", priceMinor: 1000, sku: "SD1" },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "SD1-EA", productId: product.id },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: location.id,
+        productId: product.id,
+        qty: 30,
+        skuId: sku.id,
+        unitCostMinor: 500,
+      },
+      admin
+    );
+
+    const makeSale = (key: string, qty: number) =>
+      call(
+        appRouter.pos.createSale,
+        {
+          idempotencyKey: key,
+          lines: [{ productId: product.id, qty, skuId: sku.id }],
+          locationId: location.id,
+          tenders: [
+            { amountMinor: qty * 1000, currency: "USD", method: "cash" },
+          ],
+        },
+        admin
+      );
+    const lineIdOf = async (saleId: string) => {
+      const lines = await withTenant(db, ORG, (tx) =>
+        tx
+          .select()
+          .from(schema.saleLine)
+          .where(eq(schema.saleLine.saleId, saleId))
+      );
+      return lines[0]?.id ?? "";
+    };
+
+    // 1) fresh completed sale — admin sees both actions; refundState none.
+    const fresh = await makeSale("sd-fresh", 3);
+    const adminDetail = await call(
+      appRouter.pos.saleDetail,
+      { saleId: fresh.saleId },
+      admin
+    );
+    expect(adminDetail.availableActions).toEqual({
+      canRefund: true,
+      canReprint: true,
+      canVoid: true,
+    });
+    expect(adminDetail.refundState.status).toBe("none");
+    // DTO no-leak: nothing in the whole response exposes COGS/margin internals.
+    const adminJson = JSON.stringify(adminDetail).toLowerCase();
+    expect(adminJson).not.toContain("cogs");
+    expect(adminJson).not.toContain("margin");
+
+    // Cashier: can find + reprint, but NOT refund/void (lacks the grants) — same
+    // fresh, voidable, completed sale. State is identical; only the role differs.
+    const cashierDetail = await call(
+      appRouter.pos.saleDetail,
+      { saleId: fresh.saleId },
+      cashier
+    );
+    expect(cashierDetail.availableActions).toEqual({
+      canRefund: false,
+      canReprint: true,
+      canVoid: false,
+    });
+
+    // 2) partially refunded — refundState partial; refund still offered (qty
+    // remains), void withdrawn (a sale with returns cannot be voided).
+    const partial = await makeSale("sd-partial", 3);
+    const partialLine = await lineIdOf(partial.saleId);
+    await call(
+      appRouter.pos.refund,
+      {
+        idempotencyKey: "sd-partial-r",
+        lines: [{ originalSaleLineId: partialLine, qty: 1 }],
+        originalSaleId: partial.saleId,
+        tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const partialDetail = await call(
+      appRouter.pos.saleDetail,
+      { saleId: partial.saleId },
+      admin
+    );
+    expect(partialDetail.refundState.status).toBe("partial");
+    expect(partialDetail.availableActions.canRefund).toBe(true);
+    expect(partialDetail.availableActions.canVoid).toBe(false);
+    expect(
+      partialDetail.refundState.lines.find((l) => l.saleLineId === partialLine)
+    ).toMatchObject({ qty: 3, refundableQty: 2, refundedQty: 1 });
+
+    // 3) fully refunded — refundState full; refund withdrawn (nothing remains).
+    const full = await makeSale("sd-full", 2);
+    const fullLine = await lineIdOf(full.saleId);
+    await call(
+      appRouter.pos.refund,
+      {
+        idempotencyKey: "sd-full-r",
+        lines: [{ originalSaleLineId: fullLine, qty: 2 }],
+        originalSaleId: full.saleId,
+        tenders: [{ amountMinor: 2000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    const fullDetail = await call(
+      appRouter.pos.saleDetail,
+      { saleId: full.saleId },
+      admin
+    );
+    expect(fullDetail.refundState.status).toBe("full");
+    expect(fullDetail.availableActions.canRefund).toBe(false);
+
+    // 4) voided sale — both refund and void withdrawn (status no longer completed).
+    const voided = await makeSale("sd-void", 1);
+    await call(
+      appRouter.pos.void,
+      { idempotencyKey: "sd-void-v", saleId: voided.saleId },
+      admin
+    );
+    const voidDetail = await call(
+      appRouter.pos.saleDetail,
+      { saleId: voided.saleId },
+      admin
+    );
+    expect(voidDetail.availableActions.canVoid).toBe(false);
+    expect(voidDetail.availableActions.canRefund).toBe(false);
+
+    // 5) tenant isolation — ORG_B admin (who DOES hold pos.create_sale in ORG_B,
+    // so it passes the gate then RLS-misses) cannot see ORG's sale: NOT_FOUND
+    // specifically (proving the not-found path, not an incidental error).
+    await expect(
+      call(appRouter.pos.saleDetail, { saleId: fresh.saleId }, adminB)
+    ).rejects.toThrow(SALE_NOT_FOUND_RE);
+
+    // 6) no-membership caller is rejected by the cashier-safe gate.
+    const noMember = { context: makeCtx("u_nobody_sd", ORG) };
+    await expect(
+      call(appRouter.pos.saleDetail, { saleId: fresh.saleId }, noMember)
+    ).rejects.toThrow();
+
+    // 7) #20 corollary — the ACTION endpoints independently reject the ungranted
+    // cashier, so availableActions:false above is backed by real enforcement
+    // (UI visibility is never the guard).
+    await expect(
+      call(
+        appRouter.pos.void,
+        { idempotencyKey: "sd-cashier-void", saleId: fresh.saleId },
+        cashier
+      )
+    ).rejects.toThrow(MISSING_VOID_PERM_RE);
+    await expect(
+      call(
+        appRouter.pos.refund,
+        {
+          idempotencyKey: "sd-cashier-refund",
+          lines: [{ originalSaleLineId: await lineIdOf(fresh.saleId), qty: 1 }],
+          originalSaleId: fresh.saleId,
+          tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+        },
+        cashier
+      )
+    ).rejects.toThrow(MISSING_REFUND_PERM_RE);
+
+    // 8) shift drift guard (Codex HIGH): under shift_enforcement=required,
+    // canRefund must reflect the open-shift precondition pos.refund enforces, so
+    // the read never offers a refund the endpoint would reject for shift state.
+    const reqLoc = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "SD Req Store", type: "store" },
+      admin
+    );
+    await withTenant(db, ORG, (tx) =>
+      tx
+        .update(schema.location)
+        .set({ shiftEnforcement: "required" })
+        .where(eq(schema.location.id, reqLoc.id))
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: reqLoc.id,
+        productId: product.id,
+        qty: 5,
+        skuId: sku.id,
+        unitCostMinor: 500,
+      },
+      admin
+    );
+    // Under required enforcement a sale needs an open shift at its terminal.
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "sd-req-open",
+        locationId: reqLoc.id,
+        terminalId: "SD-T1",
+      },
+      admin
+    );
+    const reqSale = await call(
+      appRouter.pos.createSale,
+      {
+        idempotencyKey: "sd-req-sale",
+        lines: [{ productId: product.id, qty: 2, skuId: sku.id }],
+        locationId: reqLoc.id,
+        shiftId: opened.shiftId,
+        terminalId: "SD-T1",
+        tenders: [{ amountMinor: 2000, currency: "USD", method: "cash" }],
+      },
+      admin
+    );
+    // With the open-shift terminal → canRefund true (read agrees with refund).
+    const reqWithShift = await call(
+      appRouter.pos.saleDetail,
+      { saleId: reqSale.saleId, terminalId: "SD-T1" },
+      admin
+    );
+    expect(reqWithShift.availableActions.canRefund).toBe(true);
+    // WITHOUT a terminal → canRefund false (a no-shift refund would be rejected)…
+    const reqNoShift = await call(
+      appRouter.pos.saleDetail,
+      { saleId: reqSale.saleId },
+      admin
+    );
+    expect(reqNoShift.availableActions.canRefund).toBe(false);
+    // …and the endpoint itself rejects the no-shift refund — the read did not
+    // promise an action that enforcement would reject (no drift, both directions).
+    await expect(
+      call(
+        appRouter.pos.refund,
+        {
+          idempotencyKey: "sd-req-refund-noshift",
+          lines: [
+            { originalSaleLineId: await lineIdOf(reqSale.saleId), qty: 1 },
+          ],
+          originalSaleId: reqSale.saleId,
+          tenders: [{ amountMinor: 1000, currency: "USD", method: "cash" }],
+        },
+        admin
+      )
+    ).rejects.toThrow(SHIFT_REQUIRED_RE);
   });
 });

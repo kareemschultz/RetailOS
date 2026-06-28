@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   company,
   fiscalDocument,
@@ -523,4 +523,115 @@ export async function buildSaleReceipt(
 ): Promise<SaleReceiptReadModel | null> {
   const data = await loadReceiptData(tx, ctx, saleId);
   return data ? buildSaleReceiptModel(ctx, data) : null;
+}
+
+// ── Sale detail read model (post-sale ACTION view) ─────────────────────────
+// The receipt read model (named lines/totals/status — receipt-safe, no COGS)
+// PLUS per-line refund-state. The `flags` are NOT display data: they are the
+// inputs the API/authorization layer combines with the caller's role to decide
+// `availableActions` (principle #20 — the backend decides, the frontend renders,
+// the action endpoints independently re-authorize). `flags` mirror the EXACT
+// runVoid/runRefund guards so a rendered action can't be rejected at submit for a
+// reason the detail view never showed (no availability↔enforcement drift).
+export interface SaleDetailReadModel {
+  flags: {
+    hasPriorReturns: boolean;
+    hasRefundableRemaining: boolean;
+    saleType: string | null;
+    status: string;
+  };
+  receipt: SaleReceiptReadModel;
+  refundState: {
+    lines: Array<{
+      qty: number;
+      refundableQty: number;
+      refundedQty: number;
+      saleLineId: string;
+    }>;
+    status: "full" | "none" | "partial";
+  };
+}
+
+export async function buildSaleDetail(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  saleId: string
+): Promise<SaleDetailReadModel | null> {
+  // Tenant-scoped (RLS) existence + state read. A return/exchange doc is itself a
+  // `sale` row and can be opened here; refund/void availability keys off
+  // saleType/status below, so a non-`sale` doc simply offers neither action.
+  const saleRow = (
+    await tx
+      .select({ saleType: sale.saleType, status: sale.status })
+      .from(sale)
+      .where(eq(sale.id, saleId))
+  ).at(0);
+  if (!saleRow) {
+    return null;
+  }
+  const receipt = await buildSaleReceipt(tx, ctx, saleId);
+  if (!receipt) {
+    return null;
+  }
+
+  // Original lines of THIS sale, then the cumulative refunded qty per line = SUM
+  // of every return-line `qty` whose originalSaleLineId points back to it.
+  // runRefund stores the return-line qty as a positive magnitude, so the sum is
+  // the refunded count directly.
+  const originalLines = await tx
+    .select({ id: saleLine.id, qty: saleLine.qty })
+    .from(saleLine)
+    .where(eq(saleLine.saleId, saleId));
+  const lineIds = originalLines.map((line) => line.id);
+  const refundedByLine = new Map<string, number>();
+  if (lineIds.length > 0) {
+    const sums = await tx
+      .select({
+        originalSaleLineId: saleLine.originalSaleLineId,
+        refundedQty: sql<number>`coalesce(sum(${saleLine.qty}), 0)`,
+      })
+      .from(saleLine)
+      .where(inArray(saleLine.originalSaleLineId, lineIds))
+      .groupBy(saleLine.originalSaleLineId);
+    for (const row of sums) {
+      if (row.originalSaleLineId) {
+        refundedByLine.set(row.originalSaleLineId, Number(row.refundedQty));
+      }
+    }
+  }
+
+  const refundLines = originalLines.map((line) => {
+    const refundedQty = refundedByLine.get(line.id) ?? 0;
+    return {
+      qty: line.qty,
+      refundableQty: Math.max(0, line.qty - refundedQty),
+      refundedQty,
+      saleLineId: line.id,
+    };
+  });
+  const anyRefunded = refundLines.some((line) => line.refundedQty > 0);
+  const hasRefundableRemaining = refundLines.some(
+    (line) => line.refundableQty > 0
+  );
+  const allFullyRefunded =
+    refundLines.length > 0 &&
+    refundLines.every((line) => line.refundableQty === 0);
+
+  let refundStatus: "full" | "none" | "partial";
+  if (anyRefunded) {
+    refundStatus = allFullyRefunded ? "full" : "partial";
+  } else {
+    refundStatus = "none";
+  }
+
+  return {
+    flags: {
+      hasPriorReturns: anyRefunded,
+      hasRefundableRemaining,
+      saleType: saleRow.saleType ?? null,
+      status: saleRow.status,
+    },
+    receipt,
+    refundState: { lines: refundLines, status: refundStatus },
+  };
 }
