@@ -61,17 +61,18 @@ function RouteComponent() {
       <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-6 py-12">
         <div className="ro-rise w-full max-w-sm">
           <div className="flex flex-col gap-6">
-            <Wordmark />
-
-            <div>
-              <h2 className="mb-1.5 font-semibold text-2xl tracking-tight">
-                {isSignIn ? "Sign in to RetailOS" : "Create your account"}
-              </h2>
-              <p className="text-muted-foreground">
-                {isSignIn
-                  ? "Run your whole store from one screen — even offline."
-                  : "Get your store up and running in minutes."}
-              </p>
+            <div className="flex flex-col items-center gap-6 text-center lg:items-start lg:text-left">
+              <Wordmark />
+              <div>
+                <h2 className="mb-1.5 font-semibold text-2xl tracking-tight">
+                  {isSignIn ? "Sign in to RetailOS" : "Create your account"}
+                </h2>
+                <p className="text-muted-foreground">
+                  {isSignIn
+                    ? "The unified platform for sales, inventory, and accounting — built to keep running, even offline."
+                    : "Set up your business and start selling in minutes."}
+                </p>
+              </div>
             </div>
 
             {isSignIn ? <SignInForm /> : <SignUpForm />}
