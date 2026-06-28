@@ -13,6 +13,9 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Overnight autonomous run — outcome (2026-06-28)
+Independent-branch fan, Codex-reviewed each, owner-gated merges. Result: **#40→#39 merged** (unblocked Task 1) → **Task 1 = PR #43 (`pos.saleDetail` + `availableActions`) MERGED** (Codex caught a real `canRefund`↔shift HIGH pre-merge; folded via a shared `findOpenShift`) → **Task 2 = PR #42** (`module-entitlements-design.md`, owner-gated draft) → **Task 3 = PR #41** (`auth-login-recon.md` — login is greenfield; needs an org-selection step). The merge gate held throughout.
+
 ### Frontend-readiness slice 5: `pos.saleDetail` + `availableActions` (in PR, 2026-06-28)
 - **Branch:** `phase-4-pos-sale-detail` off `master = f9fc975` (post-#40 governance + #39 `saleSearch` merged). The per-sale read the post-sale ACTION view needs — built backend-first/separate (the `saleSearch`/`itemSearch`/`locationList` pattern). The first build **governed by principle #20 (Action Availability)** — landed on master via #40 ahead of this.
 - **Scope (one PR, one read + one service fn):** **`pos.saleDetail`** — cashier-safe (`pos.create_sale`), tenant-scoped (RLS), keyed by `saleId`. Returns the **receipt display model** (reused `services.buildSaleReceipt` — named lines/totals/status, receipt-safe, **no COGS**) + per-line **`refundState`** (`none|partial|full`, with qty/refundedQty/refundableQty) + **`availableActions {canReprint, canRefund, canVoid}`** computed **server-side** from the caller's REAL grants AND sale state. New service `services.buildSaleDetail` (in `receipt.ts`) gathers the data + `flags`; the router's authorization layer turns flags+role into the booleans.
