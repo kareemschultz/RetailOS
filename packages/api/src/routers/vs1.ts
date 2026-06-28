@@ -4144,6 +4144,29 @@ function reservedFxTwin(rows: CashLineInput[] | services.CashAmount[]) {
 // `terminalId` is given (refunds), the open shift for that terminal is
 // looked up. All reads are RLS-scoped (a cross-tenant id returns nothing → the
 // H1 read guard).
+// The single open-shift lookup, shared so the sale/refund WRITE path
+// (resolveSaleShift) and the saleDetail READ (refundShiftSatisfied) can never
+// disagree about what "an open shift at this terminal+location" means.
+async function findOpenShift(
+  tx: TenantTransaction,
+  terminalId: string,
+  locationId: string
+): Promise<string | undefined> {
+  return (
+    await tx
+      .select({ id: schema.shift.id })
+      .from(schema.shift)
+      .where(
+        and(
+          eq(schema.shift.terminalId, terminalId),
+          eq(schema.shift.locationId, locationId),
+          eq(schema.shift.status, "open")
+        )
+      )
+      .limit(1)
+  ).at(0)?.id;
+}
+
 async function resolveSaleShift(
   tx: TenantTransaction,
   ctx: RequestContext,
@@ -4194,21 +4217,9 @@ async function resolveSaleShift(
   }
   // No explicit shiftId — find the open shift for the caller's terminal.
   if (terminalId) {
-    const open = (
-      await tx
-        .select({ id: schema.shift.id })
-        .from(schema.shift)
-        .where(
-          and(
-            eq(schema.shift.terminalId, terminalId),
-            eq(schema.shift.locationId, locationId),
-            eq(schema.shift.status, "open")
-          )
-        )
-        .limit(1)
-    ).at(0);
-    if (open) {
-      return open.id;
+    const openId = await findOpenShift(tx, terminalId, locationId);
+    if (openId) {
+      return openId;
     }
   }
   if (settings.shiftEnforcement === "required") {
@@ -4218,6 +4229,29 @@ async function resolveSaleShift(
     });
   }
   return null;
+}
+
+// Read-only, non-throwing mirror of resolveSaleShift's REQUIRED-path precondition
+// (the part runRefund enforces before a cash refund): can a refund's cash-out
+// attach to an open shift right now? Used by saleDetail so `canRefund` never
+// promises a refund the shift gate would reject (#20 availability↔enforcement —
+// the Codex HIGH). `optional`/`disabled` enforcement ⇒ always satisfiable;
+// `required` ⇒ needs an open shift at the caller's terminal (no terminal ⇒ not
+// satisfiable, exactly as runRefund rejects a no-terminal refund under required).
+async function refundShiftSatisfied(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  locationId: string,
+  terminalId: string | undefined
+): Promise<boolean> {
+  const settings = await services.resolveShiftSettings(tx, ctx, locationId);
+  if (settings.shiftEnforcement !== "required") {
+    return true;
+  }
+  if (!terminalId) {
+    return false;
+  }
+  return Boolean(await findOpenShift(tx, terminalId, locationId));
 }
 
 async function runOpenShift(
@@ -5145,6 +5179,78 @@ export const posRouter = {
           status: r.status,
           totalMinor: Number(r.totalMinor),
         }));
+      });
+    }),
+
+  // ── POS sale detail (frontend-readiness) ─────────────────────────────────
+  // Per-sale read for the post-sale ACTION view: the full display (reuses the
+  // receipt read model — named lines/totals/status, receipt-safe, no COGS), plus
+  // per-line refund-state and `availableActions`. Cashier-safe gate
+  // (pos.create_sale — a cashier opens a sale to reprint it); the refund/void
+  // ACTIONS stay separately gated. `availableActions` is computed SERVER-SIDE
+  // from the caller's REAL grants AND the sale's state — principle #20 (Action
+  // Availability): the backend decides the actions, the frontend renders exactly
+  // those, and pos.refund/pos.void independently RE-AUTHORIZE on invoke
+  // (verified — assertPermission in both handlers). UI visibility is never the
+  // guard. The flags mirror the EXACT runVoid/runRefund guards so a rendered
+  // action cannot be rejected at submit for a reason the detail view never
+  // showed (no availability↔enforcement drift).
+  saleDetail: tenantProcedure
+    .input(
+      z.object({
+        saleId: z.string().uuid(),
+        // The cashier's terminal — needed so `canRefund` reflects the shift
+        // precondition pos.refund enforces under shift_enforcement=required.
+        terminalId: z.string().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        const detail = await services.buildSaleDetail(tx, ctx, input.saleId);
+        if (!detail) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Sale not found in this tenant",
+          });
+        }
+        // Authorization layer (principle #20): availableActions = caller role
+        // grant ∧ sale state. canVoid mirrors runVoid (sale-type "sale",
+        // completed, no prior returns — voiding a refunded sale double-restocks);
+        // canRefund mirrors runRefund (completed sale, refundable qty remaining);
+        // canReprint needs only the base cashier gate.
+        const role = await services.resolveTenantRole(tx, ctx.actorUserId);
+        const can = (permission: string) =>
+          services.roleHasPermission(role, permission);
+        const isPlainSale = detail.flags.saleType === "sale";
+        const isCompleted = detail.flags.status === "completed";
+        // A cash refund must attach to an open shift when the location requires
+        // one — fold the same precondition into canRefund so the read agrees
+        // with what runRefund will accept (no availability↔enforcement drift).
+        const shiftOk = await refundShiftSatisfied(
+          tx,
+          ctx,
+          detail.receipt.location.id,
+          input.terminalId
+        );
+        return {
+          availableActions: {
+            canRefund:
+              can("pos.refund") &&
+              isCompleted &&
+              isPlainSale &&
+              detail.flags.hasRefundableRemaining &&
+              shiftOk,
+            canReprint: can("pos.create_sale"),
+            canVoid:
+              can("pos.void_sale") &&
+              isCompleted &&
+              isPlainSale &&
+              !detail.flags.hasPriorReturns,
+          },
+          receipt: detail.receipt,
+          refundState: detail.refundState,
+        };
       });
     }),
 };
