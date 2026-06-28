@@ -3,40 +3,31 @@ import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
+import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 
-import Loader from "./loader";
+const schema = z.object({
+  email: z.email("Enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
 
-export default function SignInForm({
-  onSwitchToSignUp,
-}: {
-  onSwitchToSignUp: () => void;
-}) {
-  const navigate = useNavigate({
-    from: "/",
-  });
-  const { isPending } = authClient.useSession();
+export default function SignInForm() {
+  const navigate = useNavigate({ from: "/login" });
+  const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm({
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
     onSubmit: async ({ value }) => {
       await authClient.signIn.email(
-        {
-          email: value.email,
-          password: value.password,
-        },
+        { email: value.email, password: value.password },
         {
           onSuccess: () => {
-            navigate({
-              to: "/dashboard",
-            });
-            toast.success("Sign in successful");
+            navigate({ to: "/pos" });
+            toast.success("Welcome back");
           },
           onError: (error) => {
             toast.error(error.error.message || error.error.statusText);
@@ -44,103 +35,100 @@ export default function SignInForm({
         }
       );
     },
-    validators: {
-      onSubmit: z.object({
-        email: z.email("Invalid email address"),
-        password: z.string().min(8, "Password must be at least 8 characters"),
-      }),
-    },
+    validators: { onSubmit: schema },
   });
 
-  if (isPending) {
-    return <Loader />;
-  }
-
   return (
-    <div className="mx-auto mt-10 w-full max-w-md p-6">
-      <h1 className="mb-6 text-center font-bold text-3xl">Welcome Back</h1>
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        form.handleSubmit();
+      }}
+    >
+      <form.Field name="email">
+        {(field) => (
+          <div className="space-y-1.5">
+            <Label htmlFor={field.name}>Email</Label>
+            <Input
+              autoComplete="email"
+              className="h-11"
+              id={field.name}
+              name={field.name}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+              placeholder="you@store.com"
+              type="email"
+              value={field.state.value}
+            />
+            {field.state.meta.errors.map((error) => (
+              <p className="text-destructive text-xs" key={error?.message}>
+                {error?.message}
+              </p>
+            ))}
+          </div>
+        )}
+      </form.Field>
 
-      <form
-        className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
+      <form.Field name="password">
+        {(field) => (
+          <div className="space-y-1.5">
+            <Label htmlFor={field.name}>Password</Label>
+            <div className="relative">
+              <Input
+                autoComplete="current-password"
+                className="h-11 pr-10"
+                id={field.name}
+                name={field.name}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+                placeholder="••••••••"
+                type={showPassword ? "text" : "password"}
+                value={field.state.value}
+              />
+              <Button
+                className="absolute inset-y-0 right-0 h-11 rounded-l-none text-muted-foreground hover:bg-transparent"
+                onClick={() => setShowPassword((prev) => !prev)}
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                {showPassword ? (
+                  <EyeOffIcon className="size-4" />
+                ) : (
+                  <EyeIcon className="size-4" />
+                )}
+                <span className="sr-only">
+                  {showPassword ? "Hide password" : "Show password"}
+                </span>
+              </Button>
+            </div>
+            {field.state.meta.errors.map((error) => (
+              <p className="text-destructive text-xs" key={error?.message}>
+                {error?.message}
+              </p>
+            ))}
+          </div>
+        )}
+      </form.Field>
+
+      <form.Subscribe
+        selector={(state) => ({
+          canSubmit: state.canSubmit,
+          isSubmitting: state.isSubmitting,
+        })}
       >
-        <div>
-          <form.Field name="email">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Email</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  type="email"
-                  value={field.state.value}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p className="text-red-500" key={error?.message}>
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <div>
-          <form.Field name="password">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Password</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  type="password"
-                  value={field.state.value}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p className="text-red-500" key={error?.message}>
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <form.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isSubmitting: state.isSubmitting,
-          })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button
-              className="w-full"
-              disabled={!canSubmit || isSubmitting}
-              type="submit"
-            >
-              {isSubmitting ? "Submitting..." : "Sign In"}
-            </Button>
-          )}
-        </form.Subscribe>
-      </form>
-
-      <div className="mt-4 text-center">
-        <Button
-          className="text-indigo-600 hover:text-indigo-800"
-          onClick={onSwitchToSignUp}
-          variant="link"
-        >
-          Need an account? Sign Up
-        </Button>
-      </div>
-    </div>
+        {({ canSubmit, isSubmitting }) => (
+          <Button
+            className="h-11 w-full bg-[var(--brand)] text-[var(--brand-foreground)] shadow-sm transition hover:opacity-90"
+            disabled={!canSubmit || isSubmitting}
+            type="submit"
+          >
+            {isSubmitting ? "Signing in…" : "Sign in"}
+          </Button>
+        )}
+      </form.Subscribe>
+    </form>
   );
 }

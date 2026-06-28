@@ -40,6 +40,11 @@ COPY --from=pruner /repo/out/full/ ./
 ARG VITE_SERVER_URL
 ENV VITE_SERVER_URL=${VITE_SERVER_URL}
 ENV NODE_ENV=production
+# Vite reads VITE_* from .env files (NOT process.env), and the pruned context has
+# no .env (gitignored), so the build arg must be written to .env before building
+# — otherwise the API origin is never baked into the client/SSR bundle and the
+# env validation throws at runtime. (Vite's loadEnv applies to client + SSR.)
+RUN printf 'VITE_SERVER_URL=%s\n' "${VITE_SERVER_URL}" > apps/web/.env
 RUN bunx turbo run build --filter=web
 
 # ---- Stage 3: runtime — distroless bun, self-contained Nitro output only ----
