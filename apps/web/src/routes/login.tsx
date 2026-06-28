@@ -1,8 +1,10 @@
 import { BorderBeam } from "@RetailOS/ui/components/border-beam";
 import { createFileRoute } from "@tanstack/react-router";
-import { Package, ShoppingCart, WifiOff } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
 import { useState } from "react";
 
+import AuthBackgroundShape from "@/components/auth-background-shape";
+import { GoogleSignIn } from "@/components/google-sign-in";
 import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
 
@@ -10,37 +12,13 @@ export const Route = createFileRoute("/login")({
   component: RouteComponent,
 });
 
-const FEATURES = [
-  {
-    icon: ShoppingCart,
-    title: "Fast POS",
-    desc: "Ring up sales in seconds — touch, scan, or search.",
-  },
-  {
-    icon: Package,
-    title: "Live inventory",
-    desc: "Every sale moves the stock ledger in real time.",
-  },
-  {
-    icon: WifiOff,
-    title: "Offline-first",
-    desc: "Keep selling when the Wi-Fi drops out.",
-  },
-];
-
-function Wordmark({ onDark = false }: { onDark?: boolean }) {
+function Wordmark() {
   return (
-    <div className="flex items-center gap-2.5">
-      <div
-        className={
-          onDark
-            ? "flex size-9 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/20"
-            : "flex size-9 items-center justify-center rounded-xl bg-[var(--brand)] text-[var(--brand-foreground)]"
-        }
-      >
+    <div className="flex items-center gap-3">
+      <div className="flex size-9 items-center justify-center rounded-xl bg-[var(--brand)] text-[var(--brand-foreground)]">
         <ShoppingCart className="size-5" />
       </div>
-      <span className="font-semibold text-lg tracking-tight">RetailOS</span>
+      <span className="font-semibold text-xl tracking-tight">RetailOS</span>
     </div>
   );
 }
@@ -50,70 +28,74 @@ function RouteComponent() {
   const isSignIn = mode === "signin";
 
   return (
-    <div className="h-dvh lg:grid lg:grid-cols-6">
-      {/* Brand preview — left (sourced from shadcn Studio login-page-02, re-themed) */}
-      <div className="max-lg:hidden lg:col-span-3 xl:col-span-4">
-        <div className="relative flex h-full items-center justify-center overflow-hidden bg-muted px-6">
-          <div
-            aria-hidden="true"
-            className="ro-aurora pointer-events-none absolute size-[40rem] rounded-full bg-[var(--brand)] opacity-15 blur-3xl"
+    <div className="grid min-h-dvh lg:grid-cols-2">
+      {/* Product preview — fills the left half on lg+. shadcn Studio
+          login-page-02 structure (framed preview + BorderBeam + background
+          shape), re-themed to RetailOS. The light POS shot is used in both
+          themes so the bright screen pops against the panel. */}
+      <div className="relative hidden overflow-hidden bg-muted px-8 lg:flex lg:items-center lg:justify-center">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 [background:radial-gradient(60%_55%_at_50%_38%,color-mix(in_oklch,var(--brand)_20%,transparent),transparent_72%)]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute opacity-60 mix-blend-luminosity"
+        >
+          <AuthBackgroundShape />
+        </div>
+
+        <div className="ro-rise relative z-10 w-full max-w-2xl rounded-2xl bg-card p-2 shadow-2xl ring-1 ring-black/5 dark:ring-white/10">
+          <img
+            alt="RetailOS point of sale ringing up a live sale"
+            className="w-full rounded-xl object-contain"
+            height={900}
+            src="/pos-preview-light.png"
+            width={1440}
           />
-          <div className="relative w-full max-w-xl rounded-3xl bg-[oklch(0.17_0.06_264)] p-10 text-white shadow-xl">
-            <BorderBeam duration={8} size={120} />
-            <Wordmark onDark />
-            <h1 className="mt-10 text-balance font-semibold text-3xl leading-[1.1] tracking-tight">
-              Run your whole store from one screen.
-            </h1>
-            <p className="mt-3 text-white/65">
-              POS, inventory, and back office in one operating system — built
-              for real shops, even when the Wi-Fi isn't.
-            </p>
-            <ul className="mt-9 space-y-4">
-              {FEATURES.map((feature) => (
-                <li className="flex items-start gap-3.5" key={feature.title}>
-                  <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
-                    <feature.icon className="size-5" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{feature.title}</p>
-                    <p className="text-sm text-white/55">{feature.desc}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <BorderBeam borderWidth={2} duration={9} size={140} />
         </div>
       </div>
 
-      {/* Form — right */}
-      <div className="flex h-full flex-col items-center justify-center px-6 py-10 lg:col-span-3 xl:col-span-2">
-        <div className="ro-rise w-full max-w-md">
-          <Wordmark />
-          <div className="mt-10">
-            <h2 className="font-semibold text-2xl tracking-tight">
-              {isSignIn ? "Welcome back" : "Create your account"}
-            </h2>
-            <p className="mt-1.5 text-muted-foreground">
-              {isSignIn
-                ? "Sign in to your RetailOS workspace."
-                : "Get your store up and running in minutes."}
+      {/* Auth form — fills the right half on lg+, the only column on mobile. */}
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-6 py-12">
+        <div className="ro-rise w-full max-w-sm">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col items-center gap-6 text-center lg:items-start lg:text-left">
+              <Wordmark />
+              <div>
+                <h2 className="mb-1.5 font-semibold text-2xl tracking-tight">
+                  {isSignIn ? "Sign in to RetailOS" : "Create your account"}
+                </h2>
+                <p className="text-muted-foreground">
+                  {isSignIn
+                    ? "The unified platform for sales, inventory, and accounting — built to keep running, even offline."
+                    : "Set up your business and start selling in minutes."}
+                </p>
+              </div>
+            </div>
+
+            {isSignIn ? <SignInForm /> : <SignUpForm />}
+
+            <div className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-border" />
+              <span className="text-muted-foreground text-xs">or</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+
+            <GoogleSignIn />
+
+            <p className="text-center text-muted-foreground text-sm">
+              {isSignIn ? "New to RetailOS? " : "Already have an account? "}
+              <button
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+                onClick={() => setMode(isSignIn ? "signup" : "signin")}
+                type="button"
+              >
+                {isSignIn ? "Create an account" : "Sign in"}
+              </button>
             </p>
           </div>
-
-          <div className="mt-8">
-            {isSignIn ? <SignInForm /> : <SignUpForm />}
-          </div>
-
-          <p className="mt-6 text-center text-muted-foreground text-sm">
-            {isSignIn ? "New to RetailOS? " : "Already have an account? "}
-            <button
-              className="font-medium text-[var(--brand)] underline-offset-4 hover:underline"
-              onClick={() => setMode(isSignIn ? "signup" : "signin")}
-              type="button"
-            >
-              {isSignIn ? "Create an account" : "Sign in"}
-            </button>
-          </p>
         </div>
       </div>
     </div>

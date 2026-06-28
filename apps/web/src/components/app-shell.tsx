@@ -12,7 +12,7 @@ import {
   SidebarTrigger,
 } from "@RetailOS/ui/components/sidebar";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ScanLine, Store } from "lucide-react";
+import { LayoutDashboard, Package, ScanLine, Store } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { ConnectionStatus } from "./connection-status";
@@ -23,9 +23,19 @@ import UserMenu from "./user-menu";
 // (the canonical AdminCN-style shell primitive), re-themed via the RetailOS
 // sidebar tokens already in globals.css. Adapted to TanStack Start: nav items
 // are TanStack <Link>s via the Base UI `render` prop (no Next.js routing).
-// Progressive disclosure: the cashier persona sees only the sale surfaces.
-const NAV_ITEMS = [
-  { to: "/pos", label: "Point of Sale", icon: ScanLine },
+const NAV_GROUPS = [
+  {
+    label: "Overview",
+    items: [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "Sell",
+    items: [{ to: "/pos", label: "Point of Sale", icon: ScanLine }],
+  },
+  {
+    label: "Catalog",
+    items: [{ to: "/products", label: "Products", icon: Package }],
+  },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -47,23 +57,25 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Sell</SidebarGroupLabel>
-            <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
-                <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton
-                    isActive={pathname.startsWith(item.to)}
-                    render={<Link to={item.to} />}
-                    tooltip={item.label}
-                  >
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroup>
+          {NAV_GROUPS.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarMenu>
+                {group.items.map((item) => (
+                  <SidebarMenuItem key={item.to}>
+                    <SidebarMenuButton
+                      isActive={pathname.startsWith(item.to)}
+                      render={<Link to={item.to} />}
+                      tooltip={item.label}
+                    >
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroup>
+          ))}
         </SidebarContent>
       </Sidebar>
       <SidebarInset>

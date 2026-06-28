@@ -20,6 +20,11 @@ export const env = createEnv({
     // Auth session cookie is shared across same-site subdomains (web ↔ api).
     // Env-driven; never hardcoded (§9). Unset ⇒ host-only cookie (local dev).
     AUTH_COOKIE_DOMAIN: z.string().optional(),
+    // Google OAuth (social sign-in). Optional: the provider is only enabled when
+    // both are present, so the app runs fine without them. Secrets via env only
+    // (§25) — set in Infisical, never committed.
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
   },
   runtimeEnv: process.env,
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

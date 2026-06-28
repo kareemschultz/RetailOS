@@ -1,6 +1,6 @@
 import { cn } from "@RetailOS/ui/lib/utils";
 import type { MotionStyle, Transition } from "motion/react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import type { CSSProperties } from "react";
 
 // Owned + re-themed from the shadcn Studio login-page-02 block (Assembly Law):
@@ -34,6 +34,13 @@ export function BorderBeam({
   initialOffset = 0,
   borderWidth = 2,
 }: BorderBeamProps) {
+  // Honor prefers-reduced-motion: the parent keeps its static outline frame,
+  // so suppressing the infinite beam entirely is the accessible default.
+  const shouldReduceMotion = useReducedMotion();
+  if (shouldReduceMotion) {
+    return null;
+  }
+
   return (
     <div
       className="border-(length:--border-beam-width) pointer-events-none absolute inset-0 rounded-[inherit] border-transparent [mask-clip:padding-box,border-box] [mask-composite:intersect] [mask-image:linear-gradient(transparent,transparent),linear-gradient(#000,#000)]"
