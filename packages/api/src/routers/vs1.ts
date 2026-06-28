@@ -5,6 +5,7 @@ import { ORPCError } from "@orpc/server";
 import {
   and,
   count,
+  desc,
   eq,
   gte,
   ilike,
@@ -5075,6 +5076,75 @@ export const posRouter = {
           });
         }
         return receipt;
+      });
+    }),
+
+  // ── POS sale lookup (frontend-readiness) ─────────────────────────────────
+  // Cashier-safe, OPERATIONAL "find a recent sale" read so a cashier can locate
+  // a sale to REPRINT (pos.receipt) or hand to REFUND/VOID (pos.refund/void).
+  // Gated on pos.create_sale (the base cashier grant — finding/reprinting; the
+  // refund/void ACTIONS stay separately gated). Tenant-scoped (RLS). Returns
+  // ONLY the sale-level fields needed to FIND a sale (number, when, total,
+  // status, type, location) — never line/COGS/margin internals (those live on
+  // sale_line, not sale, so this sale-only select cannot leak them).
+  // BOUNDED on purpose: a RECENCY FLOOR (last 30 days) + most-recent-first + a
+  // hard limit (max 50) + optional number match + optional location scope — an
+  // operational find, NOT a reporting export. The recency floor is load-bearing:
+  // without it the limit only caps a PAGE, and a cashier could script number
+  // searches to walk the tenant's entire history 50 rows at a time (Codex HIGH).
+  saleSearch: tenantProcedure
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(50).default(20),
+        // Optional scope to the cashier's terminal location (the frontend passes
+        // its active locationId); RLS already bounds results to the tenant.
+        locationId: z.string().uuid().optional(),
+        q: z.string().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        const conditions = [
+          // Recency floor — the load-bearing bound (Codex HIGH): even scripted
+          // `q` searches can only reach the last 30 days, so this is an
+          // OPERATIONAL find, never a full-history enumeration/export. (A longer
+          // per-tenant refund window is a future settings-resolver concern.)
+          gte(schema.sale.createdAt, sql`now() - interval '30 days'`),
+          input.locationId
+            ? eq(schema.sale.locationId, input.locationId)
+            : null,
+          input.q ? ilike(schema.sale.number, `%${input.q}%`) : null,
+        ].filter((condition): condition is SQL => condition != null);
+        const rows = await tx
+          .select({
+            createdAt: schema.sale.createdAt,
+            currency: schema.sale.currency,
+            id: schema.sale.id,
+            locationId: schema.sale.locationId,
+            number: schema.sale.number,
+            saleType: schema.sale.saleType,
+            scale: schema.sale.scale,
+            status: schema.sale.status,
+            totalMinor: schema.sale.totalMinor,
+          })
+          .from(schema.sale)
+          .where(conditions.length ? and(...conditions) : undefined)
+          // Server-authoritative recency (§14); bounded by limit.
+          .orderBy(desc(schema.sale.createdAt))
+          .limit(input.limit);
+        return rows.map((r) => ({
+          createdAt: r.createdAt.toISOString(),
+          currency: r.currency,
+          id: r.id,
+          locationId: r.locationId,
+          number: r.number,
+          saleType: r.saleType,
+          scale: r.scale,
+          status: r.status,
+          totalMinor: Number(r.totalMinor),
+        }));
       });
     }),
 };
