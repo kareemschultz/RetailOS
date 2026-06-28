@@ -278,6 +278,28 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       primaryImageUrl: "https://cdn.example.test/products/media-p1-back.png",
     });
     expect(JSON.stringify(row)).not.toMatch(PRODUCT_DTO_LEAK_RE);
+    const detail = await call(
+      appRouter.product.detail,
+      { id: product.id },
+      admin
+    );
+    expect(detail).toMatchObject({
+      id: product.id,
+      name: "Media Product",
+      images: [
+        {
+          altText: "Back pack",
+          isPrimary: true,
+          url: "https://cdn.example.test/products/media-p1-back.png",
+        },
+        {
+          altText: "Front pack",
+          isPrimary: false,
+          url: "https://cdn.example.test/products/media-p1-front.png",
+        },
+      ],
+    });
+    expect(JSON.stringify(detail)).not.toMatch(PRODUCT_DTO_LEAK_RE);
 
     await expect(
       call(
@@ -298,6 +320,9 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         },
         admin
       )
+    ).rejects.toThrow(PRODUCT_NOT_FOUND_RE);
+    await expect(
+      call(appRouter.product.detail, { id: otherTenantProduct.id }, admin)
     ).rejects.toThrow(PRODUCT_NOT_FOUND_RE);
   });
 

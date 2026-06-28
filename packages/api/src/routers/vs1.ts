@@ -337,6 +337,60 @@ export const productRouter = {
         });
       });
     }),
+  detail: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const row = (
+          await tx
+            .select({
+              currency: schema.product.currency,
+              id: schema.product.id,
+              name: schema.product.name,
+              priceMinor: schema.product.priceMinor,
+              scale: schema.product.scale,
+              sku: schema.product.sku,
+              trackingMode: schema.product.trackingMode,
+            })
+            .from(schema.product)
+            .where(
+              and(
+                eq(schema.product.id, input.id),
+                isNull(schema.product.deletedAt)
+              )
+            )
+            .limit(1)
+        ).at(0);
+        if (!row) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Product not found in this tenant",
+          });
+        }
+        const images = await tx
+          .select({
+            altText: schema.productImage.altText,
+            id: schema.productImage.id,
+            isPrimary: schema.productImage.isPrimary,
+            sortOrder: schema.productImage.sortOrder,
+            url: schema.productImage.url,
+          })
+          .from(schema.productImage)
+          .where(
+            and(
+              eq(schema.productImage.productId, input.id),
+              isNull(schema.productImage.deletedAt)
+            )
+          )
+          .orderBy(
+            desc(schema.productImage.isPrimary),
+            schema.productImage.sortOrder,
+            schema.productImage.createdAt
+          );
+        return { ...row, images };
+      });
+    }),
   imageCreate: tenantProcedure
     .input(
       z.object({

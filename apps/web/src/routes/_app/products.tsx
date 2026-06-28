@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@RetailOS/ui/components/table";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ImageIcon, Package, Search, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -137,7 +137,13 @@ function CatalogContent({
               <div className="flex min-w-0 items-center gap-3">
                 <ProductThumb product={p} />
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{p.name}</p>
+                  <Link
+                    className="truncate font-medium hover:text-primary hover:underline"
+                    params={{ productId: p.id }}
+                    to="/products/$productId"
+                  >
+                    {p.name}
+                  </Link>
                   <p className="text-muted-foreground text-xs">
                     Shared catalog item
                   </p>
