@@ -324,6 +324,44 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     await expect(
       call(appRouter.product.detail, { id: otherTenantProduct.id }, admin)
     ).rejects.toThrow(PRODUCT_NOT_FOUND_RE);
+
+    // Codex HIGH: the imageCreate write response must scrub the internal
+    // object-storage key, exactly as the catalog/detail reads do.
+    const created = await call(
+      appRouter.product.imageCreate,
+      {
+        objectKey: "tenant/secret/storage-key.png",
+        productId: product.id,
+        url: "https://cdn.example.test/products/keyed.png",
+      },
+      admin
+    );
+    expect(JSON.stringify(created)).not.toMatch(PRODUCT_DTO_LEAK_RE);
+    expect(created).not.toHaveProperty("objectKey");
+
+    // Codex HIGH: images cannot be attached to a soft-deleted (archived)
+    // product — imageCreate must apply the same isNull(deletedAt) guard as detail.
+    const archived = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Archived Media Product",
+        priceMinor: 1000,
+        sku: "MEDIA-ARCHIVED",
+      },
+      admin
+    );
+    await call(appRouter.product.archive, { id: archived.id }, admin);
+    await expect(
+      call(
+        appRouter.product.imageCreate,
+        {
+          productId: archived.id,
+          url: "https://cdn.example.test/products/archived.png",
+        },
+        admin
+      )
+    ).rejects.toThrow(PRODUCT_NOT_FOUND_RE);
   });
 
   it("blocks cross-tenant FK references (Postgres FK checks bypass RLS)", async () => {

@@ -410,7 +410,12 @@ export const productRouter = {
           await tx
             .select({ id: schema.product.id })
             .from(schema.product)
-            .where(eq(schema.product.id, input.productId))
+            .where(
+              and(
+                eq(schema.product.id, input.productId),
+                isNull(schema.product.deletedAt)
+              )
+            )
             .for("update")
             .limit(1)
         ).at(0);
@@ -458,7 +463,16 @@ export const productRouter = {
           entityId: row.id,
           after: row,
         });
-        return row;
+        // Scrub the internal object-storage key from the client DTO; reads
+        // (catalog/detail) already omit it, so the write response must too.
+        return {
+          id: row.id,
+          url: row.url,
+          altText: row.altText,
+          sortOrder: row.sortOrder,
+          isPrimary: row.isPrimary,
+          createdAt: row.createdAt,
+        };
       });
     }),
   create: tenantProcedure
