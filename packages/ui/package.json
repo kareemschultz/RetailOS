@@ -20,6 +20,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "lucide-react": "catalog:",
+    "motion": "^12.42.0",
     "next-themes": "catalog:",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

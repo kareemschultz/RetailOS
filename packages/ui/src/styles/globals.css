@@ -15,6 +15,10 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.205 0 0);
   --primary-foreground: oklch(0.985 0 0);
+  /* RetailOS Blue — brand accent (design-language SOT). Emphasis surfaces
+     (auth/onboarding); not yet the global --primary. Use via bg-[var(--brand)]. */
+  --brand: oklch(0.546 0.245 262.881);
+  --brand-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -50,6 +54,8 @@
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.87 0 0);
   --primary-foreground: oklch(0.205 0 0);
+  --brand: oklch(0.623 0.214 259.815);
+  --brand-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -126,5 +132,39 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* ── Auth / onboarding motion (Magic-UI-budget surfaces; never POS) ───────────
+   Animate only transform/opacity; honor prefers-reduced-motion. */
+@keyframes ro-aurora {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, -6%, 0) scale(1.2);
+  }
+}
+@keyframes ro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ro-aurora {
+  animation: ro-aurora 18s ease-in-out infinite;
+}
+.ro-rise {
+  animation: ro-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ro-aurora,
+  .ro-rise {
+    animation: none !important;
   }
 }
