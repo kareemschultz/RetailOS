@@ -1,1 +1,8 @@
+/* Corporate theme fonts — Inter (UI/headings) + IBM Plex Mono (money, SKUs,
+   quantities). Loaded via @fontsource so they ship with the app (no external
+   CDN, works offline — charter §13). */
+@import "@fontsource-variable/inter";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
 @import "@RetailOS/ui/globals.css";
