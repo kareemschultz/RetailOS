@@ -294,7 +294,7 @@ export const productRouter = {
             conditions.push(search);
           }
         }
-        return tx
+        const rows = await tx
           .select({
             id: schema.product.id,
             sku: schema.product.sku,
@@ -306,6 +306,173 @@ export const productRouter = {
           })
           .from(schema.product)
           .where(and(...conditions));
+        const productIds = rows.map((row) => row.id);
+        const imageRows =
+          productIds.length === 0
+            ? []
+            : await tx
+                .select({
+                  altText: schema.productImage.altText,
+                  productId: schema.productImage.productId,
+                  url: schema.productImage.url,
+                })
+                .from(schema.productImage)
+                .where(
+                  and(
+                    inArray(schema.productImage.productId, productIds),
+                    eq(schema.productImage.isPrimary, true),
+                    isNull(schema.productImage.deletedAt)
+                  )
+                );
+        const primaryImageByProduct = new Map(
+          imageRows.map((image) => [image.productId, image])
+        );
+        return rows.map((row) => {
+          const primaryImage = primaryImageByProduct.get(row.id);
+          return {
+            ...row,
+            primaryImageAltText: primaryImage?.altText ?? null,
+            primaryImageUrl: primaryImage?.url ?? null,
+          };
+        });
+      });
+    }),
+  detail: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const row = (
+          await tx
+            .select({
+              currency: schema.product.currency,
+              id: schema.product.id,
+              name: schema.product.name,
+              priceMinor: schema.product.priceMinor,
+              scale: schema.product.scale,
+              sku: schema.product.sku,
+              trackingMode: schema.product.trackingMode,
+            })
+            .from(schema.product)
+            .where(
+              and(
+                eq(schema.product.id, input.id),
+                isNull(schema.product.deletedAt)
+              )
+            )
+            .limit(1)
+        ).at(0);
+        if (!row) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Product not found in this tenant",
+          });
+        }
+        const images = await tx
+          .select({
+            altText: schema.productImage.altText,
+            id: schema.productImage.id,
+            isPrimary: schema.productImage.isPrimary,
+            sortOrder: schema.productImage.sortOrder,
+            url: schema.productImage.url,
+          })
+          .from(schema.productImage)
+          .where(
+            and(
+              eq(schema.productImage.productId, input.id),
+              isNull(schema.productImage.deletedAt)
+            )
+          )
+          .orderBy(
+            desc(schema.productImage.isPrimary),
+            schema.productImage.sortOrder,
+            schema.productImage.createdAt
+          );
+        return { ...row, images };
+      });
+    }),
+  imageCreate: tenantProcedure
+    .input(
+      z.object({
+        productId: z.string().uuid(),
+        url: z.string().url(),
+        objectKey: z.string().min(1).optional(),
+        altText: z.string().min(1).max(200).optional(),
+        sortOrder: z.number().int().min(0).default(0),
+        isPrimary: z.boolean().default(false),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const productRow = (
+          await tx
+            .select({ id: schema.product.id })
+            .from(schema.product)
+            .where(
+              and(
+                eq(schema.product.id, input.productId),
+                isNull(schema.product.deletedAt)
+              )
+            )
+            .for("update")
+            .limit(1)
+        ).at(0);
+        if (!productRow) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Product not found in this tenant",
+          });
+        }
+        if (input.isPrimary) {
+          await tx
+            .update(schema.productImage)
+            .set({
+              isPrimary: false,
+              updatedBy: ctx.actorUserId,
+            })
+            .where(
+              and(
+                eq(schema.productImage.productId, input.productId),
+                eq(schema.productImage.isPrimary, true),
+                isNull(schema.productImage.deletedAt)
+              )
+            );
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.productImage)
+              .values({
+                tenantId: ctx.tenantId,
+                productId: input.productId,
+                url: input.url,
+                objectKey: input.objectKey,
+                altText: input.altText,
+                sortOrder: input.sortOrder,
+                isPrimary: input.isPrimary,
+                createdBy: ctx.actorUserId,
+                updatedBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "product.imageCreate",
+          entityType: "product_image",
+          entityId: row.id,
+          after: row,
+        });
+        // Scrub the internal object-storage key from the client DTO; reads
+        // (catalog/detail) already omit it, so the write response must too.
+        return {
+          id: row.id,
+          url: row.url,
+          altText: row.altText,
+          sortOrder: row.sortOrder,
+          isPrimary: row.isPrimary,
+          createdAt: row.createdAt,
+        };
       });
     }),
   create: tenantProcedure

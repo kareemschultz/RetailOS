@@ -1,11 +1,14 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  foreignKey,
   index,
   integer,
   pgTable,
   text,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { actor, softDelete, tenantId, timestamps } from "./columns";
@@ -185,6 +188,36 @@ export const product = pgTable(
     index("product_baseUomId_idx").on(table.baseUomId),
     // Composite-FK target (Phase 3 #5).
     unique("product_tenant_id_uq").on(table.tenantId, table.id),
+  ]
+);
+
+export const productImage = pgTable(
+  "product_image",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    productId: uuid("product_id").notNull(),
+    url: text("url").notNull(),
+    objectKey: text("object_key"),
+    altText: text("alt_text"),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    ...timestamps,
+    ...actor,
+    ...softDelete,
+  },
+  (table) => [
+    index("product_image_tenantId_idx").on(table.tenantId),
+    index("product_image_productId_idx").on(table.productId),
+    foreignKey({
+      columns: [table.tenantId, table.productId],
+      foreignColumns: [product.tenantId, product.id],
+      name: "product_image_product_composite_fk",
+    }),
+    unique("product_image_tenant_id_uq").on(table.tenantId, table.id),
+    uniqueIndex("product_image_primary_uq")
+      .on(table.tenantId, table.productId)
+      .where(sql`${table.isPrimary} = true AND ${table.deletedAt} IS NULL`),
   ]
 );
 

@@ -22,6 +22,9 @@ const UNDERPAYMENT_RE = /Underpayment/;
 // caller (availableActions:false is meaningless unless enforcement matches).
 const MISSING_REFUND_PERM_RE = /Missing permission: pos\.refund/;
 const MISSING_VOID_PERM_RE = /Missing permission: pos\.void_sale/;
+const MISSING_PRODUCTS_CREATE_PERM_RE = /Missing permission: products\.create/;
+const PRODUCT_DTO_LEAK_RE = /objectKey|costing|policy/i;
+const PRODUCT_NOT_FOUND_RE = /Product not found in this tenant/;
 const SALE_NOT_FOUND_RE = /Sale not found in this tenant/;
 const SHIFT_REQUIRED_RE = /open shift is required/i;
 
@@ -92,6 +95,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.uomConversion);
         await tx.delete(schema.sku);
         await tx.delete(schema.variant);
+        await tx.delete(schema.productImage);
         await tx.delete(schema.membership);
         await tx.delete(schema.product);
         await tx.delete(schema.category);
@@ -219,6 +223,145 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         cashier
       )
     ).rejects.toThrow();
+  });
+
+  it("stores product media behind RLS and exposes only the primary catalog image", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const product = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Media Product",
+        priceMinor: 1000,
+        sku: "MEDIA-P1",
+      },
+      admin
+    );
+    const otherTenantProduct = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Other Tenant Product",
+        priceMinor: 1000,
+        sku: "MEDIA-P1-B",
+      },
+      adminB
+    );
+
+    await call(
+      appRouter.product.imageCreate,
+      {
+        altText: "Front pack",
+        isPrimary: true,
+        productId: product.id,
+        url: "https://cdn.example.test/products/media-p1-front.png",
+      },
+      admin
+    );
+    await call(
+      appRouter.product.imageCreate,
+      {
+        altText: "Back pack",
+        isPrimary: true,
+        productId: product.id,
+        url: "https://cdn.example.test/products/media-p1-back.png",
+      },
+      admin
+    );
+
+    const catalog = await call(appRouter.product.catalog, {}, admin);
+    const row = catalog.find((item) => item.id === product.id);
+    expect(row).toMatchObject({
+      primaryImageAltText: "Back pack",
+      primaryImageUrl: "https://cdn.example.test/products/media-p1-back.png",
+    });
+    expect(JSON.stringify(row)).not.toMatch(PRODUCT_DTO_LEAK_RE);
+    const detail = await call(
+      appRouter.product.detail,
+      { id: product.id },
+      admin
+    );
+    expect(detail).toMatchObject({
+      id: product.id,
+      name: "Media Product",
+      images: [
+        {
+          altText: "Back pack",
+          isPrimary: true,
+          url: "https://cdn.example.test/products/media-p1-back.png",
+        },
+        {
+          altText: "Front pack",
+          isPrimary: false,
+          url: "https://cdn.example.test/products/media-p1-front.png",
+        },
+      ],
+    });
+    expect(JSON.stringify(detail)).not.toMatch(PRODUCT_DTO_LEAK_RE);
+
+    await expect(
+      call(
+        appRouter.product.imageCreate,
+        {
+          productId: product.id,
+          url: "https://cdn.example.test/products/blocked.png",
+        },
+        cashier
+      )
+    ).rejects.toThrow(MISSING_PRODUCTS_CREATE_PERM_RE);
+    await expect(
+      call(
+        appRouter.product.imageCreate,
+        {
+          productId: otherTenantProduct.id,
+          url: "https://cdn.example.test/products/cross-tenant.png",
+        },
+        admin
+      )
+    ).rejects.toThrow(PRODUCT_NOT_FOUND_RE);
+    await expect(
+      call(appRouter.product.detail, { id: otherTenantProduct.id }, admin)
+    ).rejects.toThrow(PRODUCT_NOT_FOUND_RE);
+
+    // Codex HIGH: the imageCreate write response must scrub the internal
+    // object-storage key, exactly as the catalog/detail reads do.
+    const created = await call(
+      appRouter.product.imageCreate,
+      {
+        objectKey: "tenant/secret/storage-key.png",
+        productId: product.id,
+        url: "https://cdn.example.test/products/keyed.png",
+      },
+      admin
+    );
+    expect(JSON.stringify(created)).not.toMatch(PRODUCT_DTO_LEAK_RE);
+    expect(created).not.toHaveProperty("objectKey");
+
+    // Codex HIGH: images cannot be attached to a soft-deleted (archived)
+    // product — imageCreate must apply the same isNull(deletedAt) guard as detail.
+    const archived = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Archived Media Product",
+        priceMinor: 1000,
+        sku: "MEDIA-ARCHIVED",
+      },
+      admin
+    );
+    await call(appRouter.product.archive, { id: archived.id }, admin);
+    await expect(
+      call(
+        appRouter.product.imageCreate,
+        {
+          productId: archived.id,
+          url: "https://cdn.example.test/products/archived.png",
+        },
+        admin
+      )
+    ).rejects.toThrow(PRODUCT_NOT_FOUND_RE);
   });
 
   it("blocks cross-tenant FK references (Postgres FK checks bypass RLS)", async () => {
