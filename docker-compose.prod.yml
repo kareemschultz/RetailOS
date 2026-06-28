@@ -39,14 +39,10 @@ services:
         # cookie (packages/auth) shares the session between the two subdomains.
         VITE_SERVER_URL: ${VITE_SERVER_URL:-http://localhost:3000}
     init: true
+    # The web client is a pure frontend (it calls the server via the baked
+    # VITE_SERVER_URL); it needs no runtime secrets.
     environment:
-      # Machine-identity Infisical pull (token injected at deploy time; see /opt/docker/infisical-token.sh)
-      INFISICAL_DOMAIN: https://infisical.karetechsolutions.com
-      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID}
-      INFISICAL_ENV: prod
-      INFISICAL_PATH: /credentials/retailos
-      INFISICAL_TOKEN: ${INFISICAL_TOKEN}
-      # → resolves DATABASE_URL (postgres-central), REDIS_URL (redis-shared/3), S3_* (minio below)
+      NODE_ENV: production
     networks: [pangolin, retailos-internal]
     restart: unless-stopped
     # Bound resources so one app can't starve the shared VPS (noisy-neighbour, charter §8).
@@ -70,14 +66,16 @@ services:
       context: .
       dockerfile: apps/server/Dockerfile
     init: true
+    # Runtime secrets injected from Infisical (/credentials/retailos) at deploy
+    # time via `infisical run` — interpolated here, never written to disk or git.
     environment:
-      # Same Infisical machine-identity pull as web — resolves DATABASE_URL,
-      # BETTER_AUTH_SECRET, BETTER_AUTH_URL, CORS_ORIGIN, AUTH_COOKIE_DOMAIN, etc.
-      INFISICAL_DOMAIN: https://infisical.karetechsolutions.com
-      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID}
-      INFISICAL_ENV: prod
-      INFISICAL_PATH: /credentials/retailos
-      INFISICAL_TOKEN: ${INFISICAL_TOKEN}
+      NODE_ENV: production
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE}
+      DATABASE_URL: ${DATABASE_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN}
     networks: [pangolin, retailos-internal]
     restart: unless-stopped
     deploy:
