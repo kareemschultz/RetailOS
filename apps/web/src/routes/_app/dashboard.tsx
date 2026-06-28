@@ -1,9 +1,15 @@
-import { Card, CardContent } from "@RetailOS/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@RetailOS/ui/components/card";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  ImageIcon,
   type LucideIcon,
   Package,
   Receipt,
@@ -20,6 +26,18 @@ export const Route = createFileRoute("/_app/dashboard")({
 });
 
 const SKELETON_KEYS = ["a", "b", "c", "d"] as const;
+const PRODUCT_PREVIEW_LIMIT = 5;
+
+interface CatalogPreviewRow {
+  currency: string;
+  id: string;
+  name: string;
+  priceMinor: number;
+  primaryImageAltText: string | null;
+  primaryImageUrl: string | null;
+  scale: number;
+  sku: string;
+}
 
 function KpiCard({
   label,
@@ -52,17 +70,88 @@ function KpiCard({
   );
 }
 
+function ProductPreviewThumb({ product }: { product: CatalogPreviewRow }) {
+  if (product.primaryImageUrl) {
+    return (
+      <img
+        alt={product.primaryImageAltText ?? product.name}
+        className="size-10 rounded-lg border object-cover"
+        height={40}
+        src={product.primaryImageUrl}
+        width={40}
+      />
+    );
+  }
+
+  return (
+    <div className="flex size-10 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
+      <ImageIcon className="size-4" />
+    </div>
+  );
+}
+
+function CatalogPreview({
+  isLoading,
+  products,
+}: {
+  isLoading: boolean;
+  products: CatalogPreviewRow[];
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-3">
+        {SKELETON_KEYS.slice(0, 3).map((key) => (
+          <Skeleton className="h-14 rounded-lg" key={key} />
+        ))}
+      </div>
+    );
+  }
+
+  if (products.length === 0) {
+    return (
+      <div className="flex min-h-36 flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-6 text-center">
+        <Package className="size-5 text-muted-foreground" />
+        <p className="font-medium text-sm">No catalog items yet</p>
+        <p className="text-muted-foreground text-xs">
+          Products created in the catalog will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col divide-y">
+      {products.map((product) => (
+        <div className="flex items-center gap-3 py-3" key={product.id}>
+          <ProductPreviewThumb product={product} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium text-sm">{product.name}</p>
+            <p className="font-mono text-muted-foreground text-xs">
+              {product.sku}
+            </p>
+          </div>
+          <p className="font-medium font-mono text-sm">
+            {formatMoney(product.priceMinor, product.currency, product.scale)}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DashboardScreen() {
   // All KPI aggregation is server-side (reports.dashboardSummary). The client
   // only renders the returned figures — no money arithmetic in the browser.
   const summary = useQuery(
     orpc.reports.dashboardSummary.queryOptions({ input: {} })
   );
+  const catalog = useQuery(orpc.product.catalog.queryOptions({ input: {} }));
 
   const data = summary.data;
+  const productPreview = (catalog.data ?? []).slice(0, PRODUCT_PREVIEW_LIMIT);
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
       <div>
         <h1 className="font-semibold text-2xl tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
@@ -138,20 +227,33 @@ function DashboardScreen() {
         </div>
       )}
 
-      <Card className="shadow-sm">
-        <CardContent className="p-6">
-          <h2 className="font-semibold text-lg tracking-tight">
-            Welcome to RetailOS
-          </h2>
-          <p className="mt-1 text-muted-foreground text-sm">
-            Ring up a sale from{" "}
-            <span className="font-medium">Point of Sale</span>, or browse your
-            catalog under <span className="font-medium">Products</span>. More
-            dashboards (cashier, inventory, accounting) arrive as those modules
-            ship.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+        <Card className="shadow-sm">
+          <CardContent className="p-6">
+            <h2 className="font-semibold text-lg tracking-tight">
+              Welcome to RetailOS
+            </h2>
+            <p className="mt-1 text-muted-foreground text-sm">
+              Ring up a sale from{" "}
+              <span className="font-medium">Point of Sale</span>, or browse your
+              catalog under <span className="font-medium">Products</span>. More
+              dashboards (cashier, inventory, accounting) arrive as those
+              modules ship.
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="border-b">
+            <CardTitle>Catalog spotlight</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CatalogPreview
+              isLoading={catalog.isLoading}
+              products={productPreview}
+            />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

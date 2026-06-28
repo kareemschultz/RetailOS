@@ -13,6 +13,12 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Commerce back-office + product media (in progress, 2026-06-28)
+- **Branch:** `feat/commerce-backoffice-products` off `master = a98390b` after PR #45 was merged. Owner asked Codex to push work forward on a separate branch for other agents to vet.
+- **Scope built so far:** backend product-media seam + CommerceO-style Dashboard/Products polish. Added tenant-owned `product_image` with composite FK `(tenant_id, product_id) → product(tenant_id, id)`, single-primary partial unique index, fail-closed RLS, Drizzle snapshot/journal metadata, and `product.imageCreate`. `product.catalog` now returns only display-safe primary image fields (`primaryImageUrl`, `primaryImageAltText`) and still leaks no costing/policy/object-key internals. Frontend Products now renders a CommerceO-style product table with thumbnails and the Dashboard has a catalog spotlight panel; app shell/sidebar unchanged per locked decision.
+- **Verification:** `bun run check`, `bun run check-types`, `bun run check:mojibake`, default `bun run test`, and `bun -F web build` green. Fresh disposable PG18 on port 56432 (`roles.sql` → migrate 0000→0022 as `retailos_migrator` → test as `retailos_app`) green: **db 93/93 + api 53/53, zero skips**.
+- **Found/fixed:** hand-written SQL migration alone was not applied by Drizzle because `_journal.json`/snapshot metadata were missing; fixed by regenerating `0022` metadata from schema and preserving the hand-required RLS block. Lesson appended.
+
 ### 🚀 FIRST DEPLOYMENT — LIVE (2026-06-28)
 **RetailOS is live at https://retailos.karetechsolutions.com (api: retailos-api.karetechsolutions.com).** Branch `feat/deploy-server-image-and-auth` (PR #44) — deployed FROM the branch; merge to make `master` match prod.
 - **Infra:** `retailos-web:3001` + `retailos-server:3000` containers on the `pangolin` network (Traefik/SSL via Pangolin resources 68/69). `retailos` DB migrated on `postgres-central` (48 tables, RLS forced; runtime connects as `retailos_app`, `bypassrls=false`). All secrets in **Infisical** `/credentials/retailos` (DATABASE_URL/auth/cross-subdomain); deploy via `infisical run` (never on disk/git). NTFY-notified.
