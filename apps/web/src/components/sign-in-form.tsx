@@ -1,4 +1,5 @@
 import { Button } from "@RetailOS/ui/components/button";
+import { Checkbox } from "@RetailOS/ui/components/checkbox";
 import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
 import { useForm } from "@tanstack/react-form";
@@ -18,12 +19,13 @@ const schema = z.object({
 export default function SignInForm() {
   const navigate = useNavigate({ from: "/login" });
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
   const form = useForm({
     defaultValues: { email: "", password: "" },
     onSubmit: async ({ value }) => {
       await authClient.signIn.email(
-        { email: value.email, password: value.password },
+        { email: value.email, password: value.password, rememberMe },
         {
           onSuccess: () => {
             navigate({ to: "/pos" });
@@ -40,7 +42,7 @@ export default function SignInForm() {
 
   return (
     <form
-      className="space-y-4"
+      className="space-y-5"
       onSubmit={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -49,16 +51,18 @@ export default function SignInForm() {
     >
       <form.Field name="email">
         {(field) => (
-          <div className="space-y-1.5">
-            <Label htmlFor={field.name}>Email</Label>
+          <div className="space-y-2">
+            <Label className="leading-5" htmlFor={field.name}>
+              Email address
+            </Label>
             <Input
               autoComplete="email"
-              className="h-11"
+              className="h-11 rounded-lg"
               id={field.name}
               name={field.name}
               onBlur={field.handleBlur}
               onChange={(e) => field.handleChange(e.target.value)}
-              placeholder="you@store.com"
+              placeholder="Enter your email address"
               type="email"
               value={field.state.value}
             />
@@ -73,17 +77,19 @@ export default function SignInForm() {
 
       <form.Field name="password">
         {(field) => (
-          <div className="space-y-1.5">
-            <Label htmlFor={field.name}>Password</Label>
+          <div className="space-y-2">
+            <Label className="leading-5" htmlFor={field.name}>
+              Password
+            </Label>
             <div className="relative">
               <Input
                 autoComplete="current-password"
-                className="h-11 pr-10"
+                className="h-11 rounded-lg pr-10"
                 id={field.name}
                 name={field.name}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
-                placeholder="••••••••"
+                placeholder="••••••••••••"
                 type={showPassword ? "text" : "password"}
                 value={field.state.value}
               />
@@ -113,6 +119,31 @@ export default function SignInForm() {
         )}
       </form.Field>
 
+      <div className="flex items-center justify-between gap-y-2 text-sm">
+        <div className="flex items-center gap-2.5">
+          <Checkbox
+            checked={rememberMe}
+            id="rememberMe"
+            onCheckedChange={(checked) => setRememberMe(checked === true)}
+          />
+          <Label className="font-normal" htmlFor="rememberMe">
+            Remember me
+          </Label>
+        </div>
+
+        <button
+          className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          onClick={() =>
+            toast.info(
+              "Password reset is coming soon — contact your administrator."
+            )
+          }
+          type="button"
+        >
+          Forgot password?
+        </button>
+      </div>
+
       <form.Subscribe
         selector={(state) => ({
           canSubmit: state.canSubmit,
@@ -121,11 +152,11 @@ export default function SignInForm() {
       >
         {({ canSubmit, isSubmitting }) => (
           <Button
-            className="h-11 w-full bg-[var(--brand)] text-[var(--brand-foreground)] shadow-sm transition hover:opacity-90"
+            className="h-11 w-full rounded-lg bg-[var(--brand)] text-[var(--brand-foreground)] shadow-sm transition hover:opacity-90"
             disabled={!canSubmit || isSubmitting}
             type="submit"
           >
-            {isSubmitting ? "Signing in…" : "Sign in"}
+            {isSubmitting ? "Signing in…" : "Sign in to RetailOS"}
           </Button>
         )}
       </form.Subscribe>
