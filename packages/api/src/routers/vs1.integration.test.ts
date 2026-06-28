@@ -435,6 +435,12 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       0
     );
 
+    // Codex HIGH (TOCTOU): promoting a soft-deleted image must reject, not
+    // flag a deleted row is_primary=true (the final update guards deletedAt).
+    await expect(
+      call(appRouter.product.imageSetPrimary, { imageId: second.id }, admin)
+    ).rejects.toThrow(IMAGE_NOT_FOUND_RE);
+
     // Permission gate: a cashier cannot manage media.
     await expect(
       call(appRouter.product.imageSetPrimary, { imageId: first.id }, cashier)

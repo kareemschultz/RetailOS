@@ -232,6 +232,8 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 
 ## Changelog (newest first)
 
+- **2026-06-28** — PR #47 Codex review: 1 HIGH (0 CRIT) folded — imageSetPrimary TOCTOU vs imageDelete. Fixed: lock target image row FOR UPDATE in lookup (same row imageDelete locks) + isNull(deletedAt) guard on the promote UPDATE with zero-row NOT_FOUND. Deterministic regression: setPrimary on a deleted image rejects NOT_FOUND. Disposable PG18 api 54/54. Lesson appended (4th lock-the-row instance).
+
 - **2026-06-28** — Product media management completion (branch feat/product-media-management off master 1d938a7): added product.imageSetPrimary + product.imageDelete (permission-gated products.create, tenant-scoped via RLS, audited before/after, product-row FOR UPDATE to serialize primary changes, soft-delete clears primary — no auto-promote by design). Media manager UI now has Make-primary + Remove (destructive confirm dialog) per image. Regressions: promote flips exactly one primary, soft-delete removes from detail, permission + cross-tenant (RLS NOT_FOUND) + double-delete idempotent-NOT_FOUND. Verified disposable PG18: api 54/54, zero skips; check-types/biome/mojibake green.
 
 - **2026-06-28** — PR #46 vet: Codex review found 2 HIGH (0 CRIT) — folded both: soft-delete guard on product.imageCreate parent select + objectKey scrubbed from imageCreate write DTO. Locked with regressions (archive→NOT_FOUND, no objectKey in response). Verified disposable PG18: api 53/53, db 93/93, zero skips.

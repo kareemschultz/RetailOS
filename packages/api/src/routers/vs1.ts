@@ -482,7 +482,10 @@ export const productRouter = {
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "products.create");
         // RLS scopes the lookup to this tenant; a cross-tenant imageId is
-        // invisible and resolves to NOT_FOUND.
+        // invisible and resolves to NOT_FOUND. Lock the target image row
+        // FOR UPDATE so a concurrent imageDelete (which also locks this row)
+        // is serialized — without it, a delete could slip between this read
+        // and the promote below, leaving is_primary=true on a deleted row.
         const target = (
           await tx
             .select({
@@ -496,6 +499,7 @@ export const productRouter = {
                 isNull(schema.productImage.deletedAt)
               )
             )
+            .for("update")
             .limit(1)
         ).at(0);
         if (!target) {
@@ -521,15 +525,26 @@ export const productRouter = {
               isNull(schema.productImage.deletedAt)
             )
           );
-        const row = firstOrThrow(
-          (
-            await tx
-              .update(schema.productImage)
-              .set({ isPrimary: true, updatedBy: ctx.actorUserId })
-              .where(eq(schema.productImage.id, input.imageId))
-              .returning()
-          ).at(0)
-        );
+        // Promote only an ACTIVE row (deleted_at IS NULL) — belt-and-suspenders
+        // alongside the row lock: if it was concurrently deleted, the update
+        // touches zero rows and we reject rather than flag a deleted image.
+        const row = (
+          await tx
+            .update(schema.productImage)
+            .set({ isPrimary: true, updatedBy: ctx.actorUserId })
+            .where(
+              and(
+                eq(schema.productImage.id, input.imageId),
+                isNull(schema.productImage.deletedAt)
+              )
+            )
+            .returning()
+        ).at(0);
+        if (!row) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Product image not found in this tenant",
+          });
+        }
         await services.recordAudit(tx, ctx, {
           action: "product.imageSetPrimary",
           entityType: "product_image",
