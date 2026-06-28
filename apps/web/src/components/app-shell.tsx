@@ -12,7 +12,13 @@ import {
   SidebarTrigger,
 } from "@RetailOS/ui/components/sidebar";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Package, ScanLine, Store } from "lucide-react";
+import {
+  LayoutDashboard,
+  Package,
+  ReceiptText,
+  ScanLine,
+  Store,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 import { ConnectionStatus } from "./connection-status";
@@ -30,7 +36,10 @@ const NAV_GROUPS = [
   },
   {
     label: "Sell",
-    items: [{ to: "/pos", label: "Point of Sale", icon: ScanLine }],
+    items: [
+      { to: "/pos", label: "Point of Sale", icon: ScanLine },
+      { to: "/sales", label: "Sales", icon: ReceiptText },
+    ],
   },
   {
     label: "Catalog",
