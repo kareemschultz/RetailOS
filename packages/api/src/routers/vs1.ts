@@ -272,6 +272,42 @@ export const productRouter = {
           .limit(input.limit);
       });
     }),
+  // Catalog list for the admin/manager Products screen. Projects ONLY display-safe
+  // columns (no costing_method / policies / internal config leave the API) — the
+  // DTO discipline (render DTOs, not raw rows). Tenant-scoped (RLS); gated on the
+  // same catalog-management permission as `list` (there is no separate
+  // products.view in the VS#1 role model).
+  catalog: tenantProcedure
+    .input(z.object({ q: z.string().optional() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        const conditions: SQL[] = [isNull(schema.product.deletedAt)];
+        if (input.q) {
+          const term = `%${input.q}%`;
+          const search = or(
+            ilike(schema.product.name, term),
+            ilike(schema.product.sku, term)
+          );
+          if (search) {
+            conditions.push(search);
+          }
+        }
+        return tx
+          .select({
+            id: schema.product.id,
+            sku: schema.product.sku,
+            name: schema.product.name,
+            trackingMode: schema.product.trackingMode,
+            priceMinor: schema.product.priceMinor,
+            currency: schema.product.currency,
+            scale: schema.product.scale,
+          })
+          .from(schema.product)
+          .where(and(...conditions));
+      });
+    }),
   create: tenantProcedure
     .input(
       z.object({
@@ -5380,6 +5416,115 @@ export const reportsRouter = {
           onHand: Number(row.on_hand),
           suggestedQty: Math.max(0, Number(row.max_qty) - Number(row.on_hand)),
         }));
+      });
+    }),
+  // Dashboard KPIs — ALL aggregation/selection happens server-side (backend owns
+  // business math, engineering-principles): sales total for the top currency,
+  // transaction count, inventory value (AVCO+FIFO) for the top currency, and the
+  // low-stock count. The client renders these figures and does no arithmetic.
+  dashboardSummary: tenantProcedure
+    .input(z.object({ locationId: z.string().uuid().optional() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+
+        // Sales — grouped by currency; pick the top currency by total.
+        const saleConditions = [eq(schema.sale.status, "completed")];
+        if (input.locationId) {
+          saleConditions.push(eq(schema.sale.locationId, input.locationId));
+        }
+        const saleRows = await tx
+          .select({
+            currency: schema.sale.currency,
+            scale: schema.sale.scale,
+            saleCount: count(),
+            totalMinor: sql<number>`COALESCE(SUM(${schema.sale.totalMinor}), 0)::bigint`,
+          })
+          .from(schema.sale)
+          .where(and(...saleConditions))
+          .groupBy(schema.sale.currency, schema.sale.scale);
+        const transactionCount = saleRows.reduce(
+          (sum, r) => sum + Number(r.saleCount),
+          0
+        );
+        const sales =
+          saleRows
+            .map((r) => ({
+              currency: r.currency,
+              scale: r.scale,
+              totalMinor: Number(r.totalMinor),
+            }))
+            .sort((a, b) => b.totalMinor - a.totalMinor)
+            .at(0) ?? null;
+
+        // Inventory value — AVCO + FIFO, aggregated per currency, top currency.
+        const avcoRows = await tx
+          .select({
+            currency: schema.avgCost.currency,
+            scale: schema.avgCost.scale,
+            totalValueMinor: sql<number>`COALESCE(SUM(${schema.avgCost.totalValueMinor}), 0)::bigint`,
+          })
+          .from(schema.avgCost)
+          .where(
+            input.locationId
+              ? eq(schema.avgCost.locationId, input.locationId)
+              : undefined
+          )
+          .groupBy(schema.avgCost.currency, schema.avgCost.scale);
+        const fifoRes = await tx.execute(sql`
+          SELECT currency, scale,
+            COALESCE(SUM(qty_remaining * unit_cost_minor), 0)::bigint AS total_value_minor
+          FROM valuation_layer
+          WHERE qty_remaining > 0
+            AND (${input.locationId ?? null}::uuid IS NULL OR location_id = ${input.locationId ?? null})
+          GROUP BY currency, scale
+        `);
+        const invByCurrency = new Map<
+          string,
+          { currency: string; scale: number; totalValueMinor: number }
+        >();
+        const addInv = (currency: string, scale: number, value: number) => {
+          const key = `${currency}:${scale}`;
+          const existing = invByCurrency.get(key) ?? {
+            currency,
+            scale,
+            totalValueMinor: 0,
+          };
+          existing.totalValueMinor += value;
+          invByCurrency.set(key, existing);
+        };
+        for (const r of avcoRows) {
+          addInv(r.currency, r.scale, Number(r.totalValueMinor));
+        }
+        for (const r of fifoRes.rows) {
+          addInv(
+            String(r.currency),
+            Number(r.scale),
+            Number(r.total_value_minor)
+          );
+        }
+        const inventoryValue =
+          [...invByCurrency.values()].sort(
+            (a, b) => b.totalValueMinor - a.totalValueMinor
+          )[0] ?? null;
+
+        // Low-stock count.
+        const lowRes = await tx.execute(sql`
+          SELECT COUNT(*)::int AS n FROM (
+            SELECT rr.sku_id
+            FROM reorder_rule rr
+            LEFT JOIN stock_ledger sl
+              ON sl.sku_id = rr.sku_id AND sl.location_id = rr.location_id
+            WHERE rr.is_active = true AND rr.deleted_at IS NULL
+              AND (${input.locationId ?? null}::uuid IS NULL OR rr.location_id = ${input.locationId ?? null})
+            GROUP BY rr.sku_id, rr.location_id, rr.min_qty
+            HAVING COALESCE(SUM(sl.qty_delta), 0) < rr.min_qty
+          ) q
+        `);
+        const lowStockCount = Number(lowRes.rows.at(0)?.n ?? 0);
+
+        return { sales, transactionCount, inventoryValue, lowStockCount };
       });
     }),
 };
