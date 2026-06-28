@@ -61,8 +61,18 @@ CommerceO's sections span several phases — it is the **unifying admin UI** the
 4. **Cart + checkout (Phase 8)** — cart service (shared-inventory reservation per §13/§14 oversell policy), checkout → order → payment-callback; `shopping-cart` + `checkout-page` blocks. *The big backend.*
 5. **Orders / Customers / Vendors** back-office (Phases 8/7/6) — CommerceO sections light up as each backend lands.
 
-## 6. Open decisions (owner)
+## 6. Decisions (owner, 2026-06-28)
 
-- **Nav:** CommerceO uses **horizontal top nav**; RetailOS currently uses the AdminCN **sidebar**. Keep sidebar, adopt top-nav, or make it a `tenant_ui_config` option?
-- **Bring Phase 8 (and the 6/7 backends) forward** ahead of the charter order, or build CommerceO incrementally as those phases arrive in sequence?
-- **Project style:** stay on `base-lyra` (strip `rounded-none` per install) or switch to a rounded Base-UI style so new Studio components arrive themed?
+- 🔒 **Build first: Step 1 — CommerceO-skin the existing screens.** Adopt the CommerceO look on the Dashboard + Products screens we already ship (they wire to `reports.dashboardSummary` / `product.catalog`). No new backend. This is the immediate next build.
+- 🔒 **Nav: keep the AdminCN sidebar NOW; nav-style becomes a *future* `tenant_ui_config` option (do NOT build the toggle yet).** Sidebar-vs-top-nav should eventually be a `tenant_ui_config.nav_layout` (`"sidebar" | "top"`) white-label choice (charter §11) — but that seam is greenfield and design-first. Building the toggle now (scattering a nav-choice conditional before the white-label design exists) is the **module-aware-components trap**. So: ship Step 1 on the existing sidebar unchanged; record nav-style as a white-label option to design later. No top-nav, no toggle, in this pass.
+- ⬜ **Still open:** bring Phase 8 (+ the 6/7 backends) forward vs build CommerceO incrementally as phases arrive; and whether to switch the project `style` off `base-lyra` (vs keep stripping `rounded-none` per install).
+
+## 7. Immediate next task (for the next session / Codex) — Step 1
+
+**Goal:** re-skin the existing back-office to the CommerceO design, no new backend, **on the existing AdminCN sidebar (no nav change in this pass).**
+
+1. **Nav:** leave `app-shell.tsx` on the current sidebar. Do NOT add a top-nav or a `nav_layout` toggle — that's deferred to the white-label design (see §6). Restyle within the sidebar shell only if needed.
+2. **Dashboard** (`apps/web/src/routes/_app/dashboard.tsx`): keep the `reports.dashboardSummary` wiring; restyle the KPI row toward CommerceO + add a CommerceO-style "popular products / recent" panel using existing data only (`product.catalog`). No client money math (already server-aggregated).
+3. **Products** (`apps/web/src/routes/_app/products.tsx`): restyle the table toward CommerceO's product list (thumbnails are deferred until the product-image column exists — Step 2); keep `product.catalog` (DTO) + the error/empty states.
+4. **Theme discipline:** every Studio block installed comes square under `base-lyra` — wire `rounded-*` to tokens (see `lessons-learned.md`). Confirm block slugs with a live MCP probe before installing.
+5. **Gates + deploy + verify-live** (desktop + mobile, light + dark), then commit to a fresh branch off **clean master** (after PR #45 merges), Codex-gate, **do not merge** (owner gate).
