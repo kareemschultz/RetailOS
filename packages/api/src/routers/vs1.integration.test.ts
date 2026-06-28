@@ -25,6 +25,7 @@ const MISSING_VOID_PERM_RE = /Missing permission: pos\.void_sale/;
 const MISSING_PRODUCTS_CREATE_PERM_RE = /Missing permission: products\.create/;
 const PRODUCT_DTO_LEAK_RE = /objectKey|costing|policy/i;
 const PRODUCT_NOT_FOUND_RE = /Product not found in this tenant/;
+const IMAGE_NOT_FOUND_RE = /Product image not found in this tenant/;
 const SALE_NOT_FOUND_RE = /Sale not found in this tenant/;
 const SHIFT_REQUIRED_RE = /open shift is required/i;
 
@@ -362,6 +363,99 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         admin
       )
     ).rejects.toThrow(PRODUCT_NOT_FOUND_RE);
+  });
+
+  it("manages product media: set-primary promotes and delete soft-removes, behind RLS", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const product = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Managed Media Product",
+        priceMinor: 1500,
+        sku: "MEDIA-MANAGE",
+      },
+      admin
+    );
+    const first = await call(
+      appRouter.product.imageCreate,
+      {
+        isPrimary: true,
+        productId: product.id,
+        url: "https://cdn.example.test/products/manage-1.png",
+      },
+      admin
+    );
+    const second = await call(
+      appRouter.product.imageCreate,
+      {
+        productId: product.id,
+        url: "https://cdn.example.test/products/manage-2.png",
+      },
+      admin
+    );
+    expect(first.isPrimary).toBe(true);
+    expect(second.isPrimary).toBe(false);
+
+    // Promote the secondary: single-primary invariant must flip exactly one.
+    const promoted = await call(
+      appRouter.product.imageSetPrimary,
+      { imageId: second.id },
+      admin
+    );
+    expect(promoted.isPrimary).toBe(true);
+    expect(promoted).not.toHaveProperty("objectKey");
+    const afterPromote = await call(
+      appRouter.product.detail,
+      { id: product.id },
+      admin
+    );
+    const primaries = afterPromote.images.filter((image) => image.isPrimary);
+    expect(primaries).toHaveLength(1);
+    expect(primaries[0]?.id).toBe(second.id);
+
+    // Delete the (now) primary: soft-remove, leaves the product with no primary.
+    const deleted = await call(
+      appRouter.product.imageDelete,
+      { imageId: second.id },
+      admin
+    );
+    expect(deleted).toMatchObject({ deleted: true, id: second.id });
+    const afterDelete = await call(
+      appRouter.product.detail,
+      { id: product.id },
+      admin
+    );
+    expect(afterDelete.images.map((image) => image.id)).not.toContain(
+      second.id
+    );
+    expect(afterDelete.images.filter((image) => image.isPrimary)).toHaveLength(
+      0
+    );
+
+    // Permission gate: a cashier cannot manage media.
+    await expect(
+      call(appRouter.product.imageSetPrimary, { imageId: first.id }, cashier)
+    ).rejects.toThrow(MISSING_PRODUCTS_CREATE_PERM_RE);
+    await expect(
+      call(appRouter.product.imageDelete, { imageId: first.id }, cashier)
+    ).rejects.toThrow(MISSING_PRODUCTS_CREATE_PERM_RE);
+
+    // Cross-tenant: tenant B cannot touch tenant A's image (RLS → NOT_FOUND).
+    await expect(
+      call(appRouter.product.imageSetPrimary, { imageId: first.id }, adminB)
+    ).rejects.toThrow(IMAGE_NOT_FOUND_RE);
+    await expect(
+      call(appRouter.product.imageDelete, { imageId: first.id }, adminB)
+    ).rejects.toThrow(IMAGE_NOT_FOUND_RE);
+
+    // Deleting an already-deleted image is a clean NOT_FOUND, not a crash.
+    await call(appRouter.product.imageDelete, { imageId: first.id }, admin);
+    await expect(
+      call(appRouter.product.imageDelete, { imageId: first.id }, admin)
+    ).rejects.toThrow(IMAGE_NOT_FOUND_RE);
   });
 
   it("blocks cross-tenant FK references (Postgres FK checks bypass RLS)", async () => {

@@ -475,6 +475,127 @@ export const productRouter = {
         };
       });
     }),
+  imageSetPrimary: tenantProcedure
+    .input(z.object({ imageId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        // RLS scopes the lookup to this tenant; a cross-tenant imageId is
+        // invisible and resolves to NOT_FOUND.
+        const target = (
+          await tx
+            .select({
+              id: schema.productImage.id,
+              productId: schema.productImage.productId,
+            })
+            .from(schema.productImage)
+            .where(
+              and(
+                eq(schema.productImage.id, input.imageId),
+                isNull(schema.productImage.deletedAt)
+              )
+            )
+            .limit(1)
+        ).at(0);
+        if (!target) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Product image not found in this tenant",
+          });
+        }
+        // Serialize concurrent primary changes on the same product (mirrors
+        // imageCreate) so the single-primary partial unique index can't race.
+        await tx
+          .select({ id: schema.product.id })
+          .from(schema.product)
+          .where(eq(schema.product.id, target.productId))
+          .for("update")
+          .limit(1);
+        await tx
+          .update(schema.productImage)
+          .set({ isPrimary: false, updatedBy: ctx.actorUserId })
+          .where(
+            and(
+              eq(schema.productImage.productId, target.productId),
+              eq(schema.productImage.isPrimary, true),
+              isNull(schema.productImage.deletedAt)
+            )
+          );
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.productImage)
+              .set({ isPrimary: true, updatedBy: ctx.actorUserId })
+              .where(eq(schema.productImage.id, input.imageId))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "product.imageSetPrimary",
+          entityType: "product_image",
+          entityId: row.id,
+          after: row,
+        });
+        return {
+          id: row.id,
+          url: row.url,
+          altText: row.altText,
+          sortOrder: row.sortOrder,
+          isPrimary: row.isPrimary,
+          createdAt: row.createdAt,
+        };
+      });
+    }),
+  imageDelete: tenantProcedure
+    .input(z.object({ imageId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        // No hard deletes for operational data (charter §8): soft-delete and
+        // clear the primary flag so the product is left with no primary
+        // (explicit re-pick via imageSetPrimary — no surprise auto-promote).
+        const before = (
+          await tx
+            .select()
+            .from(schema.productImage)
+            .where(
+              and(
+                eq(schema.productImage.id, input.imageId),
+                isNull(schema.productImage.deletedAt)
+              )
+            )
+            .for("update")
+            .limit(1)
+        ).at(0);
+        if (!before) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Product image not found in this tenant",
+          });
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.productImage)
+              .set({
+                deletedAt: new Date(),
+                isPrimary: false,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.productImage.id, input.imageId))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "product.imageDelete",
+          entityType: "product_image",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return { id: row.id, deleted: true };
+      });
+    }),
   create: tenantProcedure
     .input(
       z.object({

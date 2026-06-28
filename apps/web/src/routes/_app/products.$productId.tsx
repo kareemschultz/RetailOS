@@ -1,3 +1,4 @@
+import type { AppRouterClient } from "@RetailOS/api/routers/index";
 import { Badge } from "@RetailOS/ui/components/badge";
 import { Button } from "@RetailOS/ui/components/button";
 import {
@@ -7,6 +8,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@RetailOS/ui/components/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@RetailOS/ui/components/dialog";
 import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
@@ -19,9 +28,11 @@ import {
   Package,
   Plus,
   Star,
+  Trash2,
   TriangleAlert,
 } from "lucide-react";
 import { useId, useState } from "react";
+import { toast } from "sonner";
 
 import { formatMoney } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
@@ -36,10 +47,78 @@ const TRACKING_LABELS: Record<string, string> = {
   serial: "Serial",
 };
 
+type ProductImage = Awaited<
+  ReturnType<AppRouterClient["product"]["detail"]>
+>["images"][number];
+
 function ProductImageFallback() {
   return (
     <div className="flex aspect-square items-center justify-center rounded-xl border bg-muted text-muted-foreground">
       <ImageIcon className="size-7" />
+    </div>
+  );
+}
+
+function SecondaryMedia({
+  images,
+  productName,
+  onMakePrimary,
+  onRemove,
+  isPromoting,
+}: {
+  images: ProductImage[];
+  productName: string;
+  onMakePrimary: (imageId: string) => void;
+  onRemove: (imageId: string) => void;
+  isPromoting: boolean;
+}) {
+  if (images.length === 0) {
+    return (
+      <div className="flex min-h-32 flex-col items-center justify-center gap-2 p-6 text-center">
+        <ImageIcon className="size-5 text-muted-foreground" />
+        <p className="font-medium text-sm">No secondary images</p>
+        <p className="text-muted-foreground text-xs">
+          Additional gallery images will appear here.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
+      {images.map((image) => (
+        <div
+          className="flex flex-col gap-2 rounded-xl border p-2"
+          key={image.id}
+        >
+          <img
+            alt={image.altText ?? productName}
+            className="aspect-square w-full rounded-lg object-cover"
+            height={180}
+            src={image.url}
+            width={180}
+          />
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              disabled={isPromoting}
+              onClick={() => onMakePrimary(image.id)}
+              size="sm"
+              variant="outline"
+            >
+              <Star data-icon="inline-start" />
+              Make primary
+            </Button>
+            <Button
+              aria-label="Remove image"
+              onClick={() => onRemove(image.id)}
+              size="icon"
+              variant="outline"
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -52,15 +131,54 @@ function ProductDetailScreen() {
   const [url, setUrl] = useState("");
   const [altText, setAltText] = useState("");
 
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
   const detail = useQuery(
     orpc.product.detail.queryOptions({ input: { id: productId } })
   );
   const imageCreate = useMutation(orpc.product.imageCreate.mutationOptions());
+  const imageSetPrimary = useMutation(
+    orpc.product.imageSetPrimary.mutationOptions()
+  );
+  const imageDelete = useMutation(orpc.product.imageDelete.mutationOptions());
 
   const product = detail.data;
   const primaryImage = product?.images.find((image) => image.isPrimary);
   const secondaryImages =
     product?.images.filter((image) => !image.isPrimary) ?? [];
+
+  function setPrimary(imageId: string) {
+    if (imageSetPrimary.isPending) {
+      return;
+    }
+    imageSetPrimary.mutate(
+      { imageId },
+      {
+        onSuccess: () => {
+          toast.success("Primary image updated");
+          router.invalidate();
+        },
+        onError: (error) => toast.error(error.message),
+      }
+    );
+  }
+
+  function confirmDelete() {
+    if (!pendingDeleteId || imageDelete.isPending) {
+      return;
+    }
+    imageDelete.mutate(
+      { imageId: pendingDeleteId },
+      {
+        onSuccess: () => {
+          toast.success("Image removed");
+          setPendingDeleteId(null);
+          router.invalidate();
+        },
+        onError: (error) => toast.error(error.message),
+      }
+    );
+  }
 
   function addPrimaryImage() {
     if (!url.trim() || imageCreate.isPending) {
@@ -155,6 +273,17 @@ function ProductDetailScreen() {
                   {primaryImage ? "Primary image set" : "No primary image"}
                 </Badge>
               </div>
+              {primaryImage ? (
+                <Button
+                  className="w-full"
+                  onClick={() => setPendingDeleteId(primaryImage.id)}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Trash2 data-icon="inline-start" />
+                  Remove primary image
+                </Button>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -241,33 +370,59 @@ function ProductDetailScreen() {
                 <CardTitle>Additional media</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                {secondaryImages.length === 0 ? (
-                  <div className="flex min-h-32 flex-col items-center justify-center gap-2 p-6 text-center">
-                    <ImageIcon className="size-5 text-muted-foreground" />
-                    <p className="font-medium text-sm">No secondary images</p>
-                    <p className="text-muted-foreground text-xs">
-                      Additional gallery images will appear here.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
-                    {secondaryImages.map((image) => (
-                      <img
-                        alt={image.altText ?? product.name}
-                        className="aspect-square rounded-xl border object-cover"
-                        height={180}
-                        key={image.id}
-                        src={image.url}
-                        width={180}
-                      />
-                    ))}
-                  </div>
-                )}
+                <SecondaryMedia
+                  images={secondaryImages}
+                  isPromoting={imageSetPrimary.isPending}
+                  onMakePrimary={setPrimary}
+                  onRemove={setPendingDeleteId}
+                  productName={product.name}
+                />
               </CardContent>
             </Card>
           </div>
         </div>
       ) : null}
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteId(null);
+          }
+        }}
+        open={pendingDeleteId != null}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove image</DialogTitle>
+            <DialogDescription>
+              This removes the image from catalog and storefront views. If it
+              was the primary image, the product will have no primary until you
+              pick a new one.
+            </DialogDescription>
+          </DialogHeader>
+          {imageDelete.isError ? (
+            <p className="text-destructive text-sm">
+              {imageDelete.error.message}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              disabled={imageDelete.isPending}
+              onClick={() => setPendingDeleteId(null)}
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={imageDelete.isPending}
+              onClick={confirmDelete}
+              variant="destructive"
+            >
+              {imageDelete.isPending ? "Removing..." : "Remove image"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
