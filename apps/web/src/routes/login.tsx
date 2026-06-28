@@ -4,6 +4,7 @@ import { ShoppingCart } from "lucide-react";
 import { useState } from "react";
 
 import AuthBackgroundShape from "@/components/auth-background-shape";
+import { GoogleSignIn } from "@/components/google-sign-in";
 import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
 
@@ -74,6 +75,14 @@ function RouteComponent() {
             </div>
 
             {isSignIn ? <SignInForm /> : <SignUpForm />}
+
+            <div className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-border" />
+              <span className="text-muted-foreground text-xs">or</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+
+            <GoogleSignIn />
 
             <p className="text-center text-muted-foreground text-sm">
               {isSignIn ? "New to RetailOS? " : "Already have an account? "}

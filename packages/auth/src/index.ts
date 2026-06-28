@@ -28,6 +28,20 @@ export function createAuth() {
     emailAndPassword: {
       enabled: true,
     },
+    // Google social sign-in — only enabled when both credentials are present,
+    // so the app runs fine without them (set GOOGLE_CLIENT_ID/SECRET in
+    // Infisical to activate). New social users have no org membership yet, so
+    // the active-org hook below simply leaves them tenant-less until invited.
+    ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+      ? {
+          socialProviders: {
+            google: {
+              clientId: env.GOOGLE_CLIENT_ID,
+              clientSecret: env.GOOGLE_CLIENT_SECRET,
+            },
+          },
+        }
+      : {}),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     advanced: {
