@@ -28,6 +28,11 @@ const PRODUCT_NOT_FOUND_RE = /Product not found in this tenant/;
 const IMAGE_NOT_FOUND_RE = /Product image not found in this tenant/;
 const SALE_NOT_FOUND_RE = /Sale not found in this tenant/;
 const SHIFT_REQUIRED_RE = /open shift is required/i;
+// Demo read-endpoint gates + isolation.
+const NOT_FOUND_IN_TENANT_RE = /not found in this tenant/i;
+const MISSING_REPORTS_VIEW_RE = /Missing permission: reports\.view/;
+const MISSING_TRANSFER_PERM_RE = /Missing permission: inventory\.transfer/;
+const MISSING_BOND_PERM_RE = /Missing permission: bond\.receive/;
 
 function makeCtx(userId: string, organizationId: string | null): Context {
   return {
@@ -4644,5 +4649,236 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         admin
       )
     ).rejects.toThrow(SHIFT_REQUIRED_RE);
+  });
+
+  // Demo backend foundation: the read endpoints (location.list, inventory.
+  // stockByLocation/stockLedgerList, transfer.list/detail, bond.receiptList/
+  // receiptDetail) enforce their permission gate AND tenant isolation. One
+  // fixture (company → warehouse/store/bonded → products → stock → a transfer →
+  // a bond receipt) built through the routers, then read/permission/isolation.
+  it("demo reads: enforce reports.view / inventory.transfer / bond.receive gates and tenant isolation", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+
+    // ── Setup (ADMIN, ORG). Bonded stock is AVCO-only; the bonded location flag
+    // is not settable through location.create, so patch it directly.
+    const company = await call(
+      appRouter.company.create,
+      { name: "DemoReads Co" },
+      admin
+    );
+    const warehouse = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "DemoReads WH", type: "warehouse" },
+      admin
+    );
+    const store = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "DemoReads Store", type: "store" },
+      admin
+    );
+    const bonded = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "DemoReads Bonded", type: "bonded" },
+      admin
+    );
+    // location is RLS-scoped — patch the bonded flag through the tenant GUC.
+    await withTenant(db, ORG, (tx) =>
+      tx
+        .update(schema.location)
+        .set({ isBonded: true, isSellable: false })
+        .where(eq(schema.location.id, bonded.id))
+    );
+    // organization is the identity/tenant table (not tenant-RLS) — direct update.
+    await db
+      .update(schema.organization)
+      .set({ costingMethod: "avco" })
+      .where(eq(schema.organization.id, ORG));
+
+    const widgetP = await call(
+      appRouter.product.create,
+      {
+        sku: "DR-WIDGET",
+        name: "DR Widget",
+        priceMinor: 5000,
+        currency: "USD",
+      },
+      admin
+    );
+    const widgetSku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "DR-WIDGET-EA", productId: widgetP.id },
+      admin
+    );
+    const gadgetP = await call(
+      appRouter.product.create,
+      {
+        sku: "DR-GADGET",
+        name: "DR Gadget",
+        priceMinor: 5000,
+        currency: "USD",
+      },
+      admin
+    );
+    const gadgetSku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "DR-GADGET-EA", productId: gadgetP.id },
+      admin
+    );
+    for (const [p, s] of [
+      [widgetP, widgetSku],
+      [gadgetP, gadgetSku],
+    ] as const) {
+      await call(
+        appRouter.inventory.receive,
+        {
+          locationId: warehouse.id,
+          productId: p.id,
+          skuId: s.id,
+          qty: 100,
+          unitCostMinor: 1000,
+          costCurrency: "USD",
+          costScale: 2,
+        },
+        admin
+      );
+    }
+    const transfer = await call(
+      appRouter.transfer.create,
+      {
+        sourceLocationId: warehouse.id,
+        destLocationId: store.id,
+        lines: [{ productId: widgetP.id, skuId: widgetSku.id, qty: 20 }],
+      },
+      admin
+    );
+    const transferId = transfer.transfer.id;
+    await call(appRouter.transfer.ship, { transferId }, admin);
+    await call(appRouter.transfer.receive, { transferId }, admin);
+    const bondRcv = await call(
+      appRouter.bond.receive,
+      {
+        companyId: company.id,
+        locationId: bonded.id,
+        supplierRef: "DR-IMP",
+        lines: [
+          {
+            productId: gadgetP.id,
+            skuId: gadgetSku.id,
+            qty: 30,
+            unitCostMinor: 1500,
+            costCurrency: "USD",
+            costScale: 2,
+          },
+        ],
+      },
+      admin
+    );
+    const bondReceiptId = bondRcv.receipt.id;
+
+    // ── Reads as ADMIN return the expected, DTO-safe data.
+    const locs = await call(appRouter.location.list, {}, admin);
+    expect(locs.map((l) => l.id)).toEqual(
+      expect.arrayContaining([warehouse.id, store.id, bonded.id])
+    );
+    const whRow = locs.find((l) => l.id === warehouse.id);
+    expect(whRow).toMatchObject({ type: "warehouse" });
+    expect(whRow).toHaveProperty("isSellable");
+    // DTO discipline: no internal cash-control / removal-strategy columns leak.
+    expect(whRow).not.toHaveProperty("removalStrategy");
+    expect(whRow).not.toHaveProperty("cashDrawer");
+    // The patched bonded location reflects its flags through the DTO.
+    const bondedRow = locs.find((l) => l.id === bonded.id);
+    expect(bondedRow).toMatchObject({ type: "bonded", isBonded: true });
+
+    const stock = await call(
+      appRouter.inventory.stockByLocation,
+      { locationId: warehouse.id },
+      admin
+    );
+    const widgetStock = stock.find((r) => r.skuId === widgetSku.id);
+    expect(widgetStock?.locationId).toBe(warehouse.id);
+    expect(widgetStock?.qtyOnHand).toBeGreaterThan(0);
+    expect(widgetStock?.productName).toBe("DR Widget");
+
+    const ledger = await call(
+      appRouter.inventory.stockLedgerList,
+      { skuId: widgetSku.id },
+      admin
+    );
+    expect(ledger.length).toBeGreaterThan(0);
+    expect(ledger[0]).toHaveProperty("movementType");
+    expect(ledger[0]).not.toHaveProperty("idempotencyKey");
+
+    const transfers = await call(appRouter.transfer.list, {}, admin);
+    expect(transfers.map((t) => t.id)).toContain(transferId);
+    const tDetail = await call(
+      appRouter.transfer.detail,
+      { transferId },
+      admin
+    );
+    expect(tDetail.transfer.id).toBe(transferId);
+    expect(tDetail.lines.length).toBeGreaterThan(0);
+    expect(tDetail.lines[0]).toMatchObject({ skuId: widgetSku.id });
+
+    const receipts = await call(appRouter.bond.receiptList, {}, admin);
+    expect(receipts.map((r) => r.id)).toContain(bondReceiptId);
+    const bDetail = await call(
+      appRouter.bond.receiptDetail,
+      { bondReceiptId },
+      admin
+    );
+    expect(bDetail.receipt.id).toBe(bondReceiptId);
+    expect(bDetail.lines[0]).toMatchObject({ skuId: gadgetSku.id });
+
+    // ── Permission gating: a cashier lacks reports.view / inventory.transfer /
+    // bond.receive and is rejected on every read.
+    await expect(call(appRouter.location.list, {}, cashier)).rejects.toThrow(
+      MISSING_REPORTS_VIEW_RE
+    );
+    await expect(
+      call(appRouter.inventory.stockByLocation, {}, cashier)
+    ).rejects.toThrow(MISSING_REPORTS_VIEW_RE);
+    await expect(
+      call(appRouter.inventory.stockLedgerList, {}, cashier)
+    ).rejects.toThrow(MISSING_REPORTS_VIEW_RE);
+    await expect(call(appRouter.transfer.list, {}, cashier)).rejects.toThrow(
+      MISSING_TRANSFER_PERM_RE
+    );
+    await expect(
+      call(appRouter.transfer.detail, { transferId }, cashier)
+    ).rejects.toThrow(MISSING_TRANSFER_PERM_RE);
+    await expect(call(appRouter.bond.receiptList, {}, cashier)).rejects.toThrow(
+      MISSING_BOND_PERM_RE
+    );
+    await expect(
+      call(appRouter.bond.receiptDetail, { bondReceiptId }, cashier)
+    ).rejects.toThrow(MISSING_BOND_PERM_RE);
+
+    // ── Tenant isolation: ORG_B's admin holds every permission in ORG_B but
+    // cannot see ORG's rows (RLS) — lists exclude them, detail/id reads NOT_FOUND.
+    const locsB = await call(appRouter.location.list, {}, adminB);
+    expect(locsB.map((l) => l.id)).not.toContain(warehouse.id);
+    await expect(
+      call(
+        appRouter.inventory.stockByLocation,
+        { locationId: warehouse.id },
+        adminB
+      )
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+    await expect(
+      call(appRouter.inventory.stockLedgerList, { skuId: widgetSku.id }, adminB)
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+    const transfersB = await call(appRouter.transfer.list, {}, adminB);
+    expect(transfersB.map((t) => t.id)).not.toContain(transferId);
+    await expect(
+      call(appRouter.transfer.detail, { transferId }, adminB)
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+    const receiptsB = await call(appRouter.bond.receiptList, {}, adminB);
+    expect(receiptsB.map((r) => r.id)).not.toContain(bondReceiptId);
+    await expect(
+      call(appRouter.bond.receiptDetail, { bondReceiptId }, adminB)
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
   });
 });
