@@ -4874,6 +4874,16 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       },
       admin
     );
+    const widgetBarcode = await call(
+      appRouter.catalog.barcodeCreate,
+      {
+        isPrimary: true,
+        skuId: widgetSku.id,
+        symbology: "code128",
+        value: "DR-WIDGET-BC",
+      },
+      admin
+    );
     const gadgetP = await call(
       appRouter.product.create,
       {
@@ -4991,6 +5001,27 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       admin
     );
     expect(skuSearch.map((row) => row.id)).toContain(widgetSku.id);
+    const barcodes = await call(
+      appRouter.catalog.barcodeCatalogList,
+      {},
+      admin
+    );
+    expect(barcodes.map((row) => row.id)).toContain(widgetBarcode.id);
+    expect(barcodes.find((row) => row.id === widgetBarcode.id)).toMatchObject({
+      isPrimary: true,
+      productName: "DR Widget",
+      productSku: "DR-WIDGET",
+      skuCode: "DR-WIDGET-EA",
+      skuName: "Demo Widget Each",
+      symbology: "code128",
+      value: "DR-WIDGET-BC",
+    });
+    const barcodeSearch = await call(
+      appRouter.catalog.barcodeCatalogList,
+      { q: "widget-bc" },
+      admin
+    );
+    expect(barcodeSearch.map((row) => row.id)).toContain(widgetBarcode.id);
 
     const stock = await call(
       appRouter.inventory.stockByLocation,
@@ -5056,6 +5087,9 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       call(appRouter.catalog.skuCatalogList, {}, cashier)
     ).rejects.toThrow(MISSING_PRODUCTS_CREATE_PERM_RE);
     await expect(
+      call(appRouter.catalog.barcodeCatalogList, {}, cashier)
+    ).rejects.toThrow(MISSING_PRODUCTS_CREATE_PERM_RE);
+    await expect(
       call(appRouter.inventory.stockByLocation, {}, cashier)
     ).rejects.toThrow(MISSING_REPORTS_VIEW_RE);
     await expect(
@@ -5082,6 +5116,19 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(skusB.map((row) => row.id)).not.toContain(widgetSku.id);
     await expect(
       call(appRouter.catalog.skuCatalogList, { productId: widgetP.id }, adminB)
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+    const barcodesB = await call(
+      appRouter.catalog.barcodeCatalogList,
+      {},
+      adminB
+    );
+    expect(barcodesB.map((row) => row.id)).not.toContain(widgetBarcode.id);
+    await expect(
+      call(
+        appRouter.catalog.barcodeCatalogList,
+        { skuId: widgetSku.id },
+        adminB
+      )
     ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
     await expect(
       call(

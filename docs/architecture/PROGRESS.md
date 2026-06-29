@@ -13,10 +13,15 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
-### Catalog SKU page pass (in progress, 2026-06-29)
+### Catalog barcode page pass (in progress, 2026-06-29)
+- **Branch:** `feat/catalog-barcode-page` off `master = 6943378` after PR #64 merged and production was deployed/verified.
+- **Scope in this branch:** adding a display-safe `catalog.barcodeCatalogList` read endpoint with SKU and product names, then adding `/barcodes` under the Catalog nav as a DataTableCard barcode registry page adapted from the configured shadcn Studio data-table pattern into owned RetailOS code. No schema, migration, mutation, or money-math change.
+- **Verification:** `bun run check-types` green; `bun run check` green after formatter fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56550 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green: **db 97/97 + api 57/57, zero skips**.
+
+### Catalog SKU page pass (merged, 2026-06-29)
 - **Branch:** `feat/catalog-sku-page` off `master = 0f8c492` after PR #63 merged and web was deployed.
 - **Scope in this branch:** adding a display-safe `catalog.skuCatalogList` read endpoint with product and base-unit names, then adding `/skus` under the Catalog nav as a DataTableCard SKU page using the configured shadcn Studio data-table pattern adapted into owned RetailOS code. No schema, migration, mutation, or money-math change.
-- **Verification:** `bun run check-types` green; `bun run check` green after formatter fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56549 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green: **db 97/97 + api 57/57, zero skips**.
+- **Verification:** `bun run check-types` green; `bun run check` green after formatter fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56549 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green: **db 97/97 + api 57/57, zero skips**. Merged as PR #64 and deployed live; authenticated `/skus` smoke rendered 27 demo rows.
 
 ### Catalog taxonomy pages pass (merged, 2026-06-29)
 - **Branch:** `feat/catalog-taxonomy-pages` off `master = 130665d` after PR #61 merged and production was redeployed/recovered with Infisical project injection.

@@ -1625,6 +1625,60 @@ export const catalogRouter = {
           .where(conditions.length ? and(...conditions) : undefined);
       });
     }),
+  barcodeCatalogList: tenantProcedure
+    .input(
+      z.object({
+        includeArchived: z.boolean().default(false),
+        q: z.string().trim().min(1).optional(),
+        skuId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        const search = input.q ? `%${input.q}%` : null;
+        const conditions = [
+          input.skuId ? eq(schema.barcode.skuId, input.skuId) : null,
+          input.includeArchived ? null : isNull(schema.barcode.deletedAt),
+          search
+            ? or(
+                ilike(schema.barcode.value, search),
+                ilike(schema.barcode.symbology, search),
+                ilike(schema.sku.code, search),
+                ilike(schema.sku.name, search),
+                ilike(schema.product.sku, search),
+                ilike(schema.product.name, search)
+              )
+            : null,
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.barcode.id,
+            skuId: schema.barcode.skuId,
+            skuCode: schema.sku.code,
+            skuName: schema.sku.name,
+            productId: schema.sku.productId,
+            productSku: schema.product.sku,
+            productName: schema.product.name,
+            value: schema.barcode.value,
+            symbology: schema.barcode.symbology,
+            isPrimary: schema.barcode.isPrimary,
+            createdAt: schema.barcode.createdAt,
+          })
+          .from(schema.barcode)
+          .innerJoin(schema.sku, eq(schema.sku.id, schema.barcode.skuId))
+          .innerJoin(
+            schema.product,
+            eq(schema.product.id, schema.sku.productId)
+          )
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(desc(schema.barcode.createdAt));
+      });
+    }),
   barcodeCreate: tenantProcedure
     .input(
       z.object({

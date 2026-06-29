@@ -59,6 +59,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/products", label: "Products", icon: Package },
       { to: "/skus", label: "SKUs", icon: Barcode },
+      { to: "/barcodes", label: "Barcodes", icon: ScanLine },
       { to: "/categories", label: "Categories", icon: FolderTree },
       { to: "/brands", label: "Brands", icon: BadgeCheck },
       { to: "/units", label: "Units", icon: Ruler },
