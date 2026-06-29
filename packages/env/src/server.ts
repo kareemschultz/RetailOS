@@ -20,6 +20,12 @@ export const env = createEnv({
     // Auth session cookie is shared across same-site subdomains (web ↔ api).
     // Env-driven; never hardcoded (§9). Unset ⇒ host-only cookie (local dev).
     AUTH_COOKIE_DOMAIN: z.string().optional(),
+    // Shopix storefront base domain (charter §11) — when set (e.g.
+    // "shop.retailos.com"), a request host of "{slug}.{STOREFRONT_BASE_DOMAIN}"
+    // resolves to the tenant whose organization.slug matches. Custom storefront
+    // domains use organization.storefront_domain instead. Env-driven; unset ⇒
+    // only explicit storefront_domain hosts resolve. Never hardcoded (§9).
+    STOREFRONT_BASE_DOMAIN: z.string().optional(),
     // Google OAuth (social sign-in). Optional: the provider is only enabled when
     // both are present, so the app runs fine without them. Secrets via env only
     // (§25) — set in Infisical, never committed.

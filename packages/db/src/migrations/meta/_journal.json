@@ -162,6 +162,13 @@
       "when": 1782681070452,
       "tag": "0022_strong_brother_voodoo",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1782746377223,
+      "tag": "0023_moaning_shooting_star",
+      "breakpoints": true
     }
   ]
 }

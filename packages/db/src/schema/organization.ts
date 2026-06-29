@@ -51,6 +51,13 @@ export const organization = pgTable("organization", {
   // value when a tenant runs multiple companies.
   vatRegistrationNumber: text("vat_registration_number"),
   taxIdentificationNumber: text("tax_identification_number"),
+  // Shopix storefront gateway (charter §11) — the custom/explicit hostname this
+  // tenant's public storefront is served at (e.g. "shop.acme.com"). Nullable,
+  // expand-only, UNIQUE so a host maps to at most one tenant. The hostname→tenant
+  // resolver (packages/api storefront.ts) matches this first, then the
+  // {slug}.{STOREFRONT_BASE_DOMAIN} subdomain pattern. Full white-label custom-
+  // domain provisioning is Phase 11; v1 sets this directly.
+  storefrontDomain: text("storefront_domain").unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

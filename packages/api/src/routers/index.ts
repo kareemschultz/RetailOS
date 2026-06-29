@@ -1,6 +1,7 @@
 import type { RouterClient } from "@orpc/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
+import { commerceRouter } from "./commerce";
 import {
   bondRouter,
   catalogRouter,
@@ -31,6 +32,8 @@ export const appRouter = {
   bond: bondRouter,
   pos: posRouter,
   reports: reportsRouter,
+  // Shopix Commerce Experience — public, hostname-resolved storefront API.
+  commerce: commerceRouter,
 };
 export type AppRouter = typeof appRouter;
 export type AppRouterClient = RouterClient<typeof appRouter>;
