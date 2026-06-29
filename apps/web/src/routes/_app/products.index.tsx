@@ -1,5 +1,5 @@
 import { Badge } from "@RetailOS/ui/components/badge";
-import { Card, CardContent } from "@RetailOS/ui/components/card";
+import { DataTableCard } from "@RetailOS/ui/components/data-table-card";
 import { Input } from "@RetailOS/ui/components/input";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
 import {
@@ -192,14 +192,8 @@ function ProductsScreen() {
         </p>
       </div>
 
-      <Card className="gap-0 overflow-hidden p-0 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
-          <div className="flex items-center gap-2">
-            <h2 className="font-medium text-sm">Catalog</h2>
-            {settled ? (
-              <Badge variant="secondary">{filtered.length}</Badge>
-            ) : null}
-          </div>
+      <DataTableCard
+        actions={
           <div className="relative w-full sm:w-64">
             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -209,23 +203,23 @@ function ProductsScreen() {
               value={query}
             />
           </div>
-        </div>
-        <CardContent className="p-0">
-          <CatalogContent
-            errorMessage={products.error?.message}
-            isError={products.isError}
-            isLoading={products.isLoading}
-            query={query}
-            rows={filtered}
-          />
-        </CardContent>
-        {settled && filtered.length > 0 ? (
-          <div className="border-t px-5 py-3 text-muted-foreground text-sm">
-            {filtered.length} product{filtered.length === 1 ? "" : "s"}
-            {query ? ` matching “${query}”` : ""}
-          </div>
-        ) : null}
-      </Card>
+        }
+        count={settled ? filtered.length : undefined}
+        footer={
+          settled && filtered.length > 0
+            ? `${filtered.length} product${filtered.length === 1 ? "" : "s"}${query ? ` matching “${query}”` : ""}`
+            : undefined
+        }
+        title="Catalog"
+      >
+        <CatalogContent
+          errorMessage={products.error?.message}
+          isError={products.isError}
+          isLoading={products.isLoading}
+          query={query}
+          rows={filtered}
+        />
+      </DataTableCard>
     </div>
   );
 }
