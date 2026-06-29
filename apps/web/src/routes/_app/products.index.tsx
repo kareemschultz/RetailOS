@@ -1,10 +1,5 @@
 import { Badge } from "@RetailOS/ui/components/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@RetailOS/ui/components/card";
+import { Card, CardContent } from "@RetailOS/ui/components/card";
 import { Input } from "@RetailOS/ui/components/input";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
 import {
@@ -186,30 +181,35 @@ function ProductsScreen() {
     );
   }, [products.data, query]);
 
+  const settled = !(products.isLoading || products.isError);
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-semibold text-2xl tracking-tight">Products</h1>
-          <p className="text-muted-foreground">
-            Your shared catalog — the same items POS and inventory draw from.
-          </p>
-        </div>
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="h-10 rounded-lg pl-9"
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name or SKU…"
-            value={query}
-          />
-        </div>
+      <div>
+        <h1 className="font-semibold text-2xl tracking-tight">Products</h1>
+        <p className="text-muted-foreground">
+          Your shared catalog — the same items POS and inventory draw from.
+        </p>
       </div>
 
-      <Card className="overflow-hidden p-0 shadow-sm">
-        <CardHeader className="border-b">
-          <CardTitle>Catalog</CardTitle>
-        </CardHeader>
+      <Card className="gap-0 overflow-hidden p-0 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+          <div className="flex items-center gap-2">
+            <h2 className="font-medium text-sm">Catalog</h2>
+            {settled ? (
+              <Badge variant="secondary">{filtered.length}</Badge>
+            ) : null}
+          </div>
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="h-9 rounded-lg pl-9"
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name or SKU…"
+              value={query}
+            />
+          </div>
+        </div>
         <CardContent className="p-0">
           <CatalogContent
             errorMessage={products.error?.message}
@@ -219,14 +219,13 @@ function ProductsScreen() {
             rows={filtered}
           />
         </CardContent>
+        {settled && filtered.length > 0 ? (
+          <div className="border-t px-5 py-3 text-muted-foreground text-sm">
+            {filtered.length} product{filtered.length === 1 ? "" : "s"}
+            {query ? ` matching “${query}”` : ""}
+          </div>
+        ) : null}
       </Card>
-
-      {!(products.isLoading || products.isError) && filtered.length > 0 ? (
-        <p className="text-muted-foreground text-sm">
-          {filtered.length} product{filtered.length === 1 ? "" : "s"}
-          {query ? ` matching “${query}”` : ""}
-        </p>
-      ) : null}
     </div>
   );
 }
