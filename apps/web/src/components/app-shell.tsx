@@ -15,6 +15,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ArrowLeftRight,
   BadgeCheck,
+  Barcode,
   Boxes,
   CircleDollarSign,
   FileClock,
@@ -57,6 +58,7 @@ const NAV_GROUPS = [
     label: "Catalog",
     items: [
       { to: "/products", label: "Products", icon: Package },
+      { to: "/skus", label: "SKUs", icon: Barcode },
       { to: "/categories", label: "Categories", icon: FolderTree },
       { to: "/brands", label: "Brands", icon: BadgeCheck },
       { to: "/units", label: "Units", icon: Ruler },
