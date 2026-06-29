@@ -13,8 +13,8 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import type { orpc } from "@/utils/orpc";
 
 import { ThemeProvider } from "../components/theme-provider";
-
 import appCss from "../index.css?url";
+import { SettingsProvider } from "../theme/settings-store";
 export interface RouterAppContext {
   orpc: typeof orpc;
   queryClient: QueryClient;
@@ -54,10 +54,12 @@ function RootDocument() {
           disableTransitionOnChange
           enableSystem
         >
-          <TooltipProvider>
-            <Outlet />
-          </TooltipProvider>
-          <Toaster richColors />
+          <SettingsProvider>
+            <TooltipProvider>
+              <Outlet />
+            </TooltipProvider>
+            <Toaster richColors />
+          </SettingsProvider>
         </ThemeProvider>
         <TanStackRouterDevtools position="bottom-left" />
         <ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />

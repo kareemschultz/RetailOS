@@ -1,0 +1,38 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - img [ref=e9]
+        - generic [ref=e13]: RetailOS
+      - generic [ref=e14]:
+        - heading "Sign in to RetailOS" [level=2] [ref=e15]
+        - paragraph [ref=e16]: The unified platform for sales, inventory, and accounting — built to keep running, even offline.
+    - generic [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]: Email address
+        - textbox "Email address" [ref=e20]:
+          - /placeholder: Enter your email address
+      - generic [ref=e21]:
+        - generic [ref=e22]: Password
+        - generic [ref=e23]:
+          - textbox "Password" [ref=e24]:
+            - /placeholder: ••••••••••••
+          - button "Show password" [ref=e25]:
+            - img
+            - generic [ref=e26]: Show password
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - checkbox [checked] [ref=e29]:
+            - img [ref=e31]
+          - checkbox [checked] [ref=e33]
+          - generic [ref=e34]: Remember me
+        - button "Forgot password?" [ref=e35]
+      - button "Sign in to RetailOS" [ref=e36]
+    - generic [ref=e39]: or
+    - button "Continue with Google" [ref=e41]:
+      - img
+      - text: Continue with Google
+    - paragraph [ref=e42]:
+      - text: New to RetailOS?
+      - button "Create an account" [ref=e43]
+  - region "Notifications alt+T"

@@ -21,6 +21,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronRightIcon, Store } from "lucide-react";
 
 import { type NavMenuItem, navGroups } from "@/configs/nav-config";
+import { useSettings } from "@/theme/settings-store";
 
 // RetailOS application sidebar — dropped in from the AdminCN template
 // `Sidebar.tsx` (Assembly Law: their structure + collapsible nesting, badges,
@@ -96,9 +97,13 @@ export function AppSidebar() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const { settings } = useSettings();
+  // Map our settings.variant (default/inset/floating) to the sidebar primitive's
+  // variant (sidebar/inset/floating) so the customizer's controls apply live.
+  const variant = settings.variant === "default" ? "sidebar" : settings.variant;
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible={settings.collapsible} variant={variant}>
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1.5">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">

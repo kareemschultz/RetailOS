@@ -10,6 +10,7 @@ import { AppSidebar } from "./app-sidebar";
 import { CommandMenu } from "./command-menu";
 import { ConnectionStatus } from "./connection-status";
 import { ModeToggle } from "./mode-toggle";
+import { ThemeCustomizer } from "./theme-customizer";
 import UserMenu from "./user-menu";
 
 // RetailOS application shell — dropped in from the AdminCN template: the Sidebar
@@ -36,6 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <div className="flex items-center gap-1.5">
               <ConnectionStatus />
+              <ThemeCustomizer />
               <ModeToggle />
               <UserMenu />
             </div>
