@@ -3445,6 +3445,69 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).rejects.toThrow();
   });
 
+  it("Commit 4: shiftList is reports-gated, tenant-scoped, and filterable", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const { location } = await seedCashFixture("ShList");
+    const opened = await call(
+      appRouter.pos.openShift,
+      {
+        idempotencyKey: "sh-list-open",
+        locationId: location.id,
+        openingFloat: [{ amountMinor: 4000, currency: "USD", scale: 2 }],
+        terminalId: "T-LIST-1",
+      },
+      admin
+    );
+    const listed = await call(
+      appRouter.pos.shiftList,
+      { locationId: location.id, status: "open" },
+      admin
+    );
+    const row = listed.find((s) => s.id === opened.shiftId);
+    expect(row).toMatchObject({
+      cashierUserId: ADMIN,
+      closedAt: null,
+      id: opened.shiftId,
+      locationId: location.id,
+      locationName: location.name,
+      status: "open",
+      terminalId: "T-LIST-1",
+      zReportNumber: null,
+    });
+    expect(row?.openedAt).toEqual(expect.any(String));
+    expect(row).not.toHaveProperty("tenantId");
+    expect(row).not.toHaveProperty("createdBy");
+
+    const closed = await call(
+      appRouter.pos.closeShift,
+      {
+        countedCash: [{ amountMinor: 4000, currency: "USD", scale: 2 }],
+        idempotencyKey: "sh-list-close",
+        shiftId: opened.shiftId,
+        terminalId: "T-LIST-1",
+      },
+      admin
+    );
+    const closedOnly = await call(
+      appRouter.pos.shiftList,
+      { limit: 10, locationId: location.id, status: "closed" },
+      admin
+    );
+    expect(closedOnly.map((s) => s.id)).toContain(opened.shiftId);
+    expect(closedOnly.find((s) => s.id === opened.shiftId)).toMatchObject({
+      status: "closed",
+      zReportNumber: closed.zReportNumber,
+    });
+    await expect(call(appRouter.pos.shiftList, {}, cashier)).rejects.toThrow(
+      MISSING_REPORTS_VIEW_RE
+    );
+    await expect(
+      call(appRouter.pos.shiftList, { locationId: location.id }, adminB)
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+  });
+
   it("Commit 4: BLIND close computes expected + over/short EXACTLY (float + cash sale + pay-out)", async () => {
     const admin = { context: makeCtx(ADMIN, ORG) };
     const { location, product, sku } = await seedCashFixture("ShClose");

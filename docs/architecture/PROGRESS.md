@@ -13,6 +13,11 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Cash-control shifts pass (in progress, 2026-06-29)
+- **Branch:** `feat/cash-control-shifts` off `master = 98c30c0` after PRs #57/#58 merged.
+- **Scope in this branch:** added `pos.shiftList`, a tenant-scoped `reports.view` read endpoint for cash-control shift rows with optional status/location filters and display-safe location names. Added `/shifts` to the web app under Sell, rendering a DataTableCard shift list and a detail dialog that drills into the existing backend `xReport`/`zReport` contracts. No schema, migration, or frontend money math change.
+- **Verification:** `bun run check-types` green; `bun run check` green after formatter folds; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56544 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app`) green: **db 97/97 + api 56/56, zero skips**.
+
 ### Demo page integration pass (in progress, 2026-06-29)
 - **Branch:** `feat/demo-pages-nav-financial` off `master = afce8f4` after PRs #53-#56 merged.
 - **Repo/PR audit:** no open GitHub PRs. Latest master CI is green at `afce8f4` (CI run `28342703192`). Remote feature branches from the just-merged demo/page work still exist, but they are not open PR blockers.

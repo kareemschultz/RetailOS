@@ -15,6 +15,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ArrowLeftRight,
   Boxes,
+  CircleDollarSign,
   LayoutDashboard,
   MapPin,
   Package,
@@ -44,6 +45,7 @@ const NAV_GROUPS = [
     items: [
       { to: "/pos", label: "Point of Sale", icon: ScanLine },
       { to: "/sales", label: "Sales", icon: ReceiptText },
+      { to: "/shifts", label: "Shifts", icon: CircleDollarSign },
     ],
   },
   {

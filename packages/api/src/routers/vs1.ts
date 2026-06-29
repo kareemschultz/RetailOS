@@ -4753,6 +4753,48 @@ async function refundShiftSatisfied(
   return Boolean(await findOpenShift(tx, terminalId, locationId));
 }
 
+async function runShiftList(
+  tx: TenantTransaction,
+  input: {
+    limit: number;
+    locationId?: string;
+    status?: (typeof schema.SHIFT_STATUSES)[number];
+  }
+) {
+  if (input.locationId) {
+    await assertLocationVisible(tx, input.locationId);
+  }
+  const filters: SQL[] = [];
+  if (input.status) {
+    filters.push(eq(schema.shift.status, input.status));
+  }
+  if (input.locationId) {
+    filters.push(eq(schema.shift.locationId, input.locationId));
+  }
+  const rows = await tx
+    .select({
+      cashierUserId: schema.shift.cashierUserId,
+      closedAt: schema.shift.closedAt,
+      id: schema.shift.id,
+      locationId: schema.shift.locationId,
+      locationName: schema.location.name,
+      openedAt: schema.shift.openedAt,
+      status: schema.shift.status,
+      terminalId: schema.shift.terminalId,
+      zReportNumber: schema.shift.zReportNumber,
+    })
+    .from(schema.shift)
+    .innerJoin(schema.location, eq(schema.location.id, schema.shift.locationId))
+    .where(filters.length > 0 ? and(...filters) : undefined)
+    .orderBy(desc(schema.shift.openedAt))
+    .limit(input.limit);
+  return rows.map((row) => ({
+    ...row,
+    closedAt: row.closedAt?.toISOString() ?? null,
+    openedAt: row.openedAt.toISOString(),
+  }));
+}
+
 async function runOpenShift(
   tx: TenantTransaction,
   ctx: RequestContext,
@@ -5205,6 +5247,23 @@ export const posRouter = {
           input,
           () => runVoid(tx, ctx, input)
         );
+      });
+    }),
+
+  // Cash control read surface for back-office shift monitoring.
+  shiftList: tenantProcedure
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(100).default(50),
+        locationId: z.string().uuid().optional(),
+        status: z.enum(schema.SHIFT_STATUSES).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        return runShiftList(tx, input);
       });
     }),
 
