@@ -58,6 +58,8 @@ describe.skipIf(!url)(
 
     const countRows = (
       table:
+        | typeof company
+        | typeof location
         | typeof product
         | typeof sale
         | typeof stockTransfer
@@ -202,21 +204,19 @@ describe.skipIf(!url)(
     });
 
     it("is re-runnable — a second seedDemo adds no duplicate rows", async () => {
-      const before = {
+      const snapshot = async () => ({
+        companies: await countRows(company),
+        locations: await countRows(location),
         products: await countRows(product),
         sales: await countRows(sale),
         transfers: await countRows(stockTransfer),
         receipts: await countRows(bondReceipt),
-      };
+      });
+      const before = await snapshot();
       const provisionTenant = (): Promise<ProvisionedTenant> =>
         Promise.resolve({ adminUserId: ADMIN, tenantId: TENANT });
       await seedDemo({ database: db, provisionTenant });
-      const after = {
-        products: await countRows(product),
-        sales: await countRows(sale),
-        transfers: await countRows(stockTransfer),
-        receipts: await countRows(bondReceipt),
-      };
+      const after = await snapshot();
       expect(after).toEqual(before);
     });
   }

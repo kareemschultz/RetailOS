@@ -1600,32 +1600,35 @@ interface DemoLocationIds {
 }
 
 async function ensureDemoCompany(tx: SeedTx, tenant: ProvisionedTenant) {
-  const inserted = (
+  // SELECT-first existence guard (mirrors ensureDemoLocation). `company` has
+  // no UNIQUE(tenant_id, name), so onConflictDoNothing on an insert with a
+  // fresh id can never fire — re-running would duplicate the company. Read by
+  // (tenant, name) and reuse, so seedDemo is genuinely re-runnable.
+  const existing = (
     await tx
-      .insert(company)
-      .values({
-        tenantId: tenant.tenantId,
-        name: "RetailOS Demo Co",
-        createdBy: tenant.adminUserId,
-      })
-      .onConflictDoNothing()
-      .returning()
+      .select()
+      .from(company)
+      .where(
+        and(
+          eq(company.tenantId, tenant.tenantId),
+          eq(company.name, "RetailOS Demo Co")
+        )
+      )
+      .limit(1)
   ).at(0);
-  if (inserted) {
-    return inserted;
+  if (existing) {
+    return existing;
   }
   return required(
     (
       await tx
-        .select()
-        .from(company)
-        .where(
-          and(
-            eq(company.tenantId, tenant.tenantId),
-            eq(company.name, "RetailOS Demo Co")
-          )
-        )
-        .limit(1)
+        .insert(company)
+        .values({
+          tenantId: tenant.tenantId,
+          name: "RetailOS Demo Co",
+          createdBy: tenant.adminUserId,
+        })
+        .returning()
     ).at(0),
     "demo company"
   );
