@@ -23,7 +23,7 @@ import { useMemo, useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
 
-export const Route = createFileRoute("/_app/products")({
+export const Route = createFileRoute("/_app/products/")({
   component: ProductsScreen,
 });
 
