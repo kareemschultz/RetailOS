@@ -242,11 +242,9 @@ function TransferLinesTable({ lines }: { lines: TransferDetail["lines"] }) {
       <TableBody>
         {lines.map((line) => (
           <TableRow key={line.id}>
+            <TableCell className="font-medium">{line.productName}</TableCell>
             <TableCell className="font-mono text-muted-foreground text-xs">
-              {line.productId.slice(0, 8)}…
-            </TableCell>
-            <TableCell className="font-mono text-muted-foreground text-xs">
-              {line.skuId ? `${line.skuId.slice(0, 8)}…` : "—"}
+              {line.skuCode ?? "—"}
             </TableCell>
             <TableCell className="text-right font-mono tabular-nums">
               {line.qty}
