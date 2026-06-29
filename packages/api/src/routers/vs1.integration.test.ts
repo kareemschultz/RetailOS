@@ -4792,11 +4792,12 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).rejects.toThrow(SHIFT_REQUIRED_RE);
   });
 
-  // Demo backend foundation: the read endpoints (location.list, inventory.
-  // stockByLocation/stockLedgerList, transfer.list/detail, bond.receiptList/
-  // receiptDetail) enforce their permission gate AND tenant isolation. One
-  // fixture (company → warehouse/store/bonded → products → stock → a transfer →
-  // a bond receipt) built through the routers, then read/permission/isolation.
+  // Demo backend foundation: the read endpoints (location.list, catalog
+  // taxonomy, inventory.stockByLocation/stockLedgerList, transfer.list/detail,
+  // bond.receiptList/receiptDetail) enforce their permission gate AND tenant
+  // isolation. One fixture (company → warehouse/store/bonded → products →
+  // stock → a transfer → a bond receipt) built through the routers, then
+  // read/permission/isolation.
   it("demo reads: enforce reports.view / inventory.transfer / bond.receive gates and tenant isolation", async () => {
     const admin = { context: makeCtx(ADMIN, ORG) };
     const cashier = { context: makeCtx(CASHIER, ORG) };
@@ -4837,6 +4838,16 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       .set({ costingMethod: "avco" })
       .where(eq(schema.organization.id, ORG));
 
+    const category = await call(
+      appRouter.catalog.categoryCreate,
+      { code: "DR-DEMO", name: "Demo Reads" },
+      admin
+    );
+    const brand = await call(
+      appRouter.catalog.brandCreate,
+      { code: "DR-BRAND", name: "Demo Brand" },
+      admin
+    );
     const widgetP = await call(
       appRouter.product.create,
       {
@@ -4932,6 +4943,19 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     // The patched bonded location reflects its flags through the DTO.
     const bondedRow = locs.find((l) => l.id === bonded.id);
     expect(bondedRow).toMatchObject({ type: "bonded", isBonded: true });
+
+    const categories = await call(appRouter.catalog.categoryList, {}, admin);
+    expect(categories.map((row) => row.id)).toContain(category.id);
+    expect(categories.find((row) => row.id === category.id)).toMatchObject({
+      code: "DR-DEMO",
+      name: "Demo Reads",
+    });
+    const brands = await call(appRouter.catalog.brandList, {}, admin);
+    expect(brands.map((row) => row.id)).toContain(brand.id);
+    expect(brands.find((row) => row.id === brand.id)).toMatchObject({
+      code: "DR-BRAND",
+      name: "Demo Brand",
+    });
 
     const stock = await call(
       appRouter.inventory.stockByLocation,

@@ -14,9 +14,11 @@ import {
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ArrowLeftRight,
+  BadgeCheck,
   Boxes,
   CircleDollarSign,
   FileClock,
+  FolderTree,
   History,
   LayoutDashboard,
   MapPin,
@@ -52,7 +54,11 @@ const NAV_GROUPS = [
   },
   {
     label: "Catalog",
-    items: [{ to: "/products", label: "Products", icon: Package }],
+    items: [
+      { to: "/products", label: "Products", icon: Package },
+      { to: "/categories", label: "Categories", icon: FolderTree },
+      { to: "/brands", label: "Brands", icon: BadgeCheck },
+    ],
   },
   {
     label: "Inventory",

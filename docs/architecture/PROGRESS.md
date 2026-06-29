@@ -13,33 +13,38 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
-### Stock-ledger page pass (in progress, 2026-06-29)
+### Catalog taxonomy pages pass (in progress, 2026-06-29)
+- **Branch:** `feat/catalog-taxonomy-pages` off `master = 130665d` after PR #61 merged and production was redeployed/recovered with Infisical project injection.
+- **Scope in this branch:** added `/categories` and `/brands` back-office catalog taxonomy pages under the Catalog nav, both composed with the owned `DataTableCard` shell and existing `catalog.categoryList` / `catalog.brandList` endpoints. Added a demo-read regression assertion that catalog taxonomy reads surface the created category/brand through the API. No schema, migration, mutation, or money-math change.
+- **Verification:** `bun run check-types` green; `bun run check` green after formatter fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56547 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green: **db 97/97 + api 57/57, zero skips**.
+
+### Stock-ledger page pass (merged, 2026-06-29)
 - **Branch:** `feat/stock-ledger-page` off `master = d6b46b5` after PR #60 merged.
 - **Scope in this branch:** `inventory.stockLedgerList` now returns display-safe product, SKU, and location names from tenant-scoped joins. Added `/stock-ledger` under the Inventory nav as a first-class append-only movement history table with location filtering. Also hardened API integration cleanup to delete number lease usage/leases/blocks before locations/companies, making reruns safe after lease tests. No schema, migration, or frontend balance/value calculation change.
 - **Verification:** `bun run check-types` green; `bun run check` green; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56546 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app`) green after folding a test-order assumption and cleanup fix: **db 97/97 + api 57/57, zero skips**.
 
-### Number-lease monitor pass (in progress, 2026-06-29)
+### Number-lease monitor pass (merged, 2026-06-29)
 - **Branch:** `feat/number-lease-monitor` off `master = 2eeaa05` after PR #59 merged.
 - **Scope in this branch:** added `pos.numberLeaseList`, a tenant-scoped `reports.view` read endpoint for number lease monitoring with optional company/location/status/docType/terminal filters and display-safe company/location names. Added `/reports/number-leases` to the web app, rendering the backend lease range/cursor/status fields in a DataTableCard. No schema, migration, sale-path lease binding, or frontend number allocation change.
 - **Verification:** `bun run check-types` green; `bun run check` green after formatter folds; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56545 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app`) green: **db 97/97 + api 57/57, zero skips**.
 
-### Cash-control shifts pass (in progress, 2026-06-29)
+### Cash-control shifts pass (merged, 2026-06-29)
 - **Branch:** `feat/cash-control-shifts` off `master = 98c30c0` after PRs #57/#58 merged.
 - **Scope in this branch:** added `pos.shiftList`, a tenant-scoped `reports.view` read endpoint for cash-control shift rows with optional status/location filters and display-safe location names. Added `/shifts` to the web app under Sell, rendering a DataTableCard shift list and a detail dialog that drills into the existing backend `xReport`/`zReport` contracts. No schema, migration, or frontend money math change.
 - **Verification:** `bun run check-types` green; `bun run check` green after formatter folds; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56544 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app`) green: **db 97/97 + api 56/56, zero skips**.
 
-### Demo page integration pass (in progress, 2026-06-29)
+### Demo page integration pass (merged, 2026-06-29)
 - **Branch:** `feat/demo-pages-nav-financial` off `master = afce8f4` after PRs #53-#56 merged.
 - **Repo/PR audit:** no open GitHub PRs. Latest master CI is green at `afce8f4` (CI run `28342703192`). Remote feature branches from the just-merged demo/page work still exist, but they are not open PR blockers.
 - **Scope in this branch:** app shell navigation now exposes the merged Stock, Transfers, Bonded goods, Locations, and Financial pages. Financial overview valuation table now reads `inventory.stockByLocation` instead of `reports.valuation`, so it renders product/location names from the backend DTO rather than UUID fragments. No backend schema/service change.
 - **Verification so far:** `bun run check-types` green; `bun run check` green; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. First `check-types` pass caught raw-SQL DTO string fields typed as `unknown`; folded by coercing display-only string fields at the UI boundary.
 
-### Demo detail names pass (in progress, 2026-06-29)
+### Demo detail names pass (merged, 2026-06-29)
 - **Branch:** `feat/demo-detail-names` off `master = afce8f4` (independent of PR #57; not stacked).
 - **Scope in this branch:** `transfer.detail` and `bond.receiptDetail` now enrich line rows with `productName` and `skuCode` from tenant-scoped joins. Transfers and Bonded goods detail dialogs render those names/codes instead of UUID fragments. No schema, mutation, or money-math change.
 - **Verification:** `bun run check-types` green; `bun run check` green after formatter fix; `bun run check:mojibake` green; `bun -F web build` green. Disposable PG18 on port 56543 (`roles.sql` via container `psql` → migrate as `retailos_migrator` → test as `retailos_app`) green: **db 97/97 + api 55/55, zero skips**. Default `bun run test` also green before the PG18 run.
 
-### Commerce back-office + product media (in progress, 2026-06-28)
+### Commerce back-office + product media (merged, 2026-06-28)
 - **Branch:** `feat/commerce-backoffice-products` off `master = a98390b` after PR #45 was merged. Owner asked Codex to push work forward on a separate branch for other agents to vet.
 - **Scope built so far:** backend product-media seam + CommerceO-style Dashboard/Products polish + POS post-sale console. Added tenant-owned `product_image` with composite FK `(tenant_id, product_id) → product(tenant_id, id)`, single-primary partial unique index, fail-closed RLS, Drizzle snapshot/journal metadata, `product.imageCreate`, and DTO-safe `product.detail`. `product.catalog` now returns only display-safe primary image fields (`primaryImageUrl`, `primaryImageAltText`) and still leaks no costing/policy/object-key internals. Frontend Products now renders a CommerceO-style product table with thumbnails and links to `/products/$productId`; Dashboard has a catalog spotlight panel; product detail has a Studio-inspired media manager (probed `product-list-01`, `form-layout-02`, `file-upload-01`, `empty-state-01`) backed by the real media mutation. Added `/sales` as an owned Studio/dashboard-shell-style POS sales console using existing `pos.saleSearch`, `pos.saleDetail`, `pos.receipt`, and `pos.void`: recent-sale lookup, receipt lines, refund-state summary, backend `availableActions`, receipt reprint, and a guarded whole-sale void dialog with a stable idempotency key per attempt. App shell/sidebar unchanged per locked decision except adding the Sales nav item under Sell.
 - **Verification:** `bun run check`, `bun run check-types`, `bun run check:mojibake`, default `bun run test`, and `bun -F web build` green. Fresh disposable PG18 on port 56432 (`roles.sql` → migrate 0000→0022 as `retailos_migrator` → test as `retailos_app`) green for the backend/media slice: **db 93/93 + api 53/53, zero skips**. Note: direct `shadcn add @ss-blocks/... -c packages/ui` was blocked in this shell because `EMAIL`/`LICENSE_KEY` were not exported; MCP registry probing succeeded, so the UI was ported/adapted as owned code rather than raw-installed. For the `/sales` UI slice, Studio registry search was probed (`dashboard-shell-01`/sales-table-style matches) and the surface was adapted as owned code from installed shadcn primitives because no exact post-sale block exists.
