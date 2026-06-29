@@ -186,9 +186,9 @@ function ReceiptLinesTable({ lines }: { lines: BondReceiptDetail["lines"] }) {
           {lines.map((line) => (
             <TableRow key={line.id}>
               <TableCell>
-                <p className="truncate font-mono text-xs">{line.skuId}</p>
+                <p className="truncate font-medium">{line.productName}</p>
                 <p className="truncate text-muted-foreground text-xs">
-                  {line.productId}
+                  {line.skuCode}
                 </p>
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">

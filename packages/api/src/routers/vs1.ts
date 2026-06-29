@@ -6317,11 +6317,21 @@ export const transferRouter = {
           .select({
             id: schema.stockTransferLine.id,
             productId: schema.stockTransferLine.productId,
+            productName: schema.product.name,
             skuId: schema.stockTransferLine.skuId,
+            skuCode: schema.sku.code,
             lotId: schema.stockTransferLine.lotId,
             qty: schema.stockTransferLine.qty,
           })
           .from(schema.stockTransferLine)
+          .innerJoin(
+            schema.product,
+            eq(schema.product.id, schema.stockTransferLine.productId)
+          )
+          .leftJoin(
+            schema.sku,
+            eq(schema.sku.id, schema.stockTransferLine.skuId)
+          )
           .where(eq(schema.stockTransferLine.transferId, input.transferId));
         return { transfer, lines };
       });
@@ -6567,7 +6577,9 @@ export const bondRouter = {
           .select({
             id: schema.bondReceiptLine.id,
             productId: schema.bondReceiptLine.productId,
+            productName: schema.product.name,
             skuId: schema.bondReceiptLine.skuId,
+            skuCode: schema.sku.code,
             lotId: schema.bondReceiptLine.lotId,
             qty: schema.bondReceiptLine.qty,
             unitCostMinor: schema.bondReceiptLine.unitCostMinor,
@@ -6575,6 +6587,14 @@ export const bondRouter = {
             costScale: schema.bondReceiptLine.costScale,
           })
           .from(schema.bondReceiptLine)
+          .innerJoin(
+            schema.product,
+            eq(schema.product.id, schema.bondReceiptLine.productId)
+          )
+          .innerJoin(
+            schema.sku,
+            eq(schema.sku.id, schema.bondReceiptLine.skuId)
+          )
           .where(eq(schema.bondReceiptLine.bondReceiptId, input.bondReceiptId));
         return { receipt, lines };
       });

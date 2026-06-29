@@ -4820,7 +4820,11 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     );
     expect(tDetail.transfer.id).toBe(transferId);
     expect(tDetail.lines.length).toBeGreaterThan(0);
-    expect(tDetail.lines[0]).toMatchObject({ skuId: widgetSku.id });
+    expect(tDetail.lines[0]).toMatchObject({
+      productName: "DR Widget",
+      skuCode: "DR-WIDGET-EA",
+      skuId: widgetSku.id,
+    });
 
     const receipts = await call(appRouter.bond.receiptList, {}, admin);
     expect(receipts.map((r) => r.id)).toContain(bondReceiptId);
@@ -4830,7 +4834,11 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       admin
     );
     expect(bDetail.receipt.id).toBe(bondReceiptId);
-    expect(bDetail.lines[0]).toMatchObject({ skuId: gadgetSku.id });
+    expect(bDetail.lines[0]).toMatchObject({
+      productName: "DR Gadget",
+      skuCode: "DR-GADGET-EA",
+      skuId: gadgetSku.id,
+    });
 
     // ── Permission gating: a cashier lacks reports.view / inventory.transfer /
     // bond.receive and is rejected on every read.
