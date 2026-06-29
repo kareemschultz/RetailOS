@@ -13,7 +13,9 @@
       "!**/routeTree.gen.ts",
       "!**/*.gen.ts",
       "!**/.source",
-      "!**/apps/fumadocs"
+      "!**/apps/fumadocs",
+      // Static public assets (favicon, robots) are served verbatim — not JSX/source to lint.
+      "!**/apps/web/public"
     ]
   },
   "linter": {

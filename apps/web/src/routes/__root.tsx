@@ -30,7 +30,10 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       { name: "color-scheme", content: "light dark" },
       { title: "RetailOS" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+    ],
   }),
 
   component: RootDocument,

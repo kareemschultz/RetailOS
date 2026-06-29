@@ -47,10 +47,11 @@ interface ValuationRow {
 
 interface LowStockRow {
   key: string;
-  locationId: string;
+  locationName: string;
   minQty: number;
   onHand: number;
-  skuId: string;
+  productName: string;
+  skuCode: string;
   suggestedQty: number;
 }
 
@@ -137,14 +138,6 @@ function TableSkeleton() {
         <Skeleton className="h-[60px] rounded-none" key={k} />
       ))}
     </div>
-  );
-}
-
-function ShortId({ value }: { value: string }) {
-  return (
-    <span className="font-mono text-muted-foreground text-xs" title={value}>
-      {value.slice(0, 8)}
-    </span>
   );
 }
 
@@ -263,7 +256,7 @@ function LowStockContent({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>SKU</TableHead>
+          <TableHead>Product</TableHead>
           <TableHead>Location</TableHead>
           <TableHead className="text-right">On hand</TableHead>
           <TableHead className="text-right">Min</TableHead>
@@ -274,11 +267,14 @@ function LowStockContent({
         {rows.map((row) => (
           <TableRow key={row.key}>
             <TableCell>
-              <ShortId value={row.skuId} />
+              <div className="min-w-0">
+                <p className="truncate font-medium">{row.productName}</p>
+                <p className="truncate font-mono text-muted-foreground text-xs">
+                  {row.skuCode}
+                </p>
+              </div>
             </TableCell>
-            <TableCell>
-              <ShortId value={row.locationId} />
-            </TableCell>
+            <TableCell>{row.locationName}</TableCell>
             <TableCell className="text-right font-mono tabular-nums">
               {row.onHand}
             </TableCell>
@@ -410,8 +406,9 @@ function FinancialOverviewScreen() {
     () =>
       (lowStock.data ?? []).map((row, index) => ({
         key: `${String(row.skuId)}:${String(row.locationId)}:${index}`,
-        skuId: String(row.skuId),
-        locationId: String(row.locationId),
+        productName: String(row.productName),
+        skuCode: String(row.skuCode),
+        locationName: String(row.locationName),
         onHand: row.onHand,
         minQty: row.minQty,
         suggestedQty: row.suggestedQty,
