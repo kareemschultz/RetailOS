@@ -4865,7 +4865,13 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     );
     const widgetSku = await call(
       appRouter.catalog.skuCreate,
-      { code: "DR-WIDGET-EA", productId: widgetP.id },
+      {
+        baseUomId: unit.id,
+        code: "DR-WIDGET-EA",
+        costingMethod: "avco",
+        name: "Demo Widget Each",
+        productId: widgetP.id,
+      },
       admin
     );
     const gadgetP = await call(
@@ -4968,6 +4974,23 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       kind: "count",
       name: "Demo Each",
     });
+    const skus = await call(appRouter.catalog.skuCatalogList, {}, admin);
+    expect(skus.map((row) => row.id)).toContain(widgetSku.id);
+    expect(skus.find((row) => row.id === widgetSku.id)).toMatchObject({
+      baseUomCode: "DR-EA",
+      code: "DR-WIDGET-EA",
+      costingMethod: "avco",
+      name: "Demo Widget Each",
+      productName: "DR Widget",
+      productSku: "DR-WIDGET",
+      trackingMode: "none",
+    });
+    const skuSearch = await call(
+      appRouter.catalog.skuCatalogList,
+      { q: "widget each" },
+      admin
+    );
+    expect(skuSearch.map((row) => row.id)).toContain(widgetSku.id);
 
     const stock = await call(
       appRouter.inventory.stockByLocation,
@@ -5030,6 +5053,9 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       MISSING_REPORTS_VIEW_RE
     );
     await expect(
+      call(appRouter.catalog.skuCatalogList, {}, cashier)
+    ).rejects.toThrow(MISSING_PRODUCTS_CREATE_PERM_RE);
+    await expect(
       call(appRouter.inventory.stockByLocation, {}, cashier)
     ).rejects.toThrow(MISSING_REPORTS_VIEW_RE);
     await expect(
@@ -5052,6 +5078,11 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     // cannot see ORG's rows (RLS) — lists exclude them, detail/id reads NOT_FOUND.
     const locsB = await call(appRouter.location.list, {}, adminB);
     expect(locsB.map((l) => l.id)).not.toContain(warehouse.id);
+    const skusB = await call(appRouter.catalog.skuCatalogList, {}, adminB);
+    expect(skusB.map((row) => row.id)).not.toContain(widgetSku.id);
+    await expect(
+      call(appRouter.catalog.skuCatalogList, { productId: widgetP.id }, adminB)
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
     await expect(
       call(
         appRouter.inventory.stockByLocation,

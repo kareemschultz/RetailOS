@@ -1416,6 +1416,64 @@ export const catalogRouter = {
           .where(conditions.length ? and(...conditions) : undefined);
       });
     }),
+  skuCatalogList: tenantProcedure
+    .input(
+      z.object({
+        includeArchived: z.boolean().default(false),
+        productId: z.string().uuid().optional(),
+        q: z.string().trim().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        if (input.productId) {
+          await assertProductVisible(tx, input.productId);
+        }
+        const search = input.q ? `%${input.q}%` : null;
+        const conditions = [
+          input.productId ? eq(schema.sku.productId, input.productId) : null,
+          input.includeArchived ? null : isNull(schema.sku.deletedAt),
+          search
+            ? or(
+                ilike(schema.sku.code, search),
+                ilike(schema.sku.name, search),
+                ilike(schema.product.sku, search),
+                ilike(schema.product.name, search),
+                ilike(schema.unitOfMeasure.code, search),
+                ilike(schema.unitOfMeasure.name, search)
+              )
+            : null,
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.sku.id,
+            productId: schema.sku.productId,
+            productSku: schema.product.sku,
+            productName: schema.product.name,
+            code: schema.sku.code,
+            name: schema.sku.name,
+            baseUomCode: schema.unitOfMeasure.code,
+            baseUomName: schema.unitOfMeasure.name,
+            costingMethod: schema.sku.costingMethod,
+            trackingMode: schema.sku.trackingMode,
+            isActive: schema.sku.isActive,
+            createdAt: schema.sku.createdAt,
+          })
+          .from(schema.sku)
+          .innerJoin(
+            schema.product,
+            eq(schema.product.id, schema.sku.productId)
+          )
+          .leftJoin(
+            schema.unitOfMeasure,
+            eq(schema.unitOfMeasure.id, schema.sku.baseUomId)
+          )
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(desc(schema.sku.createdAt));
+      });
+    }),
   skuCreate: tenantProcedure
     .input(
       z.object({
