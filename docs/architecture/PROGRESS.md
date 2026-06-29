@@ -13,7 +13,13 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
-### Commerce Experience (Shopix) capability map — PLANNING (on `plan/commerce-capability-map`, 2026-06-29)
+### Shopix design doc + threat model — PLANNING, LAST artifact before build (on `plan/shopix-design`, 2026-06-29)
+- **Scope:** `docs/architecture/shopix-design-and-threat-model.md` — the **final** planning doc before Shopix is built (threat model IS the security core). After owner approval → BUILD; no further governance docs. Codebase-grounded (exact `file:line`), incorporates the 7 owner-locked decisions (memory `shopix-v1-locked-decisions`).
+- **Covers:** threat-model trust ladder (anon→guest→customer→staff→admin; customer principal never reaches staff RBAC) · hostname→tenant gateway (`storefrontProcedure` + new `storefront_domain` col, fail-closed) · public read models + allow-list DTOs · **real tax engine** (`tax_rate` + `mulDivRound`, GAP-1 — none exists today) · cart · **atomic checkout/reservation seam** (§21, decision #1) · order schema (return-ready + pickup/delivery) · order→GL via real sale/tender doc · mock payment seam · guest PII vault · Operations dimension.
+- **Adversarial-gated:** baseline claims verified ACCURATE; **1 CRITICAL + 5 HIGH found, ALL folded** — (CRIT) **stock now commits only inside the payment-confirmation tx** (no stranded ledger); (HIGH) canonical sorted lock ordering (anti-deadlock); real `sale`/`sale_line`/`tender` persisted for GL identity; server-minted principal-bound checkout-intent idempotency; per-subject-key PII vault; generic `COMMERCE_UNAVAILABLE` + probing limits (anti stock-binary-search). Tickets: POS canonical lock ordering; GRA VAT launch-confirm.
+- **STOP before any Shopix code** — awaiting owner approval. Accounting (Phase 5) stays planned-not-built BEHIND Shopix; no parallel module track.
+
+### Commerce Experience (Shopix) capability map — PLANNING (merged #73, 2026-06-29)
 - **Scope:** planning artifact only — `docs/architecture/commerce-experience-capability-map.md`. NO code, NO governance rewrite, NO refactor. A build checklist for the future customer-facing storefront that consumes the existing shared backend (charter §21, never duplicate inventory).
 - **Mental-model lens (not new architecture):** RetailOS = one shared domain backend serving multiple **experiences** (Admin / POS / Commerce-Shopix / Mobile / API / Marketplace). Reinforces §21; no docs/governance change beyond this one map.
 - **Grounded:** built on a full backend enumeration (exact endpoints + `file:line`). Honest headline: existing catalog reads are all `tenantProcedure` gated on *operational* permissions → consumable unchanged by an authenticated back-office (CommerceO), but a **public storefront needs NEW Layer-B public read models**; the real weight is the **public security boundary** (hostname→tenant unimplemented; §11) + the **shared-inventory checkout reservation seam** (§21 oversell).
