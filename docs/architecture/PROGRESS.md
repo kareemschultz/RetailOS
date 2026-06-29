@@ -13,6 +13,17 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Commerce Experience (Shopix) capability map — PLANNING (on `plan/commerce-capability-map`, 2026-06-29)
+- **Scope:** planning artifact only — `docs/architecture/commerce-experience-capability-map.md`. NO code, NO governance rewrite, NO refactor. A build checklist for the future customer-facing storefront that consumes the existing shared backend (charter §21, never duplicate inventory).
+- **Mental-model lens (not new architecture):** RetailOS = one shared domain backend serving multiple **experiences** (Admin / POS / Commerce-Shopix / Mobile / API / Marketplace). Reinforces §21; no docs/governance change beyond this one map.
+- **Grounded:** built on a full backend enumeration (exact endpoints + `file:line`). Honest headline: existing catalog reads are all `tenantProcedure` gated on *operational* permissions → consumable unchanged by an authenticated back-office (CommerceO), but a **public storefront needs NEW Layer-B public read models**; the real weight is the **public security boundary** (hostname→tenant unimplemented; §11) + the **shared-inventory checkout reservation seam** (§21 oversell).
+- **Adversarial-gated:** fresh review verified all 5 factual claims (PASS) and found 6 gaps (4 HIGH, 1 MED, 1 LOW) — all folded (`GAP-1..6`): public `commerce.quote` needs real tax (`pos.quote` returns zero tax + is shift-aware); order→GL POST-1 events; pickup/delivery fulfilment; online returns; separate storefront customer principal; rate-limit budgets.
+- **Output:** 7 open owner decisions (oversell/reservation policy is load-bearing). **STOP before any Shopix code** — awaiting owner review. Accounting (Phase 5) stays planned-not-built behind it.
+
+### Demo polish — favicon + name-resolved low-stock (merged #72, deployed, 2026-06-29)
+- **Branch:** `polish/favicon-lowstock-names`. Brand SVG favicon (kills the `favicon.ico` 404) + `reports.lowStock` resolves identities to display names at the SQL layer (sku.code/product.name/location.name); Financial low-stock table now shows Product+SKU+Location instead of UUIDs (last UUID surface in admin UI). Excluded `apps/web/public` from Biome.
+- **Verification:** check-types/check/mojibake/web build green; disposable PG18 **api 57/57** zero skips; lowStock SQL probed directly; **Codex review CLEAN**; CI 4/4 green. Merged squash (`f18debf`), deployed app+server; favicon serves 200, deployed bundle carries the head link. (Playwright backend had QUIC/HTTP3 transport errors vs the proxy → verified below the browser layer.)
+
 ### Inventory lots page pass (merged via #70-rebase, 2026-06-29)
 - **Branch:** `feat/inventory-lots-page` rebased onto master after #70 merged (kept both endpoints + nav items).
 - **Scope in this branch:** adding a display-safe `inventory.lotCatalogList` read endpoint with joined product and SKU names, then adding `/lots` under the Inventory nav as a DataTableCard lot/batch registry page composed from owned RetailOS/shadcn primitives. No schema, migration, mutation, or money-math change.
