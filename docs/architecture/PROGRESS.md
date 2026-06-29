@@ -13,6 +13,16 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### AdminCN frontend adoption — IN BUILD on `master`, deployed to prod (solo-dev fast loop, 2026-06-29)
+- **Workflow change (owner directive):** solo-dev fast loop — commit on `master` → deploy to prod → test live; branch/PR/Codex ceremony DEFERRED until the app is built out. ONE guard before deploy: `check-types` + `bun -F web build` + mojibake green. Backend (money/RLS/Shopix) stays careful. Memory: `solo-dev-fast-loop-workflow`.
+- **"Port" = COPY the real AdminCN source files in, edit only framework/data/token lines** (next/link→TanStack Link, next/navigation→useRouterState/useNavigate, next/font→@fontsource, demo data→oRPC, cookie store→localStorage) — NEVER hand-recreate. Template ZIP extracted to `/tmp/admincn_3` (gitignored). Keep TanStack Start (no Next migration).
+- **Shipped + deployed to prod:**
+  - StatCard (AdminCN statistics-card) on the dashboard KPIs (`c167c7d`-prior).
+  - **The AdminCN shell** (`c167c7d`): nested/collapsible Sidebar (`app-sidebar.tsx` ← AdminCN `Sidebar.tsx`), polished header bar, **command palette** (`command-menu.tsx` ← AdminCN CommandMenu, ⌘K) + primitives collapsible/command/kbd. Nav = owner's hybrid model (`nav-config.ts`: Operations/Catalog→Products nested/Inventory/Network/Reports).
+  - **The theme customizer** (`2090bfd`): `theme-customizer.tsx` ← AdminCN ThemeCustomizer + `settings-store.tsx` (apply logic: preset OKLCH CSS vars / radius / scale / font / next-themes mode) + 9 presets (Modern Minimal, Corporate…) + popover/radio-group primitives. Live + localStorage-persisted; palette icon in the header; AppSidebar reads settings.variant/collapsible.
+- **base-vega vs base-lyra (verified):** AdminCN authored under `base-vega` (rounded, radius-respecting); our project `base-lyra` (square). AdminCN components carry real `rounded-*` + read `--radius`, so they render correctly here WITHOUT switching style; never `shadcn apply` (re-squares under Lyra).
+- **NEXT:** port the remaining AdminCN dashboards (Finance, Logistics, eCommerce, Orders…) + pages (settings/auth/onboarding/CRUD tables), wired to our oRPC — owner wants the full template re-skin. Notifications/activity-feed header widgets deferred (no backing data).
+
 ### Shopix design doc + threat model — PLANNING, LAST artifact before build (on `plan/shopix-design`, 2026-06-29)
 - **Scope:** `docs/architecture/shopix-design-and-threat-model.md` — the **final** planning doc before Shopix is built (threat model IS the security core). After owner approval → BUILD; no further governance docs. Codebase-grounded (exact `file:line`), incorporates the 7 owner-locked decisions (memory `shopix-v1-locked-decisions`).
 - **Covers:** threat-model trust ladder (anon→guest→customer→staff→admin; customer principal never reaches staff RBAC) · hostname→tenant gateway (`storefrontProcedure` + new `storefront_domain` col, fail-closed) · public read models + allow-list DTOs · **real tax engine** (`tax_rate` + `mulDivRound`, GAP-1 — none exists today) · cart · **atomic checkout/reservation seam** (§21, decision #1) · order schema (return-ready + pickup/delivery) · order→GL via real sale/tender doc · mock payment seam · guest PII vault · Operations dimension.
