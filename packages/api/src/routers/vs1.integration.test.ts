@@ -110,6 +110,9 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         // Cash control (Commit 4): cash_movement → shift → location/company.
         await tx.delete(schema.cashMovement);
         await tx.delete(schema.shift);
+        await tx.delete(schema.numberLeaseUsage);
+        await tx.delete(schema.numberLease);
+        await tx.delete(schema.numberBlock);
         await tx.delete(schema.location);
         await tx.delete(schema.company);
       });
@@ -4947,6 +4950,13 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     );
     expect(ledger.length).toBeGreaterThan(0);
     expect(ledger[0]).toHaveProperty("movementType");
+    expect(ledger.find((row) => row.locationId === warehouse.id)).toMatchObject(
+      {
+        locationName: "DemoReads WH",
+        productName: "DR Widget",
+        skuCode: "DR-WIDGET-EA",
+      }
+    );
     expect(ledger[0]).not.toHaveProperty("idempotencyKey");
 
     const transfers = await call(appRouter.transfer.list, {}, admin);

@@ -13,6 +13,11 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Stock-ledger page pass (in progress, 2026-06-29)
+- **Branch:** `feat/stock-ledger-page` off `master = d6b46b5` after PR #60 merged.
+- **Scope in this branch:** `inventory.stockLedgerList` now returns display-safe product, SKU, and location names from tenant-scoped joins. Added `/stock-ledger` under the Inventory nav as a first-class append-only movement history table with location filtering. Also hardened API integration cleanup to delete number lease usage/leases/blocks before locations/companies, making reruns safe after lease tests. No schema, migration, or frontend balance/value calculation change.
+- **Verification:** `bun run check-types` green; `bun run check` green; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56546 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app`) green after folding a test-order assumption and cleanup fix: **db 97/97 + api 57/57, zero skips**.
+
 ### Number-lease monitor pass (in progress, 2026-06-29)
 - **Branch:** `feat/number-lease-monitor` off `master = 2eeaa05` after PR #59 merged.
 - **Scope in this branch:** added `pos.numberLeaseList`, a tenant-scoped `reports.view` read endpoint for number lease monitoring with optional company/location/status/docType/terminal filters and display-safe company/location names. Added `/reports/number-leases` to the web app, rendering the backend lease range/cursor/status fields in a DataTableCard. No schema, migration, sale-path lease binding, or frontend number allocation change.

@@ -17,6 +17,7 @@ import {
   Boxes,
   CircleDollarSign,
   FileClock,
+  History,
   LayoutDashboard,
   MapPin,
   Package,
@@ -57,6 +58,7 @@ const NAV_GROUPS = [
     label: "Inventory",
     items: [
       { to: "/inventory", label: "Stock", icon: Boxes },
+      { to: "/stock-ledger", label: "Stock ledger", icon: History },
       { to: "/transfers", label: "Transfers", icon: ArrowLeftRight },
       { to: "/bonds", label: "Bonded goods", icon: ShieldCheck },
     ],
