@@ -4853,6 +4853,11 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       { code: "DR-EA", name: "Demo Each", kind: "count" },
       admin
     );
+    const cartonUnit = await call(
+      appRouter.catalog.uomCreate,
+      { code: "DR-CTN", name: "Demo Carton", kind: "count" },
+      admin
+    );
     const widgetP = await call(
       appRouter.product.create,
       {
@@ -4881,6 +4886,17 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         productId: widgetP.id,
         sortOrder: 1,
         value: "Each",
+      },
+      admin
+    );
+    const widgetConversion = await call(
+      appRouter.catalog.uomConversionCreate,
+      {
+        factor: 24,
+        fromUomId: cartonUnit.id,
+        productId: widgetP.id,
+        role: "purchase",
+        toUomId: unit.id,
       },
       admin
     );
@@ -4994,6 +5010,25 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       kind: "count",
       name: "Demo Each",
     });
+    const conversions = await call(
+      appRouter.catalog.uomConversionCatalogList,
+      {},
+      admin
+    );
+    expect(conversions.map((row) => row.id)).toContain(widgetConversion.id);
+    expect(
+      conversions.find((row) => row.id === widgetConversion.id)
+    ).toMatchObject({
+      factor: 24,
+      factorScale: 0,
+      fromUomCode: "DR-CTN",
+      fromUomName: "Demo Carton",
+      productName: "DR Widget",
+      productSku: "DR-WIDGET",
+      role: "purchase",
+      toUomCode: "DR-EA",
+      toUomName: "Demo Each",
+    });
     const skus = await call(appRouter.catalog.skuCatalogList, {}, admin);
     expect(skus.map((row) => row.id)).toContain(widgetSku.id);
     expect(skus.find((row) => row.id === widgetSku.id)).toMatchObject({
@@ -5024,6 +5059,14 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       admin
     );
     expect(variantSearch.map((row) => row.id)).toContain(widgetVariant.id);
+    const conversionSearch = await call(
+      appRouter.catalog.uomConversionCatalogList,
+      { q: "ctn ea widget" },
+      admin
+    );
+    expect(conversionSearch.map((row) => row.id)).toContain(
+      widgetConversion.id
+    );
     const skuSearch = await call(
       appRouter.catalog.skuCatalogList,
       { q: "widget each" },
@@ -5149,9 +5192,24 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       adminB
     );
     expect(variantsB.map((row) => row.id)).not.toContain(widgetVariant.id);
+    const conversionsB = await call(
+      appRouter.catalog.uomConversionCatalogList,
+      {},
+      adminB
+    );
+    expect(conversionsB.map((row) => row.id)).not.toContain(
+      widgetConversion.id
+    );
     await expect(
       call(
         appRouter.catalog.variantCatalogList,
+        { productId: widgetP.id },
+        adminB
+      )
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+    await expect(
+      call(
+        appRouter.catalog.uomConversionCatalogList,
         { productId: widgetP.id },
         adminB
       )

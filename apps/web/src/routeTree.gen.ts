@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppVariantsRouteImport } from './routes/_app/variants'
+import { Route as AppUomConversionsRouteImport } from './routes/_app/uom-conversions'
 import { Route as AppUnitsRouteImport } from './routes/_app/units'
 import { Route as AppTransfersRouteImport } from './routes/_app/transfers'
 import { Route as AppStockLedgerRouteImport } from './routes/_app/stock-ledger'
@@ -49,6 +50,11 @@ const IndexRoute = IndexRouteImport.update({
 const AppVariantsRoute = AppVariantsRouteImport.update({
   id: '/variants',
   path: '/variants',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppUomConversionsRoute = AppUomConversionsRouteImport.update({
+  id: '/uom-conversions',
+  path: '/uom-conversions',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppUnitsRoute = AppUnitsRouteImport.update({
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/stock-ledger': typeof AppStockLedgerRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
+  '/uom-conversions': typeof AppUomConversionsRoute
   '/variants': typeof AppVariantsRoute
   '/products/$productId': typeof AppProductsProductIdRoute
   '/reports/financial': typeof AppReportsFinancialRoute
@@ -182,6 +189,7 @@ export interface FileRoutesByTo {
   '/stock-ledger': typeof AppStockLedgerRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
+  '/uom-conversions': typeof AppUomConversionsRoute
   '/variants': typeof AppVariantsRoute
   '/products/$productId': typeof AppProductsProductIdRoute
   '/reports/financial': typeof AppReportsFinancialRoute
@@ -207,6 +215,7 @@ export interface FileRoutesById {
   '/_app/stock-ledger': typeof AppStockLedgerRoute
   '/_app/transfers': typeof AppTransfersRoute
   '/_app/units': typeof AppUnitsRoute
+  '/_app/uom-conversions': typeof AppUomConversionsRoute
   '/_app/variants': typeof AppVariantsRoute
   '/_app/products/$productId': typeof AppProductsProductIdRoute
   '/_app/reports/financial': typeof AppReportsFinancialRoute
@@ -232,6 +241,7 @@ export interface FileRouteTypes {
     | '/stock-ledger'
     | '/transfers'
     | '/units'
+    | '/uom-conversions'
     | '/variants'
     | '/products/$productId'
     | '/reports/financial'
@@ -255,6 +265,7 @@ export interface FileRouteTypes {
     | '/stock-ledger'
     | '/transfers'
     | '/units'
+    | '/uom-conversions'
     | '/variants'
     | '/products/$productId'
     | '/reports/financial'
@@ -279,6 +290,7 @@ export interface FileRouteTypes {
     | '/_app/stock-ledger'
     | '/_app/transfers'
     | '/_app/units'
+    | '/_app/uom-conversions'
     | '/_app/variants'
     | '/_app/products/$productId'
     | '/_app/reports/financial'
@@ -320,6 +332,13 @@ declare module '@tanstack/react-router' {
       path: '/variants'
       fullPath: '/variants'
       preLoaderRoute: typeof AppVariantsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/uom-conversions': {
+      id: '/_app/uom-conversions'
+      path: '/uom-conversions'
+      fullPath: '/uom-conversions'
+      preLoaderRoute: typeof AppUomConversionsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/units': {
@@ -466,6 +485,7 @@ interface AppRouteRouteChildren {
   AppStockLedgerRoute: typeof AppStockLedgerRoute
   AppTransfersRoute: typeof AppTransfersRoute
   AppUnitsRoute: typeof AppUnitsRoute
+  AppUomConversionsRoute: typeof AppUomConversionsRoute
   AppVariantsRoute: typeof AppVariantsRoute
   AppProductsProductIdRoute: typeof AppProductsProductIdRoute
   AppReportsFinancialRoute: typeof AppReportsFinancialRoute
@@ -488,6 +508,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppStockLedgerRoute: AppStockLedgerRoute,
   AppTransfersRoute: AppTransfersRoute,
   AppUnitsRoute: AppUnitsRoute,
+  AppUomConversionsRoute: AppUomConversionsRoute,
   AppVariantsRoute: AppVariantsRoute,
   AppProductsProductIdRoute: AppProductsProductIdRoute,
   AppReportsFinancialRoute: AppReportsFinancialRoute,

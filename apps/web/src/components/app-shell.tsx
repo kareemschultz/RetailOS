@@ -31,6 +31,7 @@ import {
   Store,
   Tags,
   TrendingUp,
+  Workflow,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -65,6 +66,7 @@ const NAV_GROUPS = [
       { to: "/categories", label: "Categories", icon: FolderTree },
       { to: "/brands", label: "Brands", icon: BadgeCheck },
       { to: "/units", label: "Units", icon: Ruler },
+      { to: "/uom-conversions", label: "Conversions", icon: Workflow },
     ],
   },
   {
