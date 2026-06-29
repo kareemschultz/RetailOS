@@ -4874,6 +4874,16 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       },
       admin
     );
+    const widgetVariant = await call(
+      appRouter.catalog.variantCreate,
+      {
+        name: "Size",
+        productId: widgetP.id,
+        sortOrder: 1,
+        value: "Each",
+      },
+      admin
+    );
     const widgetBarcode = await call(
       appRouter.catalog.barcodeCreate,
       {
@@ -4995,6 +5005,25 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       productSku: "DR-WIDGET",
       trackingMode: "none",
     });
+    const variants = await call(
+      appRouter.catalog.variantCatalogList,
+      {},
+      admin
+    );
+    expect(variants.map((row) => row.id)).toContain(widgetVariant.id);
+    expect(variants.find((row) => row.id === widgetVariant.id)).toMatchObject({
+      name: "Size",
+      productName: "DR Widget",
+      productSku: "DR-WIDGET",
+      sortOrder: 1,
+      value: "Each",
+    });
+    const variantSearch = await call(
+      appRouter.catalog.variantCatalogList,
+      { q: "widget each" },
+      admin
+    );
+    expect(variantSearch.map((row) => row.id)).toContain(widgetVariant.id);
     const skuSearch = await call(
       appRouter.catalog.skuCatalogList,
       { q: "widget each" },
@@ -5114,6 +5143,19 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(locsB.map((l) => l.id)).not.toContain(warehouse.id);
     const skusB = await call(appRouter.catalog.skuCatalogList, {}, adminB);
     expect(skusB.map((row) => row.id)).not.toContain(widgetSku.id);
+    const variantsB = await call(
+      appRouter.catalog.variantCatalogList,
+      {},
+      adminB
+    );
+    expect(variantsB.map((row) => row.id)).not.toContain(widgetVariant.id);
+    await expect(
+      call(
+        appRouter.catalog.variantCatalogList,
+        { productId: widgetP.id },
+        adminB
+      )
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
     await expect(
       call(appRouter.catalog.skuCatalogList, { productId: widgetP.id }, adminB)
     ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);

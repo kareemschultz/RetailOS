@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppVariantsRouteImport } from './routes/_app/variants'
 import { Route as AppUnitsRouteImport } from './routes/_app/units'
 import { Route as AppTransfersRouteImport } from './routes/_app/transfers'
 import { Route as AppStockLedgerRouteImport } from './routes/_app/stock-ledger'
@@ -44,6 +45,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppVariantsRoute = AppVariantsRouteImport.update({
+  id: '/variants',
+  path: '/variants',
+  getParentRoute: () => AppRouteRoute,
 } as any)
 const AppUnitsRoute = AppUnitsRouteImport.update({
   id: '/units',
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/stock-ledger': typeof AppStockLedgerRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
+  '/variants': typeof AppVariantsRoute
   '/products/$productId': typeof AppProductsProductIdRoute
   '/reports/financial': typeof AppReportsFinancialRoute
   '/reports/number-leases': typeof AppReportsNumberLeasesRoute
@@ -175,6 +182,7 @@ export interface FileRoutesByTo {
   '/stock-ledger': typeof AppStockLedgerRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
+  '/variants': typeof AppVariantsRoute
   '/products/$productId': typeof AppProductsProductIdRoute
   '/reports/financial': typeof AppReportsFinancialRoute
   '/reports/number-leases': typeof AppReportsNumberLeasesRoute
@@ -199,6 +207,7 @@ export interface FileRoutesById {
   '/_app/stock-ledger': typeof AppStockLedgerRoute
   '/_app/transfers': typeof AppTransfersRoute
   '/_app/units': typeof AppUnitsRoute
+  '/_app/variants': typeof AppVariantsRoute
   '/_app/products/$productId': typeof AppProductsProductIdRoute
   '/_app/reports/financial': typeof AppReportsFinancialRoute
   '/_app/reports/number-leases': typeof AppReportsNumberLeasesRoute
@@ -223,6 +232,7 @@ export interface FileRouteTypes {
     | '/stock-ledger'
     | '/transfers'
     | '/units'
+    | '/variants'
     | '/products/$productId'
     | '/reports/financial'
     | '/reports/number-leases'
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
     | '/stock-ledger'
     | '/transfers'
     | '/units'
+    | '/variants'
     | '/products/$productId'
     | '/reports/financial'
     | '/reports/number-leases'
@@ -268,6 +279,7 @@ export interface FileRouteTypes {
     | '/_app/stock-ledger'
     | '/_app/transfers'
     | '/_app/units'
+    | '/_app/variants'
     | '/_app/products/$productId'
     | '/_app/reports/financial'
     | '/_app/reports/number-leases'
@@ -302,6 +314,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/variants': {
+      id: '/_app/variants'
+      path: '/variants'
+      fullPath: '/variants'
+      preLoaderRoute: typeof AppVariantsRouteImport
+      parentRoute: typeof AppRouteRoute
     }
     '/_app/units': {
       id: '/_app/units'
@@ -447,6 +466,7 @@ interface AppRouteRouteChildren {
   AppStockLedgerRoute: typeof AppStockLedgerRoute
   AppTransfersRoute: typeof AppTransfersRoute
   AppUnitsRoute: typeof AppUnitsRoute
+  AppVariantsRoute: typeof AppVariantsRoute
   AppProductsProductIdRoute: typeof AppProductsProductIdRoute
   AppReportsFinancialRoute: typeof AppReportsFinancialRoute
   AppReportsNumberLeasesRoute: typeof AppReportsNumberLeasesRoute
@@ -468,6 +488,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppStockLedgerRoute: AppStockLedgerRoute,
   AppTransfersRoute: AppTransfersRoute,
   AppUnitsRoute: AppUnitsRoute,
+  AppVariantsRoute: AppVariantsRoute,
   AppProductsProductIdRoute: AppProductsProductIdRoute,
   AppReportsFinancialRoute: AppReportsFinancialRoute,
   AppReportsNumberLeasesRoute: AppReportsNumberLeasesRoute,

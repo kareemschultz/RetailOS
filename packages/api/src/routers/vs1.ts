@@ -1290,6 +1290,63 @@ export const catalogRouter = {
           .where(conditions.length ? and(...conditions) : undefined);
       });
     }),
+  variantCatalogList: tenantProcedure
+    .input(
+      z.object({
+        includeArchived: z.boolean().default(false),
+        productId: z.string().uuid().optional(),
+        q: z.string().trim().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        if (input.productId) {
+          await assertProductVisible(tx, input.productId);
+        }
+        const search = input.q ? `%${input.q}%` : null;
+        const conditions = [
+          input.productId
+            ? eq(schema.variant.productId, input.productId)
+            : null,
+          input.includeArchived ? null : isNull(schema.variant.deletedAt),
+          search
+            ? or(
+                ilike(schema.variant.name, search),
+                ilike(schema.variant.value, search),
+                ilike(schema.product.sku, search),
+                ilike(schema.product.name, search),
+                sql`concat_ws(' ', ${schema.product.name}, ${schema.variant.value}) ilike ${search}`,
+                sql`concat_ws(' ', ${schema.product.name}, ${schema.product.sku}, ${schema.variant.name}, ${schema.variant.value}) ilike ${search}`
+              )
+            : null,
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.variant.id,
+            productId: schema.variant.productId,
+            productSku: schema.product.sku,
+            productName: schema.product.name,
+            name: schema.variant.name,
+            value: schema.variant.value,
+            sortOrder: schema.variant.sortOrder,
+            createdAt: schema.variant.createdAt,
+          })
+          .from(schema.variant)
+          .innerJoin(
+            schema.product,
+            eq(schema.product.id, schema.variant.productId)
+          )
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(
+            schema.product.name,
+            schema.variant.name,
+            schema.variant.sortOrder,
+            schema.variant.value
+          );
+      });
+    }),
   variantCreate: tenantProcedure
     .input(
       z.object({
