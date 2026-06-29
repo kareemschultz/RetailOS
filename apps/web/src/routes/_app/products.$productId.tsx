@@ -20,7 +20,7 @@ import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ImageIcon,
@@ -125,7 +125,6 @@ function SecondaryMedia({
 
 function ProductDetailScreen() {
   const { productId } = Route.useParams();
-  const router = useRouter();
   const urlFieldId = useId();
   const altFieldId = useId();
   const [url, setUrl] = useState("");
@@ -156,7 +155,7 @@ function ProductDetailScreen() {
       {
         onSuccess: () => {
           toast.success("Primary image updated");
-          router.invalidate();
+          detail.refetch();
         },
         onError: (error) => toast.error(error.message),
       }
@@ -173,7 +172,7 @@ function ProductDetailScreen() {
         onSuccess: () => {
           toast.success("Image removed");
           setPendingDeleteId(null);
-          router.invalidate();
+          detail.refetch();
         },
         onError: (error) => toast.error(error.message),
       }
@@ -195,7 +194,7 @@ function ProductDetailScreen() {
         onSuccess: () => {
           setUrl("");
           setAltText("");
-          router.invalidate();
+          detail.refetch();
         },
       }
     );
