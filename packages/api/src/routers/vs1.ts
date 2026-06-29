@@ -16,10 +16,13 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { aliasedTable } from "drizzle-orm/alias";
 import { z } from "zod";
 import { protectedProcedure, tenantProcedure } from "../index";
 import type { RequestContext } from "../request-context";
 
+const fromUom = aliasedTable(schema.unitOfMeasure, "from_uom");
+const toUom = aliasedTable(schema.unitOfMeasure, "to_uom");
 const SEARCH_TERM_SEPARATOR = /\s+/;
 
 // Enforce a VS#1 permission for the caller's tenant role (charter §7), fail-closed.
@@ -1880,6 +1883,102 @@ export const catalogRouter = {
           .select()
           .from(schema.uomConversion)
           .where(conditions.length ? and(...conditions) : undefined);
+      });
+    }),
+  uomConversionCatalogList: tenantProcedure
+    .input(
+      z.object({
+        categoryId: z.string().uuid().optional(),
+        includeArchived: z.boolean().default(false),
+        productId: z.string().uuid().optional(),
+        q: z.string().trim().min(1).optional(),
+        skuId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        if (input.categoryId) {
+          await assertCategoryVisible(tx, input.categoryId);
+        }
+        if (input.productId) {
+          await assertProductVisible(tx, input.productId);
+        }
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        const searchTerms =
+          input.q?.split(SEARCH_TERM_SEPARATOR).filter(Boolean) ?? [];
+        const conditions = [
+          input.categoryId
+            ? eq(schema.uomConversion.categoryId, input.categoryId)
+            : null,
+          input.productId
+            ? eq(schema.uomConversion.productId, input.productId)
+            : null,
+          input.skuId ? eq(schema.uomConversion.skuId, input.skuId) : null,
+          input.includeArchived ? null : isNull(schema.uomConversion.deletedAt),
+          ...searchTerms.map((term) => {
+            const search = `%${term}%`;
+            return or(
+              ilike(schema.uomConversion.role, search),
+              ilike(fromUom.code, search),
+              ilike(fromUom.name, search),
+              ilike(toUom.code, search),
+              ilike(toUom.name, search),
+              ilike(schema.category.code, search),
+              ilike(schema.category.name, search),
+              ilike(schema.product.sku, search),
+              ilike(schema.product.name, search),
+              ilike(schema.sku.code, search),
+              ilike(schema.sku.name, search)
+            );
+          }),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.uomConversion.id,
+            categoryId: schema.uomConversion.categoryId,
+            categoryCode: schema.category.code,
+            categoryName: schema.category.name,
+            productId: schema.uomConversion.productId,
+            productSku: schema.product.sku,
+            productName: schema.product.name,
+            skuId: schema.uomConversion.skuId,
+            skuCode: schema.sku.code,
+            skuName: schema.sku.name,
+            fromUomId: schema.uomConversion.fromUomId,
+            fromUomCode: fromUom.code,
+            fromUomName: fromUom.name,
+            toUomId: schema.uomConversion.toUomId,
+            toUomCode: toUom.code,
+            toUomName: toUom.name,
+            role: schema.uomConversion.role,
+            factor: schema.uomConversion.factor,
+            factorScale: schema.uomConversion.factorScale,
+            isActive: schema.uomConversion.isActive,
+            createdAt: schema.uomConversion.createdAt,
+          })
+          .from(schema.uomConversion)
+          .innerJoin(fromUom, eq(fromUom.id, schema.uomConversion.fromUomId))
+          .innerJoin(toUom, eq(toUom.id, schema.uomConversion.toUomId))
+          .leftJoin(
+            schema.category,
+            eq(schema.category.id, schema.uomConversion.categoryId)
+          )
+          .leftJoin(
+            schema.product,
+            eq(schema.product.id, schema.uomConversion.productId)
+          )
+          .leftJoin(schema.sku, eq(schema.sku.id, schema.uomConversion.skuId))
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(
+            schema.uomConversion.role,
+            fromUom.code,
+            toUom.code,
+            schema.uomConversion.createdAt
+          );
       });
     }),
   uomConversionCreate: tenantProcedure
