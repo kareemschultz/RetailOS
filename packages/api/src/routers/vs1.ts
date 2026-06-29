@@ -20,6 +20,8 @@ import { z } from "zod";
 import { protectedProcedure, tenantProcedure } from "../index";
 import type { RequestContext } from "../request-context";
 
+const SEARCH_TERM_SEPARATOR = /\s+/;
+
 // Enforce a VS#1 permission for the caller's tenant role (charter §7), fail-closed.
 async function assertPermission(
   tx: TenantTransaction,
@@ -2445,6 +2447,72 @@ export const inventoryRouter = {
           .select()
           .from(schema.lot)
           .where(conditions.length ? and(...conditions) : undefined);
+      });
+    }),
+  lotCatalogList: tenantProcedure
+    .input(
+      z.object({
+        includeArchived: z.boolean().default(false),
+        q: z.string().trim().min(1).optional(),
+        skuId: z.string().uuid().optional(),
+        status: z
+          .enum(["available", "quarantined", "expired", "depleted"])
+          .optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.receive");
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        const searchTerms =
+          input.q?.split(SEARCH_TERM_SEPARATOR).filter(Boolean) ?? [];
+        const conditions = [
+          input.skuId ? eq(schema.lot.skuId, input.skuId) : null,
+          input.status ? eq(schema.lot.status, input.status) : null,
+          input.includeArchived ? null : isNull(schema.lot.deletedAt),
+          ...searchTerms.map((term) => {
+            const search = `%${term}%`;
+            return or(
+              ilike(schema.lot.lotNumber, search),
+              ilike(schema.lot.status, search),
+              ilike(schema.sku.code, search),
+              ilike(schema.sku.name, search),
+              ilike(schema.product.sku, search),
+              ilike(schema.product.name, search)
+            );
+          }),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.lot.id,
+            skuId: schema.lot.skuId,
+            skuCode: schema.sku.code,
+            skuName: schema.sku.name,
+            productId: schema.sku.productId,
+            productSku: schema.product.sku,
+            productName: schema.product.name,
+            lotNumber: schema.lot.lotNumber,
+            expiryDate: schema.lot.expiryDate,
+            manufacturedDate: schema.lot.manufacturedDate,
+            status: schema.lot.status,
+            createdAt: schema.lot.createdAt,
+          })
+          .from(schema.lot)
+          .innerJoin(schema.sku, eq(schema.sku.id, schema.lot.skuId))
+          .innerJoin(
+            schema.product,
+            eq(schema.product.id, schema.sku.productId)
+          )
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(
+            schema.lot.expiryDate,
+            schema.product.sku,
+            schema.sku.code,
+            schema.lot.lotNumber
+          );
       });
     }),
   lotCreate: tenantProcedure

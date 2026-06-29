@@ -13,6 +13,11 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Inventory lots page pass (in progress, 2026-06-29)
+- **Branch:** `feat/inventory-lots-page` off current `master` while PR #70 (`feat/catalog-uom-conversions-page`) remains open/green awaiting owner-approved merge.
+- **Scope in this branch:** adding a display-safe `inventory.lotCatalogList` read endpoint with joined product and SKU names, then adding `/lots` under the Inventory nav as a DataTableCard lot/batch registry page composed from owned RetailOS/shadcn primitives. No schema, migration, mutation, or money-math change.
+- **Verification:** `bun run check-types` green; `bun run check` green after formatter fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56553 (`roles.sql` at container init -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green: **db 97/97 + api 57/57, zero skips**.
+
 ### Catalog variants page pass (merged, 2026-06-29)
 - **Branch:** `feat/catalog-variants-page` off `master = 4b5b476` after PR #67 merged.
 - **Scope in this branch:** adding a display-safe `catalog.variantCatalogList` read endpoint with product names/SKUs and search, then adding `/variants` under the Catalog nav as a DataTableCard registry page composed from owned RetailOS/shadcn primitives. No schema, migration, mutation, or money-math change.
