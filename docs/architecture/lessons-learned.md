@@ -198,6 +198,12 @@
 - **Also:** test fixtures/comments must themselves avoid literal mojibake (build fixtures from codepoints) or the guard flags the test file — `--all` missed it only because the new file was still untracked (`git ls-files` lists tracked only); staged mode would have caught it.
 - **Rule:** a guard must scan exactly what gets committed (the index blob), not a possibly-divergent worktree; the C1-control-block check is the highest-value mojibake signal; and detection logic + its test fixtures must be built from codepoints so the tooling never embeds the very bytes it hunts.
 
+### TanStack Router route tree is generated, but still runtime source — 2026-06-29
+- **Context:** Gap audit after adding several TanStack Start routes (`/skus`, `/barcodes`) while `apps/web/src/routeTree.gen.ts` was ignored by Git.
+- **Mistake/surprise:** The route tree is generated, so it was treated like disposable build output. TanStack Router's official FAQ says the generated route tree is the source that the application imports at runtime and should be committed, even though it can stay excluded from linting/formatting.
+- **Fix:** Stop ignoring `apps/web/src/routeTree.gen.ts`; commit the generated web route tree; keep `routeTree.gen.ts` excluded from Biome so generated code is not hand-formatted.
+- **Rule:** Generated files are not automatically disposable. If runtime source imports a generated artifact, verify the framework's official guidance and commit it when required; exclude it from linters if needed, not from source control.
+
 ### Deleting a stacked PR's base branch CLOSES it (doesn't retarget) — 2026-06-22
 - **Context:** Merging PR #1 (`vs1-phase1`→master) with `--delete-branch`, expecting the stacked PR #2 (`phase-2-inventory`→`vs1-phase1`) to auto-retarget to master.
 - **Mistake/surprise:** GitHub **closed** PR #2 instead of retargeting it (`state: CLOSED`, base still the deleted branch); `gh pr reopen` then failed (`Could not open the pull request` — base branch gone).

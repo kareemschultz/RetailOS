@@ -13,6 +13,11 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Web route-tree source tracking fix (merged, 2026-06-29)
+- **Branch:** `fix/track-web-route-tree` off `master = 61b0b4a` after the barcode progress correction merged.
+- **Scope in this branch:** official TanStack Router docs/FAQ say `routeTree.gen.ts` is required runtime source and should be committed, while the repo had ignored `apps/web/src/routeTree.gen.ts`. This branch removes the web route-tree ignore entry, commits the generated file, and keeps Biome excluding generated files from lint/format. No product behavior, schema, API, or money-math change.
+- **Verification:** `bun run check-types` green; `bun run check` green; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Merged as PR #67.
+
 ### Catalog barcode page pass (merged, 2026-06-29)
 - **Branch:** `feat/catalog-barcode-page` off `master = 6943378` after PR #64 merged and production was deployed/verified.
 - **Scope in this branch:** adding a display-safe `catalog.barcodeCatalogList` read endpoint with SKU and product names, then adding `/barcodes` under the Catalog nav as a DataTableCard barcode registry page adapted from the configured shadcn Studio data-table pattern into owned RetailOS code. No schema, migration, mutation, or money-math change.

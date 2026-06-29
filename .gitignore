@@ -9,7 +9,6 @@ build
 *.tsbuildinfo
 
 # Generated files
-apps/web/src/routeTree.gen.ts
 apps/fumadocs/src/routeTree.gen.ts
 apps/fumadocs/.source/
 
