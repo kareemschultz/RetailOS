@@ -13,6 +13,11 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Catalog UoM conversions page pass (in progress, 2026-06-29)
+- **Branch:** `feat/catalog-uom-conversions-page` off `master = 0db4127` after PR #69 merged.
+- **Scope in this branch:** adding a display-safe `catalog.uomConversionCatalogList` read endpoint with joined unit, product, SKU, and category names, then adding `/uom-conversions` under the Catalog nav as a DataTableCard registry page composed from owned RetailOS/shadcn primitives. No schema, migration, mutation, or money-math change.
+- **Verification:** `bun run check-types` green; `bun run check` green after formatter fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56552 (`roles.sql` at container init -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green after folding tokenized UoM conversion search: **db 97/97 + api 57/57, zero skips**.
+
 ### Catalog variants page pass (merged, 2026-06-29)
 - **Branch:** `feat/catalog-variants-page` off `master = 4b5b476` after PR #67 merged.
 - **Scope in this branch:** adding a display-safe `catalog.variantCatalogList` read endpoint with product names/SKUs and search, then adding `/variants` under the Catalog nav as a DataTableCard registry page composed from owned RetailOS/shadcn primitives. No schema, migration, mutation, or money-math change.
