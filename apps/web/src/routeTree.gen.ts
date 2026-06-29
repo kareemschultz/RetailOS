@@ -21,6 +21,7 @@ import { Route as AppSkusRouteImport } from './routes/_app/skus'
 import { Route as AppShiftsRouteImport } from './routes/_app/shifts'
 import { Route as AppSalesRouteImport } from './routes/_app/sales'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
+import { Route as AppLotsRouteImport } from './routes/_app/lots'
 import { Route as AppLocationsRouteImport } from './routes/_app/locations'
 import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
@@ -92,6 +93,11 @@ const AppPosRoute = AppPosRouteImport.update({
   path: '/pos',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppLotsRoute = AppLotsRouteImport.update({
+  id: '/lots',
+  path: '/lots',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppLocationsRoute = AppLocationsRouteImport.update({
   id: '/locations',
   path: '/locations',
@@ -158,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
+  '/lots': typeof AppLotsRoute
   '/pos': typeof AppPosRoute
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
@@ -182,6 +189,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
+  '/lots': typeof AppLotsRoute
   '/pos': typeof AppPosRoute
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
@@ -208,6 +216,7 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/inventory': typeof AppInventoryRoute
   '/_app/locations': typeof AppLocationsRoute
+  '/_app/lots': typeof AppLotsRoute
   '/_app/pos': typeof AppPosRoute
   '/_app/sales': typeof AppSalesRoute
   '/_app/shifts': typeof AppShiftsRoute
@@ -234,6 +243,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/inventory'
     | '/locations'
+    | '/lots'
     | '/pos'
     | '/sales'
     | '/shifts'
@@ -258,6 +268,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/inventory'
     | '/locations'
+    | '/lots'
     | '/pos'
     | '/sales'
     | '/shifts'
@@ -283,6 +294,7 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/inventory'
     | '/_app/locations'
+    | '/_app/lots'
     | '/_app/pos'
     | '/_app/sales'
     | '/_app/shifts'
@@ -390,6 +402,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPosRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/lots': {
+      id: '/_app/lots'
+      path: '/lots'
+      fullPath: '/lots'
+      preLoaderRoute: typeof AppLotsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/locations': {
       id: '/_app/locations'
       path: '/locations'
@@ -478,6 +497,7 @@ interface AppRouteRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppLocationsRoute: typeof AppLocationsRoute
+  AppLotsRoute: typeof AppLotsRoute
   AppPosRoute: typeof AppPosRoute
   AppSalesRoute: typeof AppSalesRoute
   AppShiftsRoute: typeof AppShiftsRoute
@@ -501,6 +521,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppLocationsRoute: AppLocationsRoute,
+  AppLotsRoute: AppLotsRoute,
   AppPosRoute: AppPosRoute,
   AppSalesRoute: AppSalesRoute,
   AppShiftsRoute: AppShiftsRoute,

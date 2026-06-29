@@ -30,6 +30,7 @@ const SALE_NOT_FOUND_RE = /Sale not found in this tenant/;
 const SHIFT_REQUIRED_RE = /open shift is required/i;
 // Demo read-endpoint gates + isolation.
 const NOT_FOUND_IN_TENANT_RE = /not found in this tenant/i;
+const MISSING_INVENTORY_RECEIVE_RE = /Missing permission: inventory\.receive/;
 const MISSING_REPORTS_VIEW_RE = /Missing permission: reports\.view/;
 const MISSING_TRANSFER_PERM_RE = /Missing permission: inventory\.transfer/;
 const MISSING_BOND_PERM_RE = /Missing permission: bond\.receive/;
@@ -4889,6 +4890,16 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       },
       admin
     );
+    const widgetLot = await call(
+      appRouter.inventory.lotCreate,
+      {
+        expiryDate: "2028-06-30",
+        lotNumber: "DR-WIDGET-LOT-A",
+        manufacturedDate: "2027-06-30",
+        skuId: widgetSku.id,
+      },
+      admin
+    );
     const widgetConversion = await call(
       appRouter.catalog.uomConversionCreate,
       {
@@ -5073,6 +5084,24 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       admin
     );
     expect(skuSearch.map((row) => row.id)).toContain(widgetSku.id);
+    const lots = await call(appRouter.inventory.lotCatalogList, {}, admin);
+    expect(lots.map((row) => row.id)).toContain(widgetLot.id);
+    expect(lots.find((row) => row.id === widgetLot.id)).toMatchObject({
+      expiryDate: "2028-06-30",
+      lotNumber: "DR-WIDGET-LOT-A",
+      manufacturedDate: "2027-06-30",
+      productName: "DR Widget",
+      productSku: "DR-WIDGET",
+      skuCode: "DR-WIDGET-EA",
+      skuName: "Demo Widget Each",
+      status: "available",
+    });
+    const lotSearch = await call(
+      appRouter.inventory.lotCatalogList,
+      { q: "widget lot-a" },
+      admin
+    );
+    expect(lotSearch.map((row) => row.id)).toContain(widgetLot.id);
     const barcodes = await call(
       appRouter.catalog.barcodeCatalogList,
       {},
@@ -5162,6 +5191,9 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       call(appRouter.catalog.barcodeCatalogList, {}, cashier)
     ).rejects.toThrow(MISSING_PRODUCTS_CREATE_PERM_RE);
     await expect(
+      call(appRouter.inventory.lotCatalogList, {}, cashier)
+    ).rejects.toThrow(MISSING_INVENTORY_RECEIVE_RE);
+    await expect(
       call(appRouter.inventory.stockByLocation, {}, cashier)
     ).rejects.toThrow(MISSING_REPORTS_VIEW_RE);
     await expect(
@@ -5223,12 +5255,17 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       adminB
     );
     expect(barcodesB.map((row) => row.id)).not.toContain(widgetBarcode.id);
+    const lotsB = await call(appRouter.inventory.lotCatalogList, {}, adminB);
+    expect(lotsB.map((row) => row.id)).not.toContain(widgetLot.id);
     await expect(
       call(
         appRouter.catalog.barcodeCatalogList,
         { skuId: widgetSku.id },
         adminB
       )
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+    await expect(
+      call(appRouter.inventory.lotCatalogList, { skuId: widgetSku.id }, adminB)
     ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
     await expect(
       call(

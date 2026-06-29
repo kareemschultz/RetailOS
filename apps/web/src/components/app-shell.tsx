@@ -21,6 +21,7 @@ import {
   FileClock,
   FolderTree,
   History,
+  Layers,
   LayoutDashboard,
   MapPin,
   Package,
@@ -73,6 +74,7 @@ const NAV_GROUPS = [
     label: "Inventory",
     items: [
       { to: "/inventory", label: "Stock", icon: Boxes },
+      { to: "/lots", label: "Lots", icon: Layers },
       { to: "/stock-ledger", label: "Stock ledger", icon: History },
       { to: "/transfers", label: "Transfers", icon: ArrowLeftRight },
       { to: "/bonds", label: "Bonded goods", icon: ShieldCheck },
