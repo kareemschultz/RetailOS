@@ -202,6 +202,50 @@ export const locationRouter = {
         return row;
       });
     }),
+  // Full admin location tree (NOT just POS-sellable nodes — stores, warehouses,
+  // bonded, DCs, plus the structural zone/aisle/bin children and the in-transit
+  // virtual nodes). Tenant-scoped (RLS); gated on reports.view (operational read,
+  // every back-office role holds it; the cashier does not). Projects ONLY the
+  // display-safe columns (DTO discipline — no cash-control toggles, removal
+  // strategy, or capacity seams leave the API).
+  list: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid().optional(),
+        includeArchived: z.boolean().default(false),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        if (input.companyId) {
+          await assertCompanyVisible(tx, input.companyId);
+        }
+        const conditions = [
+          input.companyId
+            ? eq(schema.location.companyId, input.companyId)
+            : null,
+          input.includeArchived ? null : isNull(schema.location.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.location.id,
+            companyId: schema.location.companyId,
+            name: schema.location.name,
+            type: schema.location.type,
+            parentLocationId: schema.location.parentLocationId,
+            isSellable: schema.location.isSellable,
+            isQuarantine: schema.location.isQuarantine,
+            isBonded: schema.location.isBonded,
+            isTransit: schema.location.isTransit,
+            createdAt: schema.location.createdAt,
+          })
+          .from(schema.location)
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(schema.location.name);
+      });
+    }),
 };
 
 export const productRouter = {
@@ -3046,6 +3090,122 @@ export const inventoryRouter = {
           });
         }
         return result;
+      });
+    }),
+  // On-hand per SKU per location (the inventory grid): AVCO cells (avg_cost) plus
+  // the FIFO layer aggregates (valuation_layer), joined to SKU/product/location
+  // names — the same dual-costing read as reports.valuation, projected for
+  // display. Tenant-scoped (RLS scopes every joined table); gated reports.view.
+  // Money/qty are server-computed; the client renders, never sums.
+  stockByLocation: tenantProcedure
+    .input(
+      z.object({
+        locationId: z.string().uuid().optional(),
+        skuId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        // AVCO (qty<>0 cells) UNION FIFO layer aggregates, then name the cell.
+        const rows = await tx.execute(sql`
+          SELECT
+            s.id   AS sku_id,
+            s.code AS sku_code,
+            p.name AS product_name,
+            l.id   AS location_id,
+            l.name AS location_name,
+            agg.qty_on_hand,
+            agg.currency,
+            agg.scale,
+            agg.total_value_minor
+          FROM (
+            SELECT sku_id, location_id, currency, scale,
+              qty_on_hand::bigint AS qty_on_hand,
+              total_value_minor::bigint AS total_value_minor
+            FROM avg_cost
+            WHERE qty_on_hand <> 0
+            UNION ALL
+            SELECT sku_id, location_id, currency, scale,
+              COALESCE(SUM(qty_remaining), 0)::bigint AS qty_on_hand,
+              COALESCE(SUM(qty_remaining * unit_cost_minor), 0)::bigint AS total_value_minor
+            FROM valuation_layer
+            WHERE qty_remaining > 0
+            GROUP BY sku_id, location_id, currency, scale
+          ) agg
+          JOIN sku s ON s.id = agg.sku_id
+          JOIN product p ON p.id = s.product_id
+          JOIN location l ON l.id = agg.location_id
+          WHERE (${input.locationId ?? null}::uuid IS NULL OR agg.location_id = ${input.locationId ?? null})
+            AND (${input.skuId ?? null}::uuid IS NULL OR agg.sku_id = ${input.skuId ?? null})
+          ORDER BY p.name, l.name, s.code
+        `);
+        return rows.rows.map((row) => ({
+          skuId: row.sku_id,
+          skuCode: row.sku_code,
+          productName: row.product_name,
+          locationId: row.location_id,
+          locationName: row.location_name,
+          qtyOnHand: Number(row.qty_on_hand),
+          currency: row.currency,
+          scale: Number(row.scale),
+          totalValueMinor: Number(row.total_value_minor),
+        }));
+      });
+    }),
+  // Recent stock-ledger movements (newest-first) for an audit/history panel.
+  // Tenant-scoped (RLS); gated reports.view. Projects the display-safe ledger
+  // columns only (no idempotency key / ref ids / source-movement plumbing).
+  stockLedgerList: tenantProcedure
+    .input(
+      z.object({
+        skuId: z.string().uuid().optional(),
+        locationId: z.string().uuid().optional(),
+        limit: z.number().int().min(1).max(200).default(100),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        if (input.skuId) {
+          await assertSkuVisible(tx, input.skuId);
+        }
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
+        const conditions = [
+          input.skuId ? eq(schema.stockLedger.skuId, input.skuId) : null,
+          input.locationId
+            ? eq(schema.stockLedger.locationId, input.locationId)
+            : null,
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.stockLedger.id,
+            locationId: schema.stockLedger.locationId,
+            productId: schema.stockLedger.productId,
+            skuId: schema.stockLedger.skuId,
+            movementType: schema.stockLedger.movementType,
+            qtyDelta: schema.stockLedger.qtyDelta,
+            balanceAfter: schema.stockLedger.balanceAfter,
+            unitCostMinor: schema.stockLedger.unitCostMinor,
+            costCurrency: schema.stockLedger.costCurrency,
+            costScale: schema.stockLedger.costScale,
+            costingMethodApplied: schema.stockLedger.costingMethodApplied,
+            serverTs: schema.stockLedger.serverTs,
+          })
+          .from(schema.stockLedger)
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(desc(schema.stockLedger.serverTs))
+          .limit(input.limit);
       });
     }),
 };
@@ -6087,6 +6247,85 @@ export const transferRouter = {
         return transfer;
       });
     }),
+  // Transfer headers (newest-first) for the transfers list. Tenant-scoped (RLS);
+  // gated inventory.transfer. Projects display-safe header columns.
+  list: tenantProcedure
+    .input(
+      z.object({
+        status: z.enum(schema.TRANSFER_STATUSES).optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer");
+        const conditions = input.status
+          ? [eq(schema.stockTransfer.status, input.status)]
+          : [];
+        return tx
+          .select({
+            id: schema.stockTransfer.id,
+            number: schema.stockTransfer.number,
+            companyId: schema.stockTransfer.companyId,
+            sourceLocationId: schema.stockTransfer.sourceLocationId,
+            destLocationId: schema.stockTransfer.destLocationId,
+            status: schema.stockTransfer.status,
+            shippedAt: schema.stockTransfer.shippedAt,
+            expectedReceiptDate: schema.stockTransfer.expectedReceiptDate,
+            actualReceiptDate: schema.stockTransfer.actualReceiptDate,
+            createdAt: schema.stockTransfer.createdAt,
+          })
+          .from(schema.stockTransfer)
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(desc(schema.stockTransfer.createdAt))
+          .limit(input.limit);
+      });
+    }),
+  // One transfer header + its lines. Tenant-scoped read → NOT_FOUND when the
+  // transfer is not visible in this tenant (H1: never trust a caller-supplied id).
+  detail: tenantProcedure
+    .input(z.object({ transferId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.transfer");
+        const transfer = (
+          await tx
+            .select({
+              id: schema.stockTransfer.id,
+              number: schema.stockTransfer.number,
+              companyId: schema.stockTransfer.companyId,
+              sourceLocationId: schema.stockTransfer.sourceLocationId,
+              destLocationId: schema.stockTransfer.destLocationId,
+              status: schema.stockTransfer.status,
+              shippedAt: schema.stockTransfer.shippedAt,
+              expectedReceiptDate: schema.stockTransfer.expectedReceiptDate,
+              actualReceiptDate: schema.stockTransfer.actualReceiptDate,
+              createdAt: schema.stockTransfer.createdAt,
+            })
+            .from(schema.stockTransfer)
+            .where(eq(schema.stockTransfer.id, input.transferId))
+            .limit(1)
+        ).at(0);
+        if (!transfer) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Transfer not found in this tenant",
+          });
+        }
+        const lines = await tx
+          .select({
+            id: schema.stockTransferLine.id,
+            productId: schema.stockTransferLine.productId,
+            skuId: schema.stockTransferLine.skuId,
+            lotId: schema.stockTransferLine.lotId,
+            qty: schema.stockTransferLine.qty,
+          })
+          .from(schema.stockTransferLine)
+          .where(eq(schema.stockTransferLine.transferId, input.transferId));
+        return { transfer, lines };
+      });
+    }),
 };
 
 // Phase 3 commit 4 — bonded stock receiving (INV-3).
@@ -6250,6 +6489,94 @@ export const bondRouter = {
           after: { release, releaseLines },
         });
         return { release, releaseLines, transferId };
+      });
+    }),
+  // Bond receipt headers (newest-first) for the bonded-stock list. Tenant-scoped
+  // (RLS); gated bond.receive. Projects display-safe compliance header columns.
+  receiptList: tenantProcedure
+    .input(
+      z.object({
+        locationId: z.string().uuid().optional(),
+        status: z.enum(schema.BOND_RECEIPT_STATUSES).optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "bond.receive");
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
+        const conditions = [
+          input.locationId
+            ? eq(schema.bondReceipt.locationId, input.locationId)
+            : null,
+          input.status ? eq(schema.bondReceipt.status, input.status) : null,
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.bondReceipt.id,
+            number: schema.bondReceipt.number,
+            companyId: schema.bondReceipt.companyId,
+            locationId: schema.bondReceipt.locationId,
+            status: schema.bondReceipt.status,
+            supplierRef: schema.bondReceipt.supplierRef,
+            customsReference: schema.bondReceipt.customsReference,
+            receivedAt: schema.bondReceipt.receivedAt,
+            createdAt: schema.bondReceipt.createdAt,
+          })
+          .from(schema.bondReceipt)
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(desc(schema.bondReceipt.createdAt))
+          .limit(input.limit);
+      });
+    }),
+  // One bond receipt header + its lines. Tenant-scoped read → NOT_FOUND when the
+  // receipt is not visible in this tenant (H1: never trust a caller-supplied id).
+  receiptDetail: tenantProcedure
+    .input(z.object({ bondReceiptId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "bond.receive");
+        const receipt = (
+          await tx
+            .select({
+              id: schema.bondReceipt.id,
+              number: schema.bondReceipt.number,
+              companyId: schema.bondReceipt.companyId,
+              locationId: schema.bondReceipt.locationId,
+              status: schema.bondReceipt.status,
+              supplierRef: schema.bondReceipt.supplierRef,
+              customsReference: schema.bondReceipt.customsReference,
+              landedCostReference: schema.bondReceipt.landedCostReference,
+              receivedAt: schema.bondReceipt.receivedAt,
+              createdAt: schema.bondReceipt.createdAt,
+            })
+            .from(schema.bondReceipt)
+            .where(eq(schema.bondReceipt.id, input.bondReceiptId))
+            .limit(1)
+        ).at(0);
+        if (!receipt) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Bond receipt not found in this tenant",
+          });
+        }
+        const lines = await tx
+          .select({
+            id: schema.bondReceiptLine.id,
+            productId: schema.bondReceiptLine.productId,
+            skuId: schema.bondReceiptLine.skuId,
+            lotId: schema.bondReceiptLine.lotId,
+            qty: schema.bondReceiptLine.qty,
+            unitCostMinor: schema.bondReceiptLine.unitCostMinor,
+            costCurrency: schema.bondReceiptLine.costCurrency,
+            costScale: schema.bondReceiptLine.costScale,
+          })
+          .from(schema.bondReceiptLine)
+          .where(eq(schema.bondReceiptLine.bondReceiptId, input.bondReceiptId));
+        return { receipt, lines };
       });
     }),
 };
