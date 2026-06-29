@@ -6360,23 +6360,33 @@ export const reportsRouter = {
         const rows = await tx.execute(sql`
           SELECT
             rr.sku_id,
+            s.code AS sku_code,
+            p.name AS product_name,
             rr.location_id,
+            l.name AS location_name,
             rr.min_qty,
             rr.max_qty,
             COALESCE(SUM(sl.qty_delta), 0)::bigint AS on_hand
           FROM reorder_rule rr
+          JOIN sku s ON s.id = rr.sku_id
+          JOIN product p ON p.id = s.product_id
+          JOIN location l ON l.id = rr.location_id
           LEFT JOIN stock_ledger sl
             ON sl.sku_id = rr.sku_id
            AND sl.location_id = rr.location_id
           WHERE rr.is_active = true
             AND rr.deleted_at IS NULL
             AND (${input.locationId ?? null}::uuid IS NULL OR rr.location_id = ${input.locationId ?? null})
-          GROUP BY rr.sku_id, rr.location_id, rr.min_qty, rr.max_qty
+          GROUP BY rr.sku_id, s.code, p.name, rr.location_id, l.name, rr.min_qty, rr.max_qty
           HAVING COALESCE(SUM(sl.qty_delta), 0) < rr.min_qty
+          ORDER BY p.name, l.name, s.code
         `);
         return rows.rows.map((row) => ({
           skuId: row.sku_id,
+          skuCode: row.sku_code,
+          productName: row.product_name,
           locationId: row.location_id,
+          locationName: row.location_name,
           minQty: Number(row.min_qty),
           maxQty: Number(row.max_qty),
           onHand: Number(row.on_hand),
