@@ -4793,11 +4793,11 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
   });
 
   // Demo backend foundation: the read endpoints (location.list, catalog
-  // taxonomy, inventory.stockByLocation/stockLedgerList, transfer.list/detail,
-  // bond.receiptList/receiptDetail) enforce their permission gate AND tenant
-  // isolation. One fixture (company → warehouse/store/bonded → products →
-  // stock → a transfer → a bond receipt) built through the routers, then
-  // read/permission/isolation.
+  // taxonomy/units, inventory.stockByLocation/stockLedgerList,
+  // transfer.list/detail, bond.receiptList/receiptDetail) enforce their
+  // permission gate AND tenant isolation. One fixture (company →
+  // warehouse/store/bonded → products → stock → a transfer → a bond receipt)
+  // built through the routers, then read/permission/isolation.
   it("demo reads: enforce reports.view / inventory.transfer / bond.receive gates and tenant isolation", async () => {
     const admin = { context: makeCtx(ADMIN, ORG) };
     const cashier = { context: makeCtx(CASHIER, ORG) };
@@ -4846,6 +4846,11 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     const brand = await call(
       appRouter.catalog.brandCreate,
       { code: "DR-BRAND", name: "Demo Brand" },
+      admin
+    );
+    const unit = await call(
+      appRouter.catalog.uomCreate,
+      { code: "DR-EA", name: "Demo Each", kind: "count" },
       admin
     );
     const widgetP = await call(
@@ -4955,6 +4960,13 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(brands.find((row) => row.id === brand.id)).toMatchObject({
       code: "DR-BRAND",
       name: "Demo Brand",
+    });
+    const units = await call(appRouter.catalog.uomList, {}, admin);
+    expect(units.map((row) => row.id)).toContain(unit.id);
+    expect(units.find((row) => row.id === unit.id)).toMatchObject({
+      code: "DR-EA",
+      kind: "count",
+      name: "Demo Each",
     });
 
     const stock = await call(

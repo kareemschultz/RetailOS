@@ -18,6 +18,11 @@
 - **Scope in this branch:** added `/categories` and `/brands` back-office catalog taxonomy pages under the Catalog nav, both composed with the owned `DataTableCard` shell and existing `catalog.categoryList` / `catalog.brandList` endpoints. Added a demo-read regression assertion that catalog taxonomy reads surface the created category/brand through the API. No schema, migration, mutation, or money-math change.
 - **Verification:** `bun run check-types` green; `bun run check` green after formatter fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56547 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green: **db 97/97 + api 57/57, zero skips**.
 
+### Catalog units page pass (in progress, 2026-06-29)
+- **Branch:** `feat/catalog-uom-page` off `master = f5e1a9f` after PR #62 merged and web was deployed.
+- **Scope in this branch:** added `/units` under the Catalog nav as a DataTableCard units-of-measure page backed by the existing `catalog.uomList` endpoint. Extended the demo-read regression assertion to include `catalog.uomList`. No schema, migration, mutation, or money-math change.
+- **Verification:** `bun run check-types` green; `bun run check` green after import-order fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56548 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green: **db 97/97 + api 57/57, zero skips**.
+
 ### Stock-ledger page pass (merged, 2026-06-29)
 - **Branch:** `feat/stock-ledger-page` off `master = d6b46b5` after PR #60 merged.
 - **Scope in this branch:** `inventory.stockLedgerList` now returns display-safe product, SKU, and location names from tenant-scoped joins. Added `/stock-ledger` under the Inventory nav as a first-class append-only movement history table with location filtering. Also hardened API integration cleanup to delete number lease usage/leases/blocks before locations/companies, making reruns safe after lease tests. No schema, migration, or frontend balance/value calculation change.

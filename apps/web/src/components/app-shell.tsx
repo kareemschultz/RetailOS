@@ -24,6 +24,7 @@ import {
   MapPin,
   Package,
   ReceiptText,
+  Ruler,
   ScanLine,
   ShieldCheck,
   Store,
@@ -58,6 +59,7 @@ const NAV_GROUPS = [
       { to: "/products", label: "Products", icon: Package },
       { to: "/categories", label: "Categories", icon: FolderTree },
       { to: "/brands", label: "Brands", icon: BadgeCheck },
+      { to: "/units", label: "Units", icon: Ruler },
     ],
   },
   {
