@@ -29,6 +29,7 @@ import {
   ScanLine,
   ShieldCheck,
   Store,
+  Tags,
   TrendingUp,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -58,6 +59,7 @@ const NAV_GROUPS = [
     label: "Catalog",
     items: [
       { to: "/products", label: "Products", icon: Package },
+      { to: "/variants", label: "Variants", icon: Tags },
       { to: "/skus", label: "SKUs", icon: Barcode },
       { to: "/barcodes", label: "Barcodes", icon: ScanLine },
       { to: "/categories", label: "Categories", icon: FolderTree },
