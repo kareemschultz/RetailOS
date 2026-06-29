@@ -13,10 +13,10 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
-### Catalog barcode page pass (in progress, 2026-06-29)
+### Catalog barcode page pass (merged, 2026-06-29)
 - **Branch:** `feat/catalog-barcode-page` off `master = 6943378` after PR #64 merged and production was deployed/verified.
 - **Scope in this branch:** adding a display-safe `catalog.barcodeCatalogList` read endpoint with SKU and product names, then adding `/barcodes` under the Catalog nav as a DataTableCard barcode registry page adapted from the configured shadcn Studio data-table pattern into owned RetailOS code. No schema, migration, mutation, or money-math change.
-- **Verification:** `bun run check-types` green; `bun run check` green after formatter fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56550 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green: **db 97/97 + api 57/57, zero skips**.
+- **Verification:** `bun run check-types` green; `bun run check` green after formatter fold; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56550 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app` with required auth/CORS env) green: **db 97/97 + api 57/57, zero skips**. Merged as PR #65 and deployed live; authenticated `/barcodes` smoke rendered 24 demo rows.
 
 ### Catalog SKU page pass (merged, 2026-06-29)
 - **Branch:** `feat/catalog-sku-page` off `master = 0f8c492` after PR #63 merged and web was deployed.
