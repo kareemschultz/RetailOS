@@ -5,18 +5,17 @@ import {
   CardTitle,
 } from "@RetailOS/ui/components/card";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
+import { StatCard } from "@RetailOS/ui/components/stat-card";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
   ImageIcon,
-  type LucideIcon,
   Package,
   Receipt,
   TriangleAlert,
   Wallet,
 } from "lucide-react";
-import type { ReactNode } from "react";
 
 import { formatMoney } from "@/lib/format";
 import { orpc } from "@/utils/orpc";
@@ -39,36 +38,8 @@ interface CatalogPreviewRow {
   sku: string;
 }
 
-function KpiCard({
-  label,
-  value,
-  hint,
-  icon: Icon,
-}: {
-  label: string;
-  value: ReactNode;
-  hint?: string;
-  icon: LucideIcon;
-}) {
-  return (
-    <Card className="shadow-sm">
-      <CardContent className="flex items-start justify-between gap-3 p-5">
-        <div className="min-w-0 space-y-1">
-          <p className="text-muted-foreground text-sm">{label}</p>
-          <p className="truncate font-mono font-semibold text-2xl tracking-tight">
-            {value}
-          </p>
-          {hint ? (
-            <p className="text-muted-foreground text-xs">{hint}</p>
-          ) : null}
-        </div>
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Icon className="size-5" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// KPI cards now use the owned `StatCard` (adapted from the AdminCN
+// statistics-card pattern, re-themed to RetailOS tokens — Assembly Law).
 
 function ProductPreviewThumb({ product }: { product: CatalogPreviewRow }) {
   if (product.primaryImageUrl) {
@@ -182,7 +153,7 @@ function DashboardScreen() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard
+          <StatCard
             hint={data?.sales ? "Completed sales" : "No sales yet"}
             icon={Wallet}
             label="Total Sales"
@@ -196,13 +167,13 @@ function DashboardScreen() {
                 : "—"
             }
           />
-          <KpiCard
+          <StatCard
             hint="All time"
             icon={Receipt}
             label="Transactions"
             value={data?.transactionCount ?? 0}
           />
-          <KpiCard
+          <StatCard
             hint={data?.inventoryValue ? "On hand, at cost" : "No stock valued"}
             icon={Package}
             label="Inventory Value"
@@ -216,7 +187,7 @@ function DashboardScreen() {
                 : "—"
             }
           />
-          <KpiCard
+          <StatCard
             hint={
               (data?.lowStockCount ?? 0) > 0 ? "Need reordering" : "All stocked"
             }
