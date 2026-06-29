@@ -11,7 +11,9 @@ import {
   ilike,
   inArray,
   isNull,
+  like,
   lte,
+  ne,
   or,
   type SQL,
   sql,
@@ -20,6 +22,7 @@ import { aliasedTable } from "drizzle-orm/alias";
 import { z } from "zod";
 import { protectedProcedure, tenantProcedure } from "../index";
 import type { RequestContext } from "../request-context";
+import { slugify } from "../slug";
 
 const fromUom = aliasedTable(schema.unitOfMeasure, "from_uom");
 const toUom = aliasedTable(schema.unitOfMeasure, "to_uom");
@@ -806,6 +809,60 @@ export const productRouter = {
           after: row,
         });
         return row;
+      });
+    }),
+  // Storefront curation (Shopix, design §3). A staff-visible product is NOT
+  // automatically public — publishing is an explicit, audited, products.create-
+  // gated decision. Publishing ensures a unique public slug exists (the PDP
+  // addressing key; the internal uuid is never exposed publicly).
+  setPublished: tenantProcedure
+    .input(z.object({ id: z.string().uuid(), isPublished: z.boolean() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        await assertProductVisible(tx, input.id);
+        const before = firstOrThrow(
+          (
+            await tx
+              .select()
+              .from(schema.product)
+              .where(eq(schema.product.id, input.id))
+              .limit(1)
+          ).at(0)
+        );
+        // Ensure a unique public slug when publishing (kept once assigned, so a
+        // published URL stays stable even if later unpublished/republished).
+        const slug =
+          input.isPublished && !before.slug
+            ? await ensureUniqueProductSlug(
+                tx,
+                ctx.tenantId,
+                before.name,
+                input.id
+              )
+            : before.slug;
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.product)
+              .set({
+                isPublished: input.isPublished,
+                slug,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.product.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "product.setPublished",
+          entityType: "product",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return { id: row.id, isPublished: row.isPublished, slug: row.slug };
       });
     }),
   archive: tenantProcedure
@@ -2150,6 +2207,54 @@ async function assertProductVisible(
       message: "Product not found in this tenant",
     });
   }
+}
+
+const MAX_SLUG_ATTEMPTS = 10_000;
+
+// Generate a public storefront slug unique within the tenant (RLS-scoped). One
+// query fetches every existing slug colliding with the base, then a free suffix
+// is chosen in memory (no await-in-loop). Excludes the product itself so a
+// re-publish keeps its own slug.
+async function ensureUniqueProductSlug(
+  tx: TenantTransaction,
+  tenantId: string,
+  name: string,
+  productId: string
+): Promise<string> {
+  // Serialize slug generation per tenant so two concurrent setPublished calls
+  // can't read the same "taken" set and mint a colliding slug (which would
+  // surface the (tenant_id, slug) unique-index violation as a 500). Same
+  // advisory-lock discipline as allocateSaleNumber (folded review MEDIUM).
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`slug:${tenantId}`}, 0))`
+  );
+  const base = slugify(name) || "product";
+  const taken = new Set(
+    (
+      await tx
+        .select({ slug: schema.product.slug })
+        .from(schema.product)
+        .where(
+          and(
+            like(schema.product.slug, `${base}%`),
+            ne(schema.product.id, productId)
+          )
+        )
+    )
+      .map((r) => r.slug)
+      .filter((s): s is string => s !== null)
+  );
+  if (!taken.has(base)) {
+    return base;
+  }
+  for (let n = 2; n < MAX_SLUG_ATTEMPTS; n++) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
+  }
+  // Extremely unlikely; guarantee uniqueness with an id fragment.
+  return `${base}-${productId.slice(0, 8)}`;
 }
 
 async function assertLocationVisible(

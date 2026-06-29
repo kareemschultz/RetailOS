@@ -26,6 +26,15 @@ export const env = createEnv({
     // domains use organization.storefront_domain instead. Env-driven; unset ⇒
     // only explicit storefront_domain hosts resolve. Never hardcoded (§9).
     STOREFRONT_BASE_DOMAIN: z.string().optional(),
+    // Shopix public-read rate-limit budget (design §1.5, GAP-6): max storefront
+    // requests per (hostname + client IP) per 60s window. Defends the public,
+    // unauthenticated surface from scraping/abuse. Single-node in-memory today;
+    // move to a Redis token-bucket (charter §8) for multi-node. Env-driven.
+    STOREFRONT_RATE_LIMIT_PER_MIN: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(60),
     // Google OAuth (social sign-in). Optional: the provider is only enabled when
     // both are present, so the app runs fine without them. Secrets via env only
     // (§25) — set in Infisical, never committed.

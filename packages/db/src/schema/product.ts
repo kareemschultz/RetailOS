@@ -94,6 +94,9 @@ export const category = pgTable(
     }),
     oversellPolicy: text("oversell_policy", { enum: OVERSELL_POLICIES }),
     expiryPolicy: text("expiry_policy", { enum: EXPIRY_POLICIES }),
+    // Shopix storefront curation (design §3) — a category appears publicly only
+    // when published. Expand-only, default-unpublished.
+    isPublished: boolean("is_published").default(false).notNull(),
     ...timestamps,
     ...actor,
     ...softDelete,
@@ -176,6 +179,13 @@ export const product = pgTable(
     priceMinor: bigint("price_minor", { mode: "number" }).notNull(),
     currency: text("currency").notNull(),
     scale: integer("scale").default(2).notNull(),
+    // Shopix storefront curation (design §3). A staff-visible product is NOT
+    // automatically public: it appears on the public storefront only when
+    // is_published = true AND slug IS NOT NULL (a public PDP is addressed by
+    // slug, never the internal uuid — enumeration defense, design §1.5).
+    // Expand-only, default-unpublished.
+    isPublished: boolean("is_published").default(false).notNull(),
+    slug: text("slug"),
     ...timestamps,
     ...actor,
     ...softDelete,
@@ -188,6 +198,9 @@ export const product = pgTable(
     index("product_baseUomId_idx").on(table.baseUomId),
     // Composite-FK target (Phase 3 #5).
     unique("product_tenant_id_uq").on(table.tenantId, table.id),
+    // Public storefront slug — unique within a tenant. Nullable slugs are NULLS
+    // DISTINCT (Postgres default), so unpublished products coexist freely.
+    uniqueIndex("product_tenantId_slug_uq").on(table.tenantId, table.slug),
   ]
 );
 
