@@ -13,6 +13,11 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Number-lease monitor pass (in progress, 2026-06-29)
+- **Branch:** `feat/number-lease-monitor` off `master = 2eeaa05` after PR #59 merged.
+- **Scope in this branch:** added `pos.numberLeaseList`, a tenant-scoped `reports.view` read endpoint for number lease monitoring with optional company/location/status/docType/terminal filters and display-safe company/location names. Added `/reports/number-leases` to the web app, rendering the backend lease range/cursor/status fields in a DataTableCard. No schema, migration, sale-path lease binding, or frontend number allocation change.
+- **Verification:** `bun run check-types` green; `bun run check` green after formatter folds; `bun run check:mojibake` green; default `bun run test` green; `bun -F web build` green. Disposable PG18 on port 56545 (`roles.sql` via container `psql` -> migrate as `retailos_migrator` -> test as `retailos_app`) green: **db 97/97 + api 57/57, zero skips**.
+
 ### Cash-control shifts pass (in progress, 2026-06-29)
 - **Branch:** `feat/cash-control-shifts` off `master = 98c30c0` after PRs #57/#58 merged.
 - **Scope in this branch:** added `pos.shiftList`, a tenant-scoped `reports.view` read endpoint for cash-control shift rows with optional status/location filters and display-safe location names. Added `/shifts` to the web app under Sell, rendering a DataTableCard shift list and a detail dialog that drills into the existing backend `xReport`/`zReport` contracts. No schema, migration, or frontend money math change.

@@ -3508,6 +3508,81 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
   });
 
+  it("Commit 6: numberLeaseList is reports-gated, tenant-scoped, and DTO-safe", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "LeaseList Co" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "LeaseList Store", type: "store" },
+      admin
+    );
+    const lease = await call(
+      appRouter.pos.numberLeaseAllocate,
+      {
+        companyId: company.id,
+        docType: "sale",
+        idempotencyKey: "lease-list-alloc",
+        leaseSize: 3,
+        locationId: location.id,
+        series: "default",
+        terminalId: "T-LEASE-LIST",
+        ttlMinutes: 60,
+      },
+      admin
+    );
+    await call(
+      appRouter.pos.numberLeaseConsume,
+      { leaseId: lease.id, number: lease.rangeStart },
+      admin
+    );
+
+    const listed = await call(
+      appRouter.pos.numberLeaseList,
+      {
+        companyId: company.id,
+        docType: "sale",
+        locationId: location.id,
+        status: "active",
+        terminalId: "T-LEASE-LIST",
+      },
+      admin
+    );
+    const row = listed.find((l) => l.id === lease.id);
+    expect(row).toMatchObject({
+      companyId: company.id,
+      companyName: "LeaseList Co",
+      consumedThrough: lease.rangeStart,
+      docType: "sale",
+      locationId: location.id,
+      locationName: "LeaseList Store",
+      nextNumber: lease.rangeStart + 1,
+      rangeEnd: lease.rangeEnd,
+      rangeStart: lease.rangeStart,
+      remainingCount: 2,
+      series: "default",
+      status: "active",
+      terminalId: "T-LEASE-LIST",
+    });
+    expect(row?.createdAt).toEqual(expect.any(String));
+    expect(row?.expiresAt).toEqual(expect.any(String));
+    expect(row).not.toHaveProperty("tenantId");
+    expect(row).not.toHaveProperty("idempotencyKey");
+    expect(row).not.toHaveProperty("requestHash");
+
+    await expect(
+      call(appRouter.pos.numberLeaseList, {}, cashier)
+    ).rejects.toThrow(MISSING_REPORTS_VIEW_RE);
+    await expect(
+      call(appRouter.pos.numberLeaseList, { companyId: company.id }, adminB)
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+  });
+
   it("Commit 4: BLIND close computes expected + over/short EXACTLY (float + cash sale + pay-out)", async () => {
     const admin = { context: makeCtx(ADMIN, ORG) };
     const { location, product, sku } = await seedCashFixture("ShClose");

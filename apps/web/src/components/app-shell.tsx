@@ -16,6 +16,7 @@ import {
   ArrowLeftRight,
   Boxes,
   CircleDollarSign,
+  FileClock,
   LayoutDashboard,
   MapPin,
   Package,
@@ -66,7 +67,10 @@ const NAV_GROUPS = [
   },
   {
     label: "Reports",
-    items: [{ to: "/reports/financial", label: "Financial", icon: TrendingUp }],
+    items: [
+      { to: "/reports/financial", label: "Financial", icon: TrendingUp },
+      { to: "/reports/number-leases", label: "Number leases", icon: FileClock },
+    ],
   },
 ] as const;
 

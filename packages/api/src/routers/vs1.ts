@@ -5145,6 +5145,83 @@ async function runZReport(
   };
 }
 
+async function runNumberLeaseList(
+  tx: TenantTransaction,
+  input: {
+    companyId?: string;
+    docType?: string;
+    limit: number;
+    locationId?: string;
+    status?: (typeof schema.NUMBER_LEASE_STATUSES)[number];
+    terminalId?: string;
+  }
+) {
+  if (input.companyId) {
+    await assertCompanyVisible(tx, input.companyId);
+  }
+  if (input.locationId) {
+    await assertLocationVisible(tx, input.locationId);
+  }
+  const filters: SQL[] = [];
+  if (input.companyId) {
+    filters.push(eq(schema.numberLease.companyId, input.companyId));
+  }
+  if (input.locationId) {
+    filters.push(eq(schema.numberLease.locationId, input.locationId));
+  }
+  if (input.docType) {
+    filters.push(eq(schema.numberLease.docType, input.docType));
+  }
+  if (input.status) {
+    filters.push(eq(schema.numberLease.status, input.status));
+  }
+  if (input.terminalId) {
+    filters.push(eq(schema.numberLease.terminalId, input.terminalId));
+  }
+  const rows = await tx
+    .select({
+      companyId: schema.numberLease.companyId,
+      companyName: schema.company.name,
+      consumedThrough: schema.numberLease.consumedThrough,
+      createdAt: schema.numberLease.createdAt,
+      deviceId: schema.numberLease.deviceId,
+      docType: schema.numberLease.docType,
+      exhaustedAt: schema.numberLease.exhaustedAt,
+      expiresAt: schema.numberLease.expiresAt,
+      fiscalYear: schema.numberLease.fiscalYear,
+      id: schema.numberLease.id,
+      locationId: schema.numberLease.locationId,
+      locationName: schema.location.name,
+      nextNumber: schema.numberLease.nextNumber,
+      rangeEnd: schema.numberLease.rangeEnd,
+      rangeStart: schema.numberLease.rangeStart,
+      reclaimedAt: schema.numberLease.reclaimedAt,
+      series: schema.numberLease.series,
+      status: schema.numberLease.status,
+      terminalId: schema.numberLease.terminalId,
+    })
+    .from(schema.numberLease)
+    .innerJoin(
+      schema.company,
+      eq(schema.company.id, schema.numberLease.companyId)
+    )
+    .leftJoin(
+      schema.location,
+      eq(schema.location.id, schema.numberLease.locationId)
+    )
+    .where(filters.length > 0 ? and(...filters) : undefined)
+    .orderBy(desc(schema.numberLease.createdAt))
+    .limit(input.limit);
+  return rows.map((row) => ({
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    exhaustedAt: row.exhaustedAt?.toISOString() ?? null,
+    expiresAt: row.expiresAt.toISOString(),
+    reclaimedAt: row.reclaimedAt?.toISOString() ?? null,
+    remainingCount: Math.max(row.rangeEnd - row.nextNumber + 1, 0),
+  }));
+}
+
 export const posRouter = {
   createSale: tenantProcedure
     .input(
@@ -5379,6 +5456,25 @@ export const posRouter = {
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "reports.view");
         return runZReport(tx, ctx, input.shiftId);
+      });
+    }),
+
+  numberLeaseList: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid().optional(),
+        docType: z.string().min(1).optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+        locationId: z.string().uuid().optional(),
+        status: z.enum(schema.NUMBER_LEASE_STATUSES).optional(),
+        terminalId: z.string().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        return runNumberLeaseList(tx, input);
       });
     }),
 
