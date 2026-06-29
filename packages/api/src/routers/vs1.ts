@@ -3191,8 +3191,11 @@ export const inventoryRouter = {
           .select({
             id: schema.stockLedger.id,
             locationId: schema.stockLedger.locationId,
+            locationName: schema.location.name,
             productId: schema.stockLedger.productId,
+            productName: schema.product.name,
             skuId: schema.stockLedger.skuId,
+            skuCode: schema.sku.code,
             movementType: schema.stockLedger.movementType,
             qtyDelta: schema.stockLedger.qtyDelta,
             balanceAfter: schema.stockLedger.balanceAfter,
@@ -3203,6 +3206,15 @@ export const inventoryRouter = {
             serverTs: schema.stockLedger.serverTs,
           })
           .from(schema.stockLedger)
+          .innerJoin(
+            schema.location,
+            eq(schema.location.id, schema.stockLedger.locationId)
+          )
+          .innerJoin(
+            schema.product,
+            eq(schema.product.id, schema.stockLedger.productId)
+          )
+          .leftJoin(schema.sku, eq(schema.sku.id, schema.stockLedger.skuId))
           .where(conditions.length ? and(...conditions) : undefined)
           .orderBy(desc(schema.stockLedger.serverTs))
           .limit(input.limit);
