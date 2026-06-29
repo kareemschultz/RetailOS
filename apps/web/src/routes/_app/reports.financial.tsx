@@ -32,17 +32,16 @@ export const Route = createFileRoute("/_app/reports/financial")({
 const KPI_SKELETON_KEYS = ["a", "b", "c", "d"] as const;
 const ROW_SKELETON_KEYS = ["a", "b", "c", "d", "e"] as const;
 
-// A normalized valuation row for display. All figures are backend-computed —
-// the page never sums or values anything; it combines the two backend arrays
-// (AVCO + FIFO) into display rows and renders each field as-is.
+// A normalized valuation row for display. All figures are backend-computed;
+// the page maps named stock-by-location DTO rows and renders each field as-is.
 interface ValuationRow {
   currency: string;
   key: string;
-  locationId: string;
-  method: "AVCO" | "FIFO";
+  locationName: string;
+  productName: string;
   qtyOnHand: number;
   scale: number;
-  skuId: string;
+  skuCode: string;
   totalValueMinor: number;
 }
 
@@ -191,8 +190,7 @@ function ValuationContent({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Method</TableHead>
-          <TableHead>SKU</TableHead>
+          <TableHead>Product</TableHead>
           <TableHead>Location</TableHead>
           <TableHead className="text-right">Qty on hand</TableHead>
           <TableHead className="text-right">Total value</TableHead>
@@ -202,14 +200,14 @@ function ValuationContent({
         {rows.map((row) => (
           <TableRow key={row.key}>
             <TableCell>
-              <span className="font-medium text-xs">{row.method}</span>
+              <div className="min-w-0">
+                <p className="truncate font-medium">{row.productName}</p>
+                <p className="font-mono text-muted-foreground text-xs">
+                  {row.skuCode}
+                </p>
+              </div>
             </TableCell>
-            <TableCell>
-              <ShortId value={row.skuId} />
-            </TableCell>
-            <TableCell>
-              <ShortId value={row.locationId} />
-            </TableCell>
+            <TableCell>{row.locationName}</TableCell>
             <TableCell className="text-right font-mono tabular-nums">
               {row.qtyOnHand}
             </TableCell>
@@ -382,40 +380,30 @@ function FinancialOverviewScreen() {
   const summary = useQuery(
     orpc.reports.dashboardSummary.queryOptions({ input: {} })
   );
+  // Valuation reads inventory.stockByLocation, which carries product and
+  // location names so the table shows names, not ids.
   const valuation = useQuery(
-    orpc.reports.valuation.queryOptions({ input: {} })
+    orpc.inventory.stockByLocation.queryOptions({ input: {} })
   );
   const lowStock = useQuery(orpc.reports.lowStock.queryOptions({ input: {} }));
 
-  // Combine the backend's AVCO + FIFO arrays into uniform display rows. The raw
-  // FIFO/low-stock rows come from a raw SQL result, so their id/currency fields
-  // are typed `unknown` — coerce to string for rendering only (no computation).
+  // Render-only mapping of the backend DTO into display rows — the page never
+  // sums or values anything; every figure is backend-computed.
   const valuationRows = useMemo<ValuationRow[]>(() => {
     const v = valuation.data;
     if (!v) {
       return [];
     }
-    const avco: ValuationRow[] = v.avco.map((row) => ({
-      key: `AVCO:${row.skuId}:${row.locationId}:${row.currency}`,
-      method: "AVCO",
-      skuId: String(row.skuId),
-      locationId: String(row.locationId),
+    return v.map((row) => ({
+      key: `${row.skuId}:${row.locationId}:${row.currency}`,
+      productName: String(row.productName),
+      skuCode: String(row.skuCode),
+      locationName: String(row.locationName),
       currency: String(row.currency),
       scale: row.scale,
       qtyOnHand: row.qtyOnHand,
       totalValueMinor: row.totalValueMinor,
     }));
-    const fifo: ValuationRow[] = v.fifo.map((row) => ({
-      key: `FIFO:${String(row.skuId)}:${String(row.locationId)}:${String(row.currency)}`,
-      method: "FIFO",
-      skuId: String(row.skuId),
-      locationId: String(row.locationId),
-      currency: String(row.currency),
-      scale: row.scale,
-      qtyOnHand: row.qtyOnHand,
-      totalValueMinor: row.totalValueMinor,
-    }));
-    return [...avco, ...fifo];
   }, [valuation.data]);
 
   const lowStockRows = useMemo<LowStockRow[]>(
@@ -451,7 +439,7 @@ function FinancialOverviewScreen() {
         count={valuationSettled ? valuationRows.length : undefined}
         footer={
           valuationSettled && valuationRows.length > 0
-            ? "On-hand quantity and value per SKU and location, by costing method."
+            ? "On-hand quantity and value per SKU and location."
             : undefined
         }
         title="Inventory valuation"

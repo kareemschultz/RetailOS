@@ -13,11 +13,16 @@ import {
 } from "@RetailOS/ui/components/sidebar";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  ArrowLeftRight,
+  Boxes,
   LayoutDashboard,
+  MapPin,
   Package,
   ReceiptText,
   ScanLine,
+  ShieldCheck,
   Store,
+  TrendingUp,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -44,6 +49,22 @@ const NAV_GROUPS = [
   {
     label: "Catalog",
     items: [{ to: "/products", label: "Products", icon: Package }],
+  },
+  {
+    label: "Inventory",
+    items: [
+      { to: "/inventory", label: "Stock", icon: Boxes },
+      { to: "/transfers", label: "Transfers", icon: ArrowLeftRight },
+      { to: "/bonds", label: "Bonded goods", icon: ShieldCheck },
+    ],
+  },
+  {
+    label: "Network",
+    items: [{ to: "/locations", label: "Locations", icon: MapPin }],
+  },
+  {
+    label: "Reports",
+    items: [{ to: "/reports/financial", label: "Financial", icon: TrendingUp }],
   },
 ] as const;
 
