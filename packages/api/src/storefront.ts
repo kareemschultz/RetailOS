@@ -88,6 +88,63 @@ export async function resolveTenantFromHost(
   return null;
 }
 
+// Per-(host + IP) fixed-window rate limit (design §1.5, GAP-6). In-memory →
+// single-node only; behind a multi-node deploy this MUST move to a Redis token
+// bucket (charter §8). Public reads cannot mutate, so an in-memory limiter is a
+// real (if coarse) control today. Budget is env-driven (STOREFRONT_RATE_LIMIT_PER_MIN).
+const RATE_WINDOW_MS = 60_000;
+// Cap on distinct (host+IP) buckets. A public surface lets anonymous callers
+// mint new keys by rotating Host/IP; without a bound the limiter's own Map is a
+// memory-exhaustion (self-DoS) vector. When the cap is hit we sweep expired
+// buckets before admitting a new key (folded review HIGH). Multi-node ⇒ Redis
+// keys with native TTL (charter §8).
+const MAX_RATE_BUCKETS = 50_000;
+const FORWARDED_FOR_SEPARATOR = /\s*,\s*/;
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+
+// Drop every expired bucket. Map iteration tolerates deletes mid-loop.
+function pruneExpiredRateBuckets(now: number): void {
+  for (const [key, bucket] of rateBuckets) {
+    if (bucket.resetAt <= now) {
+      rateBuckets.delete(key);
+    }
+  }
+}
+
+// Best-effort client IP behind the proxy (Traefik/Pangolin sets x-forwarded-for).
+// Falls back to "unknown" so a missing header still rate-limits per host (coarse).
+function clientIp(headers: Headers | undefined): string {
+  const fwd = headers?.get("x-forwarded-for");
+  if (fwd) {
+    return fwd.split(FORWARDED_FOR_SEPARATOR)[0] ?? "unknown";
+  }
+  return headers?.get("x-real-ip") ?? "unknown";
+}
+
+const rateLimit = o.middleware(({ context, next }) => {
+  const host = normalizeHost(context.headers?.get("host")) ?? "unknown";
+  const key = `${host}:${clientIp(context.headers)}`;
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    // New window (also lazily reclaims an expired bucket's slot). Before
+    // admitting a brand-new key at the cap, sweep expired buckets so a
+    // Host/IP-rotation flood cannot grow the Map without bound.
+    if (!bucket && rateBuckets.size >= MAX_RATE_BUCKETS) {
+      pruneExpiredRateBuckets(now);
+    }
+    rateBuckets.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
+  } else {
+    bucket.count += 1;
+    if (bucket.count > env.STOREFRONT_RATE_LIMIT_PER_MIN) {
+      throw new ORPCError("TOO_MANY_REQUESTS", {
+        message: "Too many requests — please slow down",
+      });
+    }
+  }
+  return next();
+});
+
 // Resolves the hostname → tenant and injects the StorefrontContext. Fail-closed:
 // an unknown/missing host rejects with NOT_FOUND (never a default tenant, never a
 // cross-tenant spill — consistent with the RLS fail-closed posture).
@@ -118,5 +175,8 @@ const requireStorefrontTenant = o.middleware(async ({ context, next }) => {
 });
 
 // The public storefront procedure: anonymous (no session/permission), tenant
-// resolved from hostname. The storefront analogue of tenantProcedure.
-export const storefrontProcedure = publicProcedure.use(requireStorefrontTenant);
+// resolved from hostname. The storefront analogue of tenantProcedure. Rate-limit
+// runs FIRST (before tenant resolution) so an unknown-host flood is also bounded.
+export const storefrontProcedure = publicProcedure
+  .use(rateLimit)
+  .use(requireStorefrontTenant);
