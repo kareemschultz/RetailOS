@@ -21,24 +21,42 @@ import { Route as AppStockLedgerRouteImport } from './routes/_app/stock-ledger'
 import { Route as AppSkusRouteImport } from './routes/_app/skus'
 import { Route as AppShiftsRouteImport } from './routes/_app/shifts'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppSalesOverviewRouteImport } from './routes/_app/sales-overview'
 import { Route as AppSalesRouteImport } from './routes/_app/sales'
 import { Route as AppRolesRouteImport } from './routes/_app/roles'
 import { Route as AppProfileRouteImport } from './routes/_app/profile'
+import { Route as AppProductivityRouteImport } from './routes/_app/productivity'
 import { Route as AppPricingRouteImport } from './routes/_app/pricing'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
 import { Route as AppPermissionsRouteImport } from './routes/_app/permissions'
+import { Route as AppPaymentsRouteImport } from './routes/_app/payments'
 import { Route as AppOrdersRouteImport } from './routes/_app/orders'
 import { Route as AppOnboardingRouteImport } from './routes/_app/onboarding'
+import { Route as AppMailRouteImport } from './routes/_app/mail'
 import { Route as AppLotsRouteImport } from './routes/_app/lots'
 import { Route as AppLogisticsRouteImport } from './routes/_app/logistics'
 import { Route as AppLocationsRouteImport } from './routes/_app/locations'
+import { Route as AppKanbanRouteImport } from './routes/_app/kanban'
 import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
+import { Route as AppFormWizardRouteImport } from './routes/_app/form-wizard'
+import { Route as AppFormValidationRouteImport } from './routes/_app/form-validation'
+import { Route as AppFormLayoutsRouteImport } from './routes/_app/form-layouts'
 import { Route as AppFinanceRouteImport } from './routes/_app/finance'
 import { Route as AppFaqRouteImport } from './routes/_app/faq'
+import { Route as AppErrorMaintenanceRouteImport } from './routes/_app/error-maintenance'
+import { Route as AppError500RouteImport } from './routes/_app/error-500'
+import { Route as AppError404RouteImport } from './routes/_app/error-404'
+import { Route as AppError403RouteImport } from './routes/_app/error-403'
+import { Route as AppError401RouteImport } from './routes/_app/error-401'
 import { Route as AppEmptyStatesRouteImport } from './routes/_app/empty-states'
+import { Route as AppDataTablesRouteImport } from './routes/_app/data-tables'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppContactsRouteImport } from './routes/_app/contacts'
 import { Route as AppCommerceDashboardRouteImport } from './routes/_app/commerce-dashboard'
+import { Route as AppChatRouteImport } from './routes/_app/chat'
 import { Route as AppCategoriesRouteImport } from './routes/_app/categories'
+import { Route as AppCampaignsRouteImport } from './routes/_app/campaigns'
+import { Route as AppCalendarRouteImport } from './routes/_app/calendar'
 import { Route as AppBrandsRouteImport } from './routes/_app/brands'
 import { Route as AppBondsRouteImport } from './routes/_app/bonds'
 import { Route as AppBarcodesRouteImport } from './routes/_app/barcodes'
@@ -107,6 +125,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppSalesOverviewRoute = AppSalesOverviewRouteImport.update({
+  id: '/sales-overview',
+  path: '/sales-overview',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppSalesRoute = AppSalesRouteImport.update({
   id: '/sales',
   path: '/sales',
@@ -120,6 +143,11 @@ const AppRolesRoute = AppRolesRouteImport.update({
 const AppProfileRoute = AppProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppProductivityRoute = AppProductivityRouteImport.update({
+  id: '/productivity',
+  path: '/productivity',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppPricingRoute = AppPricingRouteImport.update({
@@ -137,6 +165,11 @@ const AppPermissionsRoute = AppPermissionsRouteImport.update({
   path: '/permissions',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppPaymentsRoute = AppPaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppOrdersRoute = AppOrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
@@ -145,6 +178,11 @@ const AppOrdersRoute = AppOrdersRouteImport.update({
 const AppOnboardingRoute = AppOnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppMailRoute = AppMailRouteImport.update({
+  id: '/mail',
+  path: '/mail',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppLotsRoute = AppLotsRouteImport.update({
@@ -162,9 +200,29 @@ const AppLocationsRoute = AppLocationsRouteImport.update({
   path: '/locations',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppKanbanRoute = AppKanbanRouteImport.update({
+  id: '/kanban',
+  path: '/kanban',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppInventoryRoute = AppInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppFormWizardRoute = AppFormWizardRouteImport.update({
+  id: '/form-wizard',
+  path: '/form-wizard',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppFormValidationRoute = AppFormValidationRouteImport.update({
+  id: '/form-validation',
+  path: '/form-validation',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppFormLayoutsRoute = AppFormLayoutsRouteImport.update({
+  id: '/form-layouts',
+  path: '/form-layouts',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppFinanceRoute = AppFinanceRouteImport.update({
@@ -177,9 +235,39 @@ const AppFaqRoute = AppFaqRouteImport.update({
   path: '/faq',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppErrorMaintenanceRoute = AppErrorMaintenanceRouteImport.update({
+  id: '/error-maintenance',
+  path: '/error-maintenance',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppError500Route = AppError500RouteImport.update({
+  id: '/error-500',
+  path: '/error-500',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppError404Route = AppError404RouteImport.update({
+  id: '/error-404',
+  path: '/error-404',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppError403Route = AppError403RouteImport.update({
+  id: '/error-403',
+  path: '/error-403',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppError401Route = AppError401RouteImport.update({
+  id: '/error-401',
+  path: '/error-401',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppEmptyStatesRoute = AppEmptyStatesRouteImport.update({
   id: '/empty-states',
   path: '/empty-states',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppDataTablesRoute = AppDataTablesRouteImport.update({
+  id: '/data-tables',
+  path: '/data-tables',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
@@ -187,14 +275,34 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppContactsRoute = AppContactsRouteImport.update({
+  id: '/contacts',
+  path: '/contacts',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppCommerceDashboardRoute = AppCommerceDashboardRouteImport.update({
   id: '/commerce-dashboard',
   path: '/commerce-dashboard',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppChatRoute = AppChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppCategoriesRoute = AppCategoriesRouteImport.update({
   id: '/categories',
   path: '/categories',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppCampaignsRoute = AppCampaignsRouteImport.update({
+  id: '/campaigns',
+  path: '/campaigns',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppCalendarRoute = AppCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppBrandsRoute = AppBrandsRouteImport.update({
@@ -245,24 +353,42 @@ export interface FileRoutesByFullPath {
   '/barcodes': typeof AppBarcodesRoute
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
+  '/calendar': typeof AppCalendarRoute
+  '/campaigns': typeof AppCampaignsRoute
   '/categories': typeof AppCategoriesRoute
+  '/chat': typeof AppChatRoute
   '/commerce-dashboard': typeof AppCommerceDashboardRoute
+  '/contacts': typeof AppContactsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/data-tables': typeof AppDataTablesRoute
   '/empty-states': typeof AppEmptyStatesRoute
+  '/error-401': typeof AppError401Route
+  '/error-403': typeof AppError403Route
+  '/error-404': typeof AppError404Route
+  '/error-500': typeof AppError500Route
+  '/error-maintenance': typeof AppErrorMaintenanceRoute
   '/faq': typeof AppFaqRoute
   '/finance': typeof AppFinanceRoute
+  '/form-layouts': typeof AppFormLayoutsRoute
+  '/form-validation': typeof AppFormValidationRoute
+  '/form-wizard': typeof AppFormWizardRoute
   '/inventory': typeof AppInventoryRoute
+  '/kanban': typeof AppKanbanRoute
   '/locations': typeof AppLocationsRoute
   '/logistics': typeof AppLogisticsRoute
   '/lots': typeof AppLotsRoute
+  '/mail': typeof AppMailRoute
   '/onboarding': typeof AppOnboardingRoute
   '/orders': typeof AppOrdersRoute
+  '/payments': typeof AppPaymentsRoute
   '/permissions': typeof AppPermissionsRoute
   '/pos': typeof AppPosRoute
   '/pricing': typeof AppPricingRoute
+  '/productivity': typeof AppProductivityRoute
   '/profile': typeof AppProfileRoute
   '/roles': typeof AppRolesRoute
   '/sales': typeof AppSalesRoute
+  '/sales-overview': typeof AppSalesOverviewRoute
   '/settings': typeof AppSettingsRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
@@ -284,24 +410,42 @@ export interface FileRoutesByTo {
   '/barcodes': typeof AppBarcodesRoute
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
+  '/calendar': typeof AppCalendarRoute
+  '/campaigns': typeof AppCampaignsRoute
   '/categories': typeof AppCategoriesRoute
+  '/chat': typeof AppChatRoute
   '/commerce-dashboard': typeof AppCommerceDashboardRoute
+  '/contacts': typeof AppContactsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/data-tables': typeof AppDataTablesRoute
   '/empty-states': typeof AppEmptyStatesRoute
+  '/error-401': typeof AppError401Route
+  '/error-403': typeof AppError403Route
+  '/error-404': typeof AppError404Route
+  '/error-500': typeof AppError500Route
+  '/error-maintenance': typeof AppErrorMaintenanceRoute
   '/faq': typeof AppFaqRoute
   '/finance': typeof AppFinanceRoute
+  '/form-layouts': typeof AppFormLayoutsRoute
+  '/form-validation': typeof AppFormValidationRoute
+  '/form-wizard': typeof AppFormWizardRoute
   '/inventory': typeof AppInventoryRoute
+  '/kanban': typeof AppKanbanRoute
   '/locations': typeof AppLocationsRoute
   '/logistics': typeof AppLogisticsRoute
   '/lots': typeof AppLotsRoute
+  '/mail': typeof AppMailRoute
   '/onboarding': typeof AppOnboardingRoute
   '/orders': typeof AppOrdersRoute
+  '/payments': typeof AppPaymentsRoute
   '/permissions': typeof AppPermissionsRoute
   '/pos': typeof AppPosRoute
   '/pricing': typeof AppPricingRoute
+  '/productivity': typeof AppProductivityRoute
   '/profile': typeof AppProfileRoute
   '/roles': typeof AppRolesRoute
   '/sales': typeof AppSalesRoute
+  '/sales-overview': typeof AppSalesOverviewRoute
   '/settings': typeof AppSettingsRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
@@ -325,24 +469,42 @@ export interface FileRoutesById {
   '/_app/barcodes': typeof AppBarcodesRoute
   '/_app/bonds': typeof AppBondsRoute
   '/_app/brands': typeof AppBrandsRoute
+  '/_app/calendar': typeof AppCalendarRoute
+  '/_app/campaigns': typeof AppCampaignsRoute
   '/_app/categories': typeof AppCategoriesRoute
+  '/_app/chat': typeof AppChatRoute
   '/_app/commerce-dashboard': typeof AppCommerceDashboardRoute
+  '/_app/contacts': typeof AppContactsRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/data-tables': typeof AppDataTablesRoute
   '/_app/empty-states': typeof AppEmptyStatesRoute
+  '/_app/error-401': typeof AppError401Route
+  '/_app/error-403': typeof AppError403Route
+  '/_app/error-404': typeof AppError404Route
+  '/_app/error-500': typeof AppError500Route
+  '/_app/error-maintenance': typeof AppErrorMaintenanceRoute
   '/_app/faq': typeof AppFaqRoute
   '/_app/finance': typeof AppFinanceRoute
+  '/_app/form-layouts': typeof AppFormLayoutsRoute
+  '/_app/form-validation': typeof AppFormValidationRoute
+  '/_app/form-wizard': typeof AppFormWizardRoute
   '/_app/inventory': typeof AppInventoryRoute
+  '/_app/kanban': typeof AppKanbanRoute
   '/_app/locations': typeof AppLocationsRoute
   '/_app/logistics': typeof AppLogisticsRoute
   '/_app/lots': typeof AppLotsRoute
+  '/_app/mail': typeof AppMailRoute
   '/_app/onboarding': typeof AppOnboardingRoute
   '/_app/orders': typeof AppOrdersRoute
+  '/_app/payments': typeof AppPaymentsRoute
   '/_app/permissions': typeof AppPermissionsRoute
   '/_app/pos': typeof AppPosRoute
   '/_app/pricing': typeof AppPricingRoute
+  '/_app/productivity': typeof AppProductivityRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/roles': typeof AppRolesRoute
   '/_app/sales': typeof AppSalesRoute
+  '/_app/sales-overview': typeof AppSalesOverviewRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/shifts': typeof AppShiftsRoute
   '/_app/skus': typeof AppSkusRoute
@@ -366,24 +528,42 @@ export interface FileRouteTypes {
     | '/barcodes'
     | '/bonds'
     | '/brands'
+    | '/calendar'
+    | '/campaigns'
     | '/categories'
+    | '/chat'
     | '/commerce-dashboard'
+    | '/contacts'
     | '/dashboard'
+    | '/data-tables'
     | '/empty-states'
+    | '/error-401'
+    | '/error-403'
+    | '/error-404'
+    | '/error-500'
+    | '/error-maintenance'
     | '/faq'
     | '/finance'
+    | '/form-layouts'
+    | '/form-validation'
+    | '/form-wizard'
     | '/inventory'
+    | '/kanban'
     | '/locations'
     | '/logistics'
     | '/lots'
+    | '/mail'
     | '/onboarding'
     | '/orders'
+    | '/payments'
     | '/permissions'
     | '/pos'
     | '/pricing'
+    | '/productivity'
     | '/profile'
     | '/roles'
     | '/sales'
+    | '/sales-overview'
     | '/settings'
     | '/shifts'
     | '/skus'
@@ -405,24 +585,42 @@ export interface FileRouteTypes {
     | '/barcodes'
     | '/bonds'
     | '/brands'
+    | '/calendar'
+    | '/campaigns'
     | '/categories'
+    | '/chat'
     | '/commerce-dashboard'
+    | '/contacts'
     | '/dashboard'
+    | '/data-tables'
     | '/empty-states'
+    | '/error-401'
+    | '/error-403'
+    | '/error-404'
+    | '/error-500'
+    | '/error-maintenance'
     | '/faq'
     | '/finance'
+    | '/form-layouts'
+    | '/form-validation'
+    | '/form-wizard'
     | '/inventory'
+    | '/kanban'
     | '/locations'
     | '/logistics'
     | '/lots'
+    | '/mail'
     | '/onboarding'
     | '/orders'
+    | '/payments'
     | '/permissions'
     | '/pos'
     | '/pricing'
+    | '/productivity'
     | '/profile'
     | '/roles'
     | '/sales'
+    | '/sales-overview'
     | '/settings'
     | '/shifts'
     | '/skus'
@@ -445,24 +643,42 @@ export interface FileRouteTypes {
     | '/_app/barcodes'
     | '/_app/bonds'
     | '/_app/brands'
+    | '/_app/calendar'
+    | '/_app/campaigns'
     | '/_app/categories'
+    | '/_app/chat'
     | '/_app/commerce-dashboard'
+    | '/_app/contacts'
     | '/_app/dashboard'
+    | '/_app/data-tables'
     | '/_app/empty-states'
+    | '/_app/error-401'
+    | '/_app/error-403'
+    | '/_app/error-404'
+    | '/_app/error-500'
+    | '/_app/error-maintenance'
     | '/_app/faq'
     | '/_app/finance'
+    | '/_app/form-layouts'
+    | '/_app/form-validation'
+    | '/_app/form-wizard'
     | '/_app/inventory'
+    | '/_app/kanban'
     | '/_app/locations'
     | '/_app/logistics'
     | '/_app/lots'
+    | '/_app/mail'
     | '/_app/onboarding'
     | '/_app/orders'
+    | '/_app/payments'
     | '/_app/permissions'
     | '/_app/pos'
     | '/_app/pricing'
+    | '/_app/productivity'
     | '/_app/profile'
     | '/_app/roles'
     | '/_app/sales'
+    | '/_app/sales-overview'
     | '/_app/settings'
     | '/_app/shifts'
     | '/_app/skus'
@@ -570,6 +786,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/sales-overview': {
+      id: '/_app/sales-overview'
+      path: '/sales-overview'
+      fullPath: '/sales-overview'
+      preLoaderRoute: typeof AppSalesOverviewRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/sales': {
       id: '/_app/sales'
       path: '/sales'
@@ -589,6 +812,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/productivity': {
+      id: '/_app/productivity'
+      path: '/productivity'
+      fullPath: '/productivity'
+      preLoaderRoute: typeof AppProductivityRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/pricing': {
@@ -612,6 +842,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPermissionsRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/payments': {
+      id: '/_app/payments'
+      path: '/payments'
+      fullPath: '/payments'
+      preLoaderRoute: typeof AppPaymentsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/orders': {
       id: '/_app/orders'
       path: '/orders'
@@ -624,6 +861,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof AppOnboardingRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/mail': {
+      id: '/_app/mail'
+      path: '/mail'
+      fullPath: '/mail'
+      preLoaderRoute: typeof AppMailRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/lots': {
@@ -647,11 +891,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLocationsRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/kanban': {
+      id: '/_app/kanban'
+      path: '/kanban'
+      fullPath: '/kanban'
+      preLoaderRoute: typeof AppKanbanRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/inventory': {
       id: '/_app/inventory'
       path: '/inventory'
       fullPath: '/inventory'
       preLoaderRoute: typeof AppInventoryRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/form-wizard': {
+      id: '/_app/form-wizard'
+      path: '/form-wizard'
+      fullPath: '/form-wizard'
+      preLoaderRoute: typeof AppFormWizardRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/form-validation': {
+      id: '/_app/form-validation'
+      path: '/form-validation'
+      fullPath: '/form-validation'
+      preLoaderRoute: typeof AppFormValidationRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/form-layouts': {
+      id: '/_app/form-layouts'
+      path: '/form-layouts'
+      fullPath: '/form-layouts'
+      preLoaderRoute: typeof AppFormLayoutsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/finance': {
@@ -668,11 +940,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppFaqRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/error-maintenance': {
+      id: '/_app/error-maintenance'
+      path: '/error-maintenance'
+      fullPath: '/error-maintenance'
+      preLoaderRoute: typeof AppErrorMaintenanceRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/error-500': {
+      id: '/_app/error-500'
+      path: '/error-500'
+      fullPath: '/error-500'
+      preLoaderRoute: typeof AppError500RouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/error-404': {
+      id: '/_app/error-404'
+      path: '/error-404'
+      fullPath: '/error-404'
+      preLoaderRoute: typeof AppError404RouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/error-403': {
+      id: '/_app/error-403'
+      path: '/error-403'
+      fullPath: '/error-403'
+      preLoaderRoute: typeof AppError403RouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/error-401': {
+      id: '/_app/error-401'
+      path: '/error-401'
+      fullPath: '/error-401'
+      preLoaderRoute: typeof AppError401RouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/empty-states': {
       id: '/_app/empty-states'
       path: '/empty-states'
       fullPath: '/empty-states'
       preLoaderRoute: typeof AppEmptyStatesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/data-tables': {
+      id: '/_app/data-tables'
+      path: '/data-tables'
+      fullPath: '/data-tables'
+      preLoaderRoute: typeof AppDataTablesRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/dashboard': {
@@ -682,6 +996,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/contacts': {
+      id: '/_app/contacts'
+      path: '/contacts'
+      fullPath: '/contacts'
+      preLoaderRoute: typeof AppContactsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/commerce-dashboard': {
       id: '/_app/commerce-dashboard'
       path: '/commerce-dashboard'
@@ -689,11 +1010,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCommerceDashboardRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/chat': {
+      id: '/_app/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof AppChatRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/categories': {
       id: '/_app/categories'
       path: '/categories'
       fullPath: '/categories'
       preLoaderRoute: typeof AppCategoriesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/campaigns': {
+      id: '/_app/campaigns'
+      path: '/campaigns'
+      fullPath: '/campaigns'
+      preLoaderRoute: typeof AppCampaignsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/calendar': {
+      id: '/_app/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof AppCalendarRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/brands': {
@@ -760,24 +1102,42 @@ interface AppRouteRouteChildren {
   AppBarcodesRoute: typeof AppBarcodesRoute
   AppBondsRoute: typeof AppBondsRoute
   AppBrandsRoute: typeof AppBrandsRoute
+  AppCalendarRoute: typeof AppCalendarRoute
+  AppCampaignsRoute: typeof AppCampaignsRoute
   AppCategoriesRoute: typeof AppCategoriesRoute
+  AppChatRoute: typeof AppChatRoute
   AppCommerceDashboardRoute: typeof AppCommerceDashboardRoute
+  AppContactsRoute: typeof AppContactsRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppDataTablesRoute: typeof AppDataTablesRoute
   AppEmptyStatesRoute: typeof AppEmptyStatesRoute
+  AppError401Route: typeof AppError401Route
+  AppError403Route: typeof AppError403Route
+  AppError404Route: typeof AppError404Route
+  AppError500Route: typeof AppError500Route
+  AppErrorMaintenanceRoute: typeof AppErrorMaintenanceRoute
   AppFaqRoute: typeof AppFaqRoute
   AppFinanceRoute: typeof AppFinanceRoute
+  AppFormLayoutsRoute: typeof AppFormLayoutsRoute
+  AppFormValidationRoute: typeof AppFormValidationRoute
+  AppFormWizardRoute: typeof AppFormWizardRoute
   AppInventoryRoute: typeof AppInventoryRoute
+  AppKanbanRoute: typeof AppKanbanRoute
   AppLocationsRoute: typeof AppLocationsRoute
   AppLogisticsRoute: typeof AppLogisticsRoute
   AppLotsRoute: typeof AppLotsRoute
+  AppMailRoute: typeof AppMailRoute
   AppOnboardingRoute: typeof AppOnboardingRoute
   AppOrdersRoute: typeof AppOrdersRoute
+  AppPaymentsRoute: typeof AppPaymentsRoute
   AppPermissionsRoute: typeof AppPermissionsRoute
   AppPosRoute: typeof AppPosRoute
   AppPricingRoute: typeof AppPricingRoute
+  AppProductivityRoute: typeof AppProductivityRoute
   AppProfileRoute: typeof AppProfileRoute
   AppRolesRoute: typeof AppRolesRoute
   AppSalesRoute: typeof AppSalesRoute
+  AppSalesOverviewRoute: typeof AppSalesOverviewRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppShiftsRoute: typeof AppShiftsRoute
   AppSkusRoute: typeof AppSkusRoute
@@ -798,24 +1158,42 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppBarcodesRoute: AppBarcodesRoute,
   AppBondsRoute: AppBondsRoute,
   AppBrandsRoute: AppBrandsRoute,
+  AppCalendarRoute: AppCalendarRoute,
+  AppCampaignsRoute: AppCampaignsRoute,
   AppCategoriesRoute: AppCategoriesRoute,
+  AppChatRoute: AppChatRoute,
   AppCommerceDashboardRoute: AppCommerceDashboardRoute,
+  AppContactsRoute: AppContactsRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppDataTablesRoute: AppDataTablesRoute,
   AppEmptyStatesRoute: AppEmptyStatesRoute,
+  AppError401Route: AppError401Route,
+  AppError403Route: AppError403Route,
+  AppError404Route: AppError404Route,
+  AppError500Route: AppError500Route,
+  AppErrorMaintenanceRoute: AppErrorMaintenanceRoute,
   AppFaqRoute: AppFaqRoute,
   AppFinanceRoute: AppFinanceRoute,
+  AppFormLayoutsRoute: AppFormLayoutsRoute,
+  AppFormValidationRoute: AppFormValidationRoute,
+  AppFormWizardRoute: AppFormWizardRoute,
   AppInventoryRoute: AppInventoryRoute,
+  AppKanbanRoute: AppKanbanRoute,
   AppLocationsRoute: AppLocationsRoute,
   AppLogisticsRoute: AppLogisticsRoute,
   AppLotsRoute: AppLotsRoute,
+  AppMailRoute: AppMailRoute,
   AppOnboardingRoute: AppOnboardingRoute,
   AppOrdersRoute: AppOrdersRoute,
+  AppPaymentsRoute: AppPaymentsRoute,
   AppPermissionsRoute: AppPermissionsRoute,
   AppPosRoute: AppPosRoute,
   AppPricingRoute: AppPricingRoute,
+  AppProductivityRoute: AppProductivityRoute,
   AppProfileRoute: AppProfileRoute,
   AppRolesRoute: AppRolesRoute,
   AppSalesRoute: AppSalesRoute,
+  AppSalesOverviewRoute: AppSalesOverviewRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppShiftsRoute: AppShiftsRoute,
   AppSkusRoute: AppSkusRoute,

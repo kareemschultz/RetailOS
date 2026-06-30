@@ -66,3 +66,6 @@ admincn*.zip
 *admin-dashboard-template*.zip
 shadcn-nextjs-admincn-*/
 admincn-reference/
+
+# Agent worktrees (temporary full-repo copies; never commit)
+.claude/worktrees/

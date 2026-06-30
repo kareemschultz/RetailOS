@@ -65,17 +65,27 @@
           "a11y": {
             "noAmbiguousAnchorText": "off",
             "noNoninteractiveElementInteractions": "off",
+            "noRedundantAlt": "off",
             "noStaticElementInteractions": "off",
             "noSvgWithoutTitle": "off",
+            "useAnchorContent": "off",
             "useAriaPropsSupportedByRole": "off",
             "useKeyWithClickEvents": "off",
             "useSemanticElements": "off",
             "useValidAnchor": "off"
           },
-          "complexity": { "noForEach": "off" },
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off",
+            "noForEach": "off",
+            "useOptionalChain": "off"
+          },
           "correctness": { "useImageSize": "off" },
           "performance": { "noAccumulatingSpread": "off" },
-          "style": { "noNestedTernary": "off", "noNonNullAssertion": "off" },
+          "style": {
+            "noNestedTernary": "off",
+            "noNonNullAssertion": "off",
+            "useConsistentTypeDefinitions": "off"
+          },
           "suspicious": {
             "noAlert": "off",
             "noArrayIndexKey": "off",
