@@ -273,7 +273,7 @@ function SalesConsole() {
             <Input
               id={voidReasonId}
               onChange={(event) => setVoidReason(event.target.value)}
-              placeholder="Manager-approved mistake"
+              placeholder="Enter approved void reason"
               value={voidReason}
             />
           </div>

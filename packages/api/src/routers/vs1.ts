@@ -6257,6 +6257,176 @@ export const posRouter = {
     }),
 };
 
+interface OperationsSummaryScope {
+  companyId?: string;
+  locationId?: string;
+}
+
+function dayBounds(): { todayStart: Date; tomorrowStart: Date } {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  return { todayStart, tomorrowStart };
+}
+
+function countStatus<T extends { status: string; total: number }>(
+  rows: T[],
+  status: string
+): number {
+  return Number(rows.find((row) => row.status === status)?.total ?? 0);
+}
+
+function transferSummaryConditions(scope: OperationsSummaryScope): SQL[] {
+  const conditions: SQL[] = [isNull(schema.stockTransfer.deletedAt)];
+  if (scope.companyId) {
+    conditions.push(eq(schema.stockTransfer.companyId, scope.companyId));
+  }
+  if (scope.locationId) {
+    conditions.push(
+      or(
+        eq(schema.stockTransfer.sourceLocationId, scope.locationId),
+        eq(schema.stockTransfer.destLocationId, scope.locationId),
+        eq(schema.stockTransfer.inTransitLocationId, scope.locationId)
+      ) as SQL
+    );
+  }
+  return conditions;
+}
+
+function bondReceiptSummaryConditions(scope: OperationsSummaryScope): SQL[] {
+  const conditions: SQL[] = [isNull(schema.bondReceipt.deletedAt)];
+  if (scope.companyId) {
+    conditions.push(eq(schema.bondReceipt.companyId, scope.companyId));
+  }
+  if (scope.locationId) {
+    conditions.push(eq(schema.bondReceipt.locationId, scope.locationId));
+  }
+  return conditions;
+}
+
+function bondReleaseSummaryConditions(scope: OperationsSummaryScope): SQL[] {
+  const conditions: SQL[] = [isNull(schema.bondRelease.deletedAt)];
+  if (scope.companyId) {
+    conditions.push(eq(schema.bondRelease.companyId, scope.companyId));
+  }
+  if (scope.locationId) {
+    conditions.push(
+      or(
+        eq(schema.bondRelease.sourceLocationId, scope.locationId),
+        eq(schema.bondRelease.destLocationId, scope.locationId)
+      ) as SQL
+    );
+  }
+  return conditions;
+}
+
+function shiftSummaryConditions(scope: OperationsSummaryScope): SQL[] {
+  const conditions: SQL[] = [];
+  if (scope.companyId) {
+    conditions.push(eq(schema.shift.companyId, scope.companyId));
+  }
+  if (scope.locationId) {
+    conditions.push(eq(schema.shift.locationId, scope.locationId));
+  }
+  return conditions;
+}
+
+async function readOperationsSummary(
+  tx: TenantTransaction,
+  scope: OperationsSummaryScope
+) {
+  const { todayStart, tomorrowStart } = dayBounds();
+  const transferConditions = transferSummaryConditions(scope);
+  const bondReceiptConditions = bondReceiptSummaryConditions(scope);
+  const bondReleaseConditions = bondReleaseSummaryConditions(scope);
+  const shiftConditions = shiftSummaryConditions(scope);
+
+  const transferRows = await tx
+    .select({ status: schema.stockTransfer.status, total: count() })
+    .from(schema.stockTransfer)
+    .where(and(...transferConditions))
+    .groupBy(schema.stockTransfer.status);
+  const overdueTransfers = (
+    await tx
+      .select({ total: count() })
+      .from(schema.stockTransfer)
+      .where(
+        and(
+          ...transferConditions,
+          eq(schema.stockTransfer.status, "shipped"),
+          sql`${schema.stockTransfer.expectedReceiptDate} < CURRENT_DATE`
+        )
+      )
+  ).at(0);
+  const receivedTodayTransfers = (
+    await tx
+      .select({ total: count() })
+      .from(schema.stockTransfer)
+      .where(
+        and(
+          ...transferConditions,
+          eq(schema.stockTransfer.status, "received"),
+          gte(schema.stockTransfer.actualReceiptDate, todayStart),
+          lte(schema.stockTransfer.actualReceiptDate, tomorrowStart)
+        )
+      )
+  ).at(0);
+
+  const bondReceiptRows = await tx
+    .select({ status: schema.bondReceipt.status, total: count() })
+    .from(schema.bondReceipt)
+    .where(and(...bondReceiptConditions))
+    .groupBy(schema.bondReceipt.status);
+  const bondReleaseRows = await tx
+    .select({ status: schema.bondRelease.status, total: count() })
+    .from(schema.bondRelease)
+    .where(and(...bondReleaseConditions))
+    .groupBy(schema.bondRelease.status);
+
+  const openShift = (
+    await tx
+      .select({ total: count() })
+      .from(schema.shift)
+      .where(and(...shiftConditions, eq(schema.shift.status, "open")))
+  ).at(0);
+  const closedToday = (
+    await tx
+      .select({ total: count() })
+      .from(schema.shift)
+      .where(
+        and(
+          ...shiftConditions,
+          eq(schema.shift.status, "closed"),
+          gte(schema.shift.closedAt, todayStart),
+          lte(schema.shift.closedAt, tomorrowStart)
+        )
+      )
+  ).at(0);
+
+  return {
+    bonds: {
+      receiptsClosed: countStatus(bondReceiptRows, "closed"),
+      receiptsOpen: countStatus(bondReceiptRows, "open"),
+      releasesApproved: countStatus(bondReleaseRows, "approved"),
+      releasesPending: countStatus(bondReleaseRows, "pending"),
+      releasesReleased: countStatus(bondReleaseRows, "released"),
+    },
+    pos: {
+      closedToday: Number(closedToday?.total ?? 0),
+      openShifts: Number(openShift?.total ?? 0),
+    },
+    transfers: {
+      cancelled: countStatus(transferRows, "cancelled"),
+      draft: countStatus(transferRows, "draft"),
+      overdue: Number(overdueTransfers?.total ?? 0),
+      received: countStatus(transferRows, "received"),
+      receivedToday: Number(receivedTodayTransfers?.total ?? 0),
+      shipped: countStatus(transferRows, "shipped"),
+    },
+  };
+}
+
 export const reportsRouter = {
   salesBasic: tenantProcedure
     .input(
@@ -6501,6 +6671,31 @@ export const reportsRouter = {
         const lowStockCount = Number(lowRes.rows.at(0)?.n ?? 0);
 
         return { sales, transactionCount, inventoryValue, lowStockCount };
+      });
+    }),
+  // Operations cockpit — read-only workflow state for the enterprise overview.
+  // This endpoint deliberately returns counts/statuses only: no drawer cash,
+  // tender totals, duty values, or client-side business math. It gives the UI a
+  // real production data source for AdminCN-style operations cards/tabs.
+  operationsSummary: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid().optional(),
+        locationId: z.string().uuid().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        if (input.companyId) {
+          await assertCompanyVisible(tx, input.companyId);
+        }
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
+
+        return readOperationsSummary(tx, input);
       });
     }),
 };

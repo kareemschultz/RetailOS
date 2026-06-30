@@ -32,8 +32,6 @@ import {
 } from "@RetailOS/ui/components/tooltip";
 // Util Imports
 import { cn } from "@RetailOS/ui/lib/utils";
-// Next Imports
-import { Link } from "@tanstack/react-router";
 // Third-party Imports
 import type { ColumnDef, RowData } from "@tanstack/react-table";
 import { format } from "date-fns";
@@ -124,8 +122,7 @@ function UserRowActions({
             render={
               <Button
                 aria-label="View user"
-                nativeButton={false}
-                render={<Link to="/users" />}
+                onClick={() => onEditUser(user.id)}
                 size="icon"
                 variant="ghost"
               />

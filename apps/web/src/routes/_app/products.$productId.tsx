@@ -332,7 +332,7 @@ function ProductDetailScreen() {
                         className="pl-9"
                         id={urlFieldId}
                         onChange={(event) => setUrl(event.target.value)}
-                        placeholder="https://cdn.example.com/product.png"
+                        placeholder="Paste product image URL"
                         value={url}
                       />
                     </div>

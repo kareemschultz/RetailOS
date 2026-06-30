@@ -482,3 +482,13 @@
 ### Solo-dev fast loop — build on master → deploy → test on prod (owner directive) — 2026-06-29
 - **Context:** owner is a solo dev new to coding and wants to iterate the UI build-out fast: build directly on `master`, deploy to prod, test live, fix in the loop — deferring the branch/PR/Codex-review ceremony "until the app is fully built out, then we use branches."
 - **Rule (this phase only):** for UI/frontend build-out, commit on `master` and deploy to prod directly; the ONE non-negotiable guard before each deploy is `bun run check-types` + `bun -F web build` green (never hard-break prod), plus the mojibake guard. **Security/correctness-sensitive backend stays careful even in fast mode** — money/RLS/tenant-isolation/Shopix public surface still get tests + adversarial review; the relaxation is for presentation/UI only. Re-introduce branches+PRs+Codex when the owner says the app is built out.
+---
+
+### 37. Deleting template routes requires repairing generated and latent links
+- **Date:** 2026-06-30
+- **Context:** Client-submission hardening after AdminCN route adoption.
+- **Mistake:** Template/demo routes can be removed from source and navigation, but generated route types and latent links may still reference deleted paths until the router tree and related UI actions are regenerated/repaired.
+- **Root cause:** The route tree is generated runtime source in this repo, and apparently-unused feature code can still type-check against routes that disappear during production pruning.
+- **Fix:** Regenerate/check the TanStack route tree through the web type gate, inspect diffs for deleted route references, and replace broken latent links with workflow-local actions.
+- **Rule:** Route pruning is a three-part change: delete the source route, regenerate/commit `routeTree.gen.ts`, and scan/repair all links/actions that targeted the deleted path.
+

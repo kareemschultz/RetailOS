@@ -13,6 +13,12 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Client-submission hardening — operations cockpit + production route pruning (verified, 2026-06-30)
+- **Scope:** removed exposed AdminCN/template/demo routes from the TanStack route tree/source route set; narrowed navigation to real RetailOS modules only; added `/operations` as an AdminCN-style progressive-disclosure operations cockpit backed by the new `reports.operationsSummary` oRPC endpoint. Also neutralized visible placeholder/demo strings in product media + sale void fields and fixed the deleted-`/users` row action to open the edit dialog instead of linking to a removed route.
+- **Backend:** `reports.operationsSummary` is tenant-scoped, gated by `reports.view`, accepts optional company/location filters with visibility checks, and returns operational counts only for transfers, bonds, and shifts — no drawer cash, tender totals, duty values, or client-side financial math.
+- **Verification:** `bun run check`, `bun run check:mojibake`, `bun run check-types`, `bun run build`, and default `bun run test` are green. Route scan under `_app` for fake/mock/template/sample/showcase/example placeholder terms returned zero. Build emits only existing Vite chunk-size warnings.
+- **Deployment note:** live target is `retailos.karetechsolutions.com` / `retailos-api.karetechsolutions.com`; deploy through Infisical-wrapped `docker compose -f docker-compose.prod.yml up -d --build app server`, then smoke `/operations`, `/dashboard`, `/pos`, `/api/auth/ok`, and the operations summary API through the public origins.
+
 ### AdminCN frontend adoption — IN BUILD on `master`, deployed to prod (solo-dev fast loop, 2026-06-29)
 - **Workflow change (owner directive):** solo-dev fast loop — commit on `master` → deploy to prod → test live; branch/PR/Codex ceremony DEFERRED until the app is built out. ONE guard before deploy: `check-types` + `bun -F web build` + mojibake green. Backend (money/RLS/Shopix) stays careful. Memory: `solo-dev-fast-loop-workflow`.
 - **"Port" = COPY the real AdminCN source files in, edit only framework/data/token lines** (next/link→TanStack Link, next/navigation→useRouterState/useNavigate, next/font→@fontsource, demo data→oRPC, cookie store→localStorage) — NEVER hand-recreate. Template ZIP extracted to `/tmp/admincn_3` (gitignored). Keep TanStack Start (no Next migration).
