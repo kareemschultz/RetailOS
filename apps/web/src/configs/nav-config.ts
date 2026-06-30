@@ -16,7 +16,6 @@ import {
   Ruler,
   ScanLine,
   ShieldCheck,
-  TrendingUp,
   Workflow,
 } from "lucide-react";
 
@@ -106,7 +105,6 @@ export const navGroups: NavGroup[] = [
   {
     groupLabel: "Reports",
     items: [
-      { icon: TrendingUp, label: "Financial", to: "/reports/financial" },
       { icon: FileClock, label: "Number leases", to: "/reports/number-leases" },
     ],
   },
