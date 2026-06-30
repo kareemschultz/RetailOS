@@ -23,6 +23,11 @@ export default defineConfig({
     : {
         command:
           "bun run --cwd apps/web dev --host 127.0.0.1 --port 4177 --strictPort",
+        env: {
+          ...process.env,
+          VITE_SERVER_URL:
+            process.env.VITE_SERVER_URL ?? "http://127.0.0.1:3000",
+        },
         reuseExistingServer: false,
         timeout: 120_000,
         url: "http://127.0.0.1:4177/login",
