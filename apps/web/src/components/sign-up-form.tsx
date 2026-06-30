@@ -61,7 +61,7 @@ export default function SignUpForm() {
               name={field.name}
               onBlur={field.handleBlur}
               onChange={(e) => field.handleChange(e.target.value)}
-              placeholder="Alex Carter"
+              placeholder="Enter your full name"
               value={field.state.value}
             />
             {field.state.meta.errors.map((error) => (
@@ -86,7 +86,7 @@ export default function SignUpForm() {
               name={field.name}
               onBlur={field.handleBlur}
               onChange={(e) => field.handleChange(e.target.value)}
-              placeholder="you@store.com"
+              placeholder="Enter your work email"
               type="email"
               value={field.state.value}
             />

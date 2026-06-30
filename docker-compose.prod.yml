@@ -70,12 +70,14 @@ services:
     # time via `infisical run` — interpolated here, never written to disk or git.
     environment:
       NODE_ENV: production
-      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-saas}
       DATABASE_URL: ${DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       CORS_ORIGIN: ${CORS_ORIGIN}
       AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     networks: [pangolin, retailos-internal]
     restart: unless-stopped
     deploy:
