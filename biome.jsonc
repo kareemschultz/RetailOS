@@ -15,7 +15,9 @@
       "!**/.source",
       "!**/apps/fumadocs",
       // Static public assets (favicon, robots) are served verbatim — not JSX/source to lint.
-      "!**/apps/web/public"
+      "!**/apps/web/public",
+      // Agent worktrees are full repo copies (each with its own biome root) — never lint them.
+      "!**/.claude/worktrees"
     ]
   },
   "linter": {
@@ -31,5 +33,57 @@
         "useFilenamingConvention": "off"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      // Vendored AdminCN feature scaffolds (dense data tables, recharts charts,
+      // sample-data widgets) — copied verbatim from the template, themed to our
+      // tokens, kept as-is until wired to real data. Their strict-lint patterns
+      // (array-index keys on static sample rows, recharts SVG shapes without a
+      // <title>, non-null assertions / nested ternaries / accumulator spreads in
+      // the copied table code) are relaxed here; tighten as each is wired up.
+      "includes": [
+        "apps/web/src/features/**",
+        "packages/ui/src/components/avatar.tsx",
+        "packages/ui/src/components/background-ripple.tsx",
+        "packages/ui/src/components/chart.tsx",
+        "packages/ui/src/components/circular-progress.tsx",
+        "packages/ui/src/components/field.tsx",
+        "packages/ui/src/components/input-group.tsx",
+        "packages/ui/src/components/pagination.tsx",
+        "packages/ui/src/components/progress.tsx",
+        "packages/ui/src/components/rating.tsx",
+        "packages/ui/src/components/scroll-area.tsx",
+        "packages/ui/src/components/switch.tsx",
+        "packages/ui/src/components/textarea.tsx",
+        "packages/ui/src/components/timeline.tsx",
+        "packages/ui/src/components/toggle.tsx",
+        "packages/ui/src/components/toggle-group.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noAmbiguousAnchorText": "off",
+            "noNoninteractiveElementInteractions": "off",
+            "noStaticElementInteractions": "off",
+            "noSvgWithoutTitle": "off",
+            "useAriaPropsSupportedByRole": "off",
+            "useKeyWithClickEvents": "off",
+            "useSemanticElements": "off",
+            "useValidAnchor": "off"
+          },
+          "complexity": { "noForEach": "off" },
+          "correctness": { "useImageSize": "off" },
+          "performance": { "noAccumulatingSpread": "off" },
+          "style": { "noNestedTernary": "off", "noNonNullAssertion": "off" },
+          "suspicious": {
+            "noAlert": "off",
+            "noArrayIndexKey": "off",
+            "noExplicitAny": "off",
+            "useIterableCallbackReturn": "off"
+          }
+        }
+      }
+    }
+  ]
 }

@@ -13,22 +13,36 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppVariantsRouteImport } from './routes/_app/variants'
+import { Route as AppUsersRouteImport } from './routes/_app/users'
 import { Route as AppUomConversionsRouteImport } from './routes/_app/uom-conversions'
 import { Route as AppUnitsRouteImport } from './routes/_app/units'
 import { Route as AppTransfersRouteImport } from './routes/_app/transfers'
 import { Route as AppStockLedgerRouteImport } from './routes/_app/stock-ledger'
 import { Route as AppSkusRouteImport } from './routes/_app/skus'
 import { Route as AppShiftsRouteImport } from './routes/_app/shifts'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppSalesRouteImport } from './routes/_app/sales'
+import { Route as AppRolesRouteImport } from './routes/_app/roles'
+import { Route as AppProfileRouteImport } from './routes/_app/profile'
+import { Route as AppPricingRouteImport } from './routes/_app/pricing'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
+import { Route as AppPermissionsRouteImport } from './routes/_app/permissions'
+import { Route as AppOrdersRouteImport } from './routes/_app/orders'
+import { Route as AppOnboardingRouteImport } from './routes/_app/onboarding'
 import { Route as AppLotsRouteImport } from './routes/_app/lots'
+import { Route as AppLogisticsRouteImport } from './routes/_app/logistics'
 import { Route as AppLocationsRouteImport } from './routes/_app/locations'
 import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
+import { Route as AppFinanceRouteImport } from './routes/_app/finance'
+import { Route as AppFaqRouteImport } from './routes/_app/faq'
+import { Route as AppEmptyStatesRouteImport } from './routes/_app/empty-states'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppCommerceDashboardRouteImport } from './routes/_app/commerce-dashboard'
 import { Route as AppCategoriesRouteImport } from './routes/_app/categories'
 import { Route as AppBrandsRouteImport } from './routes/_app/brands'
 import { Route as AppBondsRouteImport } from './routes/_app/bonds'
 import { Route as AppBarcodesRouteImport } from './routes/_app/barcodes'
+import { Route as AppAnalyticsRouteImport } from './routes/_app/analytics'
 import { Route as AppProductsIndexRouteImport } from './routes/_app/products.index'
 import { Route as AppReportsNumberLeasesRouteImport } from './routes/_app/reports.number-leases'
 import { Route as AppReportsFinancialRouteImport } from './routes/_app/reports.financial'
@@ -51,6 +65,11 @@ const IndexRoute = IndexRouteImport.update({
 const AppVariantsRoute = AppVariantsRouteImport.update({
   id: '/variants',
   path: '/variants',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppUsersRoute = AppUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppUomConversionsRoute = AppUomConversionsRouteImport.update({
@@ -83,9 +102,29 @@ const AppShiftsRoute = AppShiftsRouteImport.update({
   path: '/shifts',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppSalesRoute = AppSalesRouteImport.update({
   id: '/sales',
   path: '/sales',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRolesRoute = AppRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppPricingRoute = AppPricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppPosRoute = AppPosRouteImport.update({
@@ -93,9 +132,29 @@ const AppPosRoute = AppPosRouteImport.update({
   path: '/pos',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppPermissionsRoute = AppPermissionsRouteImport.update({
+  id: '/permissions',
+  path: '/permissions',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppOrdersRoute = AppOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppOnboardingRoute = AppOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppLotsRoute = AppLotsRouteImport.update({
   id: '/lots',
   path: '/lots',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppLogisticsRoute = AppLogisticsRouteImport.update({
+  id: '/logistics',
+  path: '/logistics',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppLocationsRoute = AppLocationsRouteImport.update({
@@ -108,9 +167,29 @@ const AppInventoryRoute = AppInventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppFinanceRoute = AppFinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppFaqRoute = AppFaqRouteImport.update({
+  id: '/faq',
+  path: '/faq',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppEmptyStatesRoute = AppEmptyStatesRouteImport.update({
+  id: '/empty-states',
+  path: '/empty-states',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppCommerceDashboardRoute = AppCommerceDashboardRouteImport.update({
+  id: '/commerce-dashboard',
+  path: '/commerce-dashboard',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppCategoriesRoute = AppCategoriesRouteImport.update({
@@ -131,6 +210,11 @@ const AppBondsRoute = AppBondsRouteImport.update({
 const AppBarcodesRoute = AppBarcodesRouteImport.update({
   id: '/barcodes',
   path: '/barcodes',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppProductsIndexRoute = AppProductsIndexRouteImport.update({
@@ -157,22 +241,36 @@ const AppProductsProductIdRoute = AppProductsProductIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/analytics': typeof AppAnalyticsRoute
   '/barcodes': typeof AppBarcodesRoute
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
   '/categories': typeof AppCategoriesRoute
+  '/commerce-dashboard': typeof AppCommerceDashboardRoute
   '/dashboard': typeof AppDashboardRoute
+  '/empty-states': typeof AppEmptyStatesRoute
+  '/faq': typeof AppFaqRoute
+  '/finance': typeof AppFinanceRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
+  '/logistics': typeof AppLogisticsRoute
   '/lots': typeof AppLotsRoute
+  '/onboarding': typeof AppOnboardingRoute
+  '/orders': typeof AppOrdersRoute
+  '/permissions': typeof AppPermissionsRoute
   '/pos': typeof AppPosRoute
+  '/pricing': typeof AppPricingRoute
+  '/profile': typeof AppProfileRoute
+  '/roles': typeof AppRolesRoute
   '/sales': typeof AppSalesRoute
+  '/settings': typeof AppSettingsRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
   '/stock-ledger': typeof AppStockLedgerRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
   '/uom-conversions': typeof AppUomConversionsRoute
+  '/users': typeof AppUsersRoute
   '/variants': typeof AppVariantsRoute
   '/products/$productId': typeof AppProductsProductIdRoute
   '/reports/financial': typeof AppReportsFinancialRoute
@@ -182,22 +280,36 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/analytics': typeof AppAnalyticsRoute
   '/barcodes': typeof AppBarcodesRoute
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
   '/categories': typeof AppCategoriesRoute
+  '/commerce-dashboard': typeof AppCommerceDashboardRoute
   '/dashboard': typeof AppDashboardRoute
+  '/empty-states': typeof AppEmptyStatesRoute
+  '/faq': typeof AppFaqRoute
+  '/finance': typeof AppFinanceRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
+  '/logistics': typeof AppLogisticsRoute
   '/lots': typeof AppLotsRoute
+  '/onboarding': typeof AppOnboardingRoute
+  '/orders': typeof AppOrdersRoute
+  '/permissions': typeof AppPermissionsRoute
   '/pos': typeof AppPosRoute
+  '/pricing': typeof AppPricingRoute
+  '/profile': typeof AppProfileRoute
+  '/roles': typeof AppRolesRoute
   '/sales': typeof AppSalesRoute
+  '/settings': typeof AppSettingsRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
   '/stock-ledger': typeof AppStockLedgerRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
   '/uom-conversions': typeof AppUomConversionsRoute
+  '/users': typeof AppUsersRoute
   '/variants': typeof AppVariantsRoute
   '/products/$productId': typeof AppProductsProductIdRoute
   '/reports/financial': typeof AppReportsFinancialRoute
@@ -209,22 +321,36 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/analytics': typeof AppAnalyticsRoute
   '/_app/barcodes': typeof AppBarcodesRoute
   '/_app/bonds': typeof AppBondsRoute
   '/_app/brands': typeof AppBrandsRoute
   '/_app/categories': typeof AppCategoriesRoute
+  '/_app/commerce-dashboard': typeof AppCommerceDashboardRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/empty-states': typeof AppEmptyStatesRoute
+  '/_app/faq': typeof AppFaqRoute
+  '/_app/finance': typeof AppFinanceRoute
   '/_app/inventory': typeof AppInventoryRoute
   '/_app/locations': typeof AppLocationsRoute
+  '/_app/logistics': typeof AppLogisticsRoute
   '/_app/lots': typeof AppLotsRoute
+  '/_app/onboarding': typeof AppOnboardingRoute
+  '/_app/orders': typeof AppOrdersRoute
+  '/_app/permissions': typeof AppPermissionsRoute
   '/_app/pos': typeof AppPosRoute
+  '/_app/pricing': typeof AppPricingRoute
+  '/_app/profile': typeof AppProfileRoute
+  '/_app/roles': typeof AppRolesRoute
   '/_app/sales': typeof AppSalesRoute
+  '/_app/settings': typeof AppSettingsRoute
   '/_app/shifts': typeof AppShiftsRoute
   '/_app/skus': typeof AppSkusRoute
   '/_app/stock-ledger': typeof AppStockLedgerRoute
   '/_app/transfers': typeof AppTransfersRoute
   '/_app/units': typeof AppUnitsRoute
   '/_app/uom-conversions': typeof AppUomConversionsRoute
+  '/_app/users': typeof AppUsersRoute
   '/_app/variants': typeof AppVariantsRoute
   '/_app/products/$productId': typeof AppProductsProductIdRoute
   '/_app/reports/financial': typeof AppReportsFinancialRoute
@@ -236,22 +362,36 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/analytics'
     | '/barcodes'
     | '/bonds'
     | '/brands'
     | '/categories'
+    | '/commerce-dashboard'
     | '/dashboard'
+    | '/empty-states'
+    | '/faq'
+    | '/finance'
     | '/inventory'
     | '/locations'
+    | '/logistics'
     | '/lots'
+    | '/onboarding'
+    | '/orders'
+    | '/permissions'
     | '/pos'
+    | '/pricing'
+    | '/profile'
+    | '/roles'
     | '/sales'
+    | '/settings'
     | '/shifts'
     | '/skus'
     | '/stock-ledger'
     | '/transfers'
     | '/units'
     | '/uom-conversions'
+    | '/users'
     | '/variants'
     | '/products/$productId'
     | '/reports/financial'
@@ -261,22 +401,36 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/analytics'
     | '/barcodes'
     | '/bonds'
     | '/brands'
     | '/categories'
+    | '/commerce-dashboard'
     | '/dashboard'
+    | '/empty-states'
+    | '/faq'
+    | '/finance'
     | '/inventory'
     | '/locations'
+    | '/logistics'
     | '/lots'
+    | '/onboarding'
+    | '/orders'
+    | '/permissions'
     | '/pos'
+    | '/pricing'
+    | '/profile'
+    | '/roles'
     | '/sales'
+    | '/settings'
     | '/shifts'
     | '/skus'
     | '/stock-ledger'
     | '/transfers'
     | '/units'
     | '/uom-conversions'
+    | '/users'
     | '/variants'
     | '/products/$productId'
     | '/reports/financial'
@@ -287,22 +441,36 @@ export interface FileRouteTypes {
     | '/'
     | '/_app'
     | '/login'
+    | '/_app/analytics'
     | '/_app/barcodes'
     | '/_app/bonds'
     | '/_app/brands'
     | '/_app/categories'
+    | '/_app/commerce-dashboard'
     | '/_app/dashboard'
+    | '/_app/empty-states'
+    | '/_app/faq'
+    | '/_app/finance'
     | '/_app/inventory'
     | '/_app/locations'
+    | '/_app/logistics'
     | '/_app/lots'
+    | '/_app/onboarding'
+    | '/_app/orders'
+    | '/_app/permissions'
     | '/_app/pos'
+    | '/_app/pricing'
+    | '/_app/profile'
+    | '/_app/roles'
     | '/_app/sales'
+    | '/_app/settings'
     | '/_app/shifts'
     | '/_app/skus'
     | '/_app/stock-ledger'
     | '/_app/transfers'
     | '/_app/units'
     | '/_app/uom-conversions'
+    | '/_app/users'
     | '/_app/variants'
     | '/_app/products/$productId'
     | '/_app/reports/financial'
@@ -344,6 +512,13 @@ declare module '@tanstack/react-router' {
       path: '/variants'
       fullPath: '/variants'
       preLoaderRoute: typeof AppVariantsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/users': {
+      id: '/_app/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AppUsersRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/uom-conversions': {
@@ -388,11 +563,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppShiftsRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/sales': {
       id: '/_app/sales'
       path: '/sales'
       fullPath: '/sales'
       preLoaderRoute: typeof AppSalesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/roles': {
+      id: '/_app/roles'
+      path: '/roles'
+      fullPath: '/roles'
+      preLoaderRoute: typeof AppRolesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/profile': {
+      id: '/_app/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/pricing': {
+      id: '/_app/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof AppPricingRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/pos': {
@@ -402,11 +605,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPosRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/permissions': {
+      id: '/_app/permissions'
+      path: '/permissions'
+      fullPath: '/permissions'
+      preLoaderRoute: typeof AppPermissionsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/orders': {
+      id: '/_app/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof AppOrdersRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/onboarding': {
+      id: '/_app/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof AppOnboardingRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/lots': {
       id: '/_app/lots'
       path: '/lots'
       fullPath: '/lots'
       preLoaderRoute: typeof AppLotsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/logistics': {
+      id: '/_app/logistics'
+      path: '/logistics'
+      fullPath: '/logistics'
+      preLoaderRoute: typeof AppLogisticsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/locations': {
@@ -423,11 +654,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppInventoryRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/finance': {
+      id: '/_app/finance'
+      path: '/finance'
+      fullPath: '/finance'
+      preLoaderRoute: typeof AppFinanceRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/faq': {
+      id: '/_app/faq'
+      path: '/faq'
+      fullPath: '/faq'
+      preLoaderRoute: typeof AppFaqRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/empty-states': {
+      id: '/_app/empty-states'
+      path: '/empty-states'
+      fullPath: '/empty-states'
+      preLoaderRoute: typeof AppEmptyStatesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/dashboard': {
       id: '/_app/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/commerce-dashboard': {
+      id: '/_app/commerce-dashboard'
+      path: '/commerce-dashboard'
+      fullPath: '/commerce-dashboard'
+      preLoaderRoute: typeof AppCommerceDashboardRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/categories': {
@@ -456,6 +715,13 @@ declare module '@tanstack/react-router' {
       path: '/barcodes'
       fullPath: '/barcodes'
       preLoaderRoute: typeof AppBarcodesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/analytics': {
+      id: '/_app/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AppAnalyticsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/products/': {
@@ -490,22 +756,36 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteRouteChildren {
+  AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppBarcodesRoute: typeof AppBarcodesRoute
   AppBondsRoute: typeof AppBondsRoute
   AppBrandsRoute: typeof AppBrandsRoute
   AppCategoriesRoute: typeof AppCategoriesRoute
+  AppCommerceDashboardRoute: typeof AppCommerceDashboardRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppEmptyStatesRoute: typeof AppEmptyStatesRoute
+  AppFaqRoute: typeof AppFaqRoute
+  AppFinanceRoute: typeof AppFinanceRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppLocationsRoute: typeof AppLocationsRoute
+  AppLogisticsRoute: typeof AppLogisticsRoute
   AppLotsRoute: typeof AppLotsRoute
+  AppOnboardingRoute: typeof AppOnboardingRoute
+  AppOrdersRoute: typeof AppOrdersRoute
+  AppPermissionsRoute: typeof AppPermissionsRoute
   AppPosRoute: typeof AppPosRoute
+  AppPricingRoute: typeof AppPricingRoute
+  AppProfileRoute: typeof AppProfileRoute
+  AppRolesRoute: typeof AppRolesRoute
   AppSalesRoute: typeof AppSalesRoute
+  AppSettingsRoute: typeof AppSettingsRoute
   AppShiftsRoute: typeof AppShiftsRoute
   AppSkusRoute: typeof AppSkusRoute
   AppStockLedgerRoute: typeof AppStockLedgerRoute
   AppTransfersRoute: typeof AppTransfersRoute
   AppUnitsRoute: typeof AppUnitsRoute
   AppUomConversionsRoute: typeof AppUomConversionsRoute
+  AppUsersRoute: typeof AppUsersRoute
   AppVariantsRoute: typeof AppVariantsRoute
   AppProductsProductIdRoute: typeof AppProductsProductIdRoute
   AppReportsFinancialRoute: typeof AppReportsFinancialRoute
@@ -514,22 +794,36 @@ interface AppRouteRouteChildren {
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppAnalyticsRoute: AppAnalyticsRoute,
   AppBarcodesRoute: AppBarcodesRoute,
   AppBondsRoute: AppBondsRoute,
   AppBrandsRoute: AppBrandsRoute,
   AppCategoriesRoute: AppCategoriesRoute,
+  AppCommerceDashboardRoute: AppCommerceDashboardRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppEmptyStatesRoute: AppEmptyStatesRoute,
+  AppFaqRoute: AppFaqRoute,
+  AppFinanceRoute: AppFinanceRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppLocationsRoute: AppLocationsRoute,
+  AppLogisticsRoute: AppLogisticsRoute,
   AppLotsRoute: AppLotsRoute,
+  AppOnboardingRoute: AppOnboardingRoute,
+  AppOrdersRoute: AppOrdersRoute,
+  AppPermissionsRoute: AppPermissionsRoute,
   AppPosRoute: AppPosRoute,
+  AppPricingRoute: AppPricingRoute,
+  AppProfileRoute: AppProfileRoute,
+  AppRolesRoute: AppRolesRoute,
   AppSalesRoute: AppSalesRoute,
+  AppSettingsRoute: AppSettingsRoute,
   AppShiftsRoute: AppShiftsRoute,
   AppSkusRoute: AppSkusRoute,
   AppStockLedgerRoute: AppStockLedgerRoute,
   AppTransfersRoute: AppTransfersRoute,
   AppUnitsRoute: AppUnitsRoute,
   AppUomConversionsRoute: AppUomConversionsRoute,
+  AppUsersRoute: AppUsersRoute,
   AppVariantsRoute: AppVariantsRoute,
   AppProductsProductIdRoute: AppProductsProductIdRoute,
   AppReportsFinancialRoute: AppReportsFinancialRoute,

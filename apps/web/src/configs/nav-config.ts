@@ -2,21 +2,34 @@ import type { LinkProps } from "@tanstack/react-router";
 import {
   ArrowLeftRight,
   BadgeCheck,
+  Banknote,
+  BarChart3,
   Boxes,
   CircleDollarSign,
+  CircleHelp,
   FileClock,
   FolderTree,
   History,
+  Inbox,
+  KeyRound,
   Layers,
   LayoutDashboard,
   type LucideIcon,
   MapPin,
   Package,
   ReceiptText,
+  Rocket,
   Ruler,
   ScanLine,
+  Settings,
   ShieldCheck,
+  ShoppingBag,
+  ShoppingCart,
   TrendingUp,
+  Truck,
+  UserCog,
+  UserRound,
+  Users,
   Workflow,
 } from "lucide-react";
 
@@ -52,6 +65,21 @@ export const navGroups: NavGroup[] = [
       { icon: ScanLine, label: "Point of Sale", to: "/pos" },
       { icon: ReceiptText, label: "Sales", to: "/sales" },
       { icon: CircleDollarSign, label: "Shifts", to: "/shifts" },
+    ],
+  },
+  {
+    groupLabel: "Insights",
+    items: [
+      { icon: Banknote, label: "Finance", to: "/finance" },
+      { icon: BarChart3, label: "Analytics", to: "/analytics" },
+      { icon: Truck, label: "Logistics", to: "/logistics" },
+    ],
+  },
+  {
+    groupLabel: "Commerce",
+    items: [
+      { icon: ShoppingCart, label: "Orders", to: "/orders" },
+      { icon: ShoppingBag, label: "eCommerce", to: "/commerce-dashboard" },
     ],
   },
   {
@@ -93,6 +121,25 @@ export const navGroups: NavGroup[] = [
     items: [
       { icon: TrendingUp, label: "Financial", to: "/reports/financial" },
       { icon: FileClock, label: "Number leases", to: "/reports/number-leases" },
+    ],
+  },
+  {
+    groupLabel: "Administration",
+    items: [
+      { icon: Users, label: "Users", to: "/users" },
+      { icon: UserCog, label: "Roles", to: "/roles" },
+      { icon: KeyRound, label: "Permissions", to: "/permissions" },
+      { icon: Settings, label: "Settings", to: "/settings" },
+      { icon: UserRound, label: "Profile", to: "/profile" },
+    ],
+  },
+  {
+    groupLabel: "Pages",
+    items: [
+      { icon: Banknote, label: "Pricing", to: "/pricing" },
+      { icon: CircleHelp, label: "FAQ", to: "/faq" },
+      { icon: Rocket, label: "Onboarding", to: "/onboarding" },
+      { icon: Inbox, label: "Empty states", to: "/empty-states" },
     ],
   },
 ];
