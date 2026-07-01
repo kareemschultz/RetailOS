@@ -25,7 +25,7 @@
 ### Missing or incomplete
 
 - Financials/accounting: no COA, journals, posting periods, AR/AP, bank reconciliation, VAT/GRA reports, P&L, balance sheet, trial balance.
-- Procurement/POs: suppliers, purchase orders, and GRN-lite goods receipts are backend-built; supplier bills, landed costs, three-way match, vendor payments, and procurement UI remain incomplete.
+- Procurement/POs: suppliers, purchase orders, GRN-lite goods receipts, and supplier-bill three-way match entities are backend-built; landed costs, vendor payments, and procurement UI remain incomplete.
 - Storefront/commerce: no public catalog, PDP, cart, checkout, online orders, public payments, customer identity, fulfilment.
 - POS/offline: no general offline sync ingestion, no Tauri SQLite queue, no integrated payment provider lifecycle, no fiscal writer, no commission/stored-value ledger.
 - Reports IA: no `/reports` landing page; Financials route exists but is not discoverable and intentionally unavailable.
@@ -107,7 +107,7 @@
 2. Purchase orders and PO lines with approval workflow.
 3. [x] GRN/goods receipt against PO using valued receipt primitive — backend slice added in `0026_goods_receipt_grn_lite`; UI deferred.
 4. [x] Partial receiving and over-receipt rejection/disposition baseline — partial receipt updates status; over-receipt is blocked pending owner policy.
-5. Supplier bills and three-way match entities.
+5. [x] Supplier bills and three-way match entities — backend slice added in `0027_supplier_bill_three_way_match`; AP posting/vendor payment UI deferred.
 6. Landed cost pools/allocation with per-pool largest-remainder math.
 7. Import batch/customs tracking using Phase-3 bond seams.
 8. Reorder suggestion → PO conversion.

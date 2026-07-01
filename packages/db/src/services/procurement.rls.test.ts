@@ -18,6 +18,8 @@ import {
   sku,
   stockLedger,
   supplier,
+  supplierBill,
+  supplierBillLine,
   unitOfMeasure,
   valuationLayer,
 } from "../schema";
@@ -25,6 +27,7 @@ import { withTenant } from "../tenant";
 import {
   createPurchaseOrder,
   createSupplier,
+  createSupplierBill,
   receivePurchaseOrder,
 } from "./procurement";
 
@@ -61,6 +64,8 @@ describe.skipIf(!url)("Phase D procurement foundation", () => {
       .onConflictDoNothing();
     for (const tenant of [TENANT, OTHER_TENANT]) {
       await withTenant(db, tenant, async (tx) => {
+        await tx.delete(supplierBillLine);
+        await tx.delete(supplierBill);
         await tx.delete(goodsReceiptLine);
         await tx.delete(valuationLayer);
         await tx.delete(avgCost);
@@ -434,6 +439,114 @@ describe.skipIf(!url)("Phase D procurement foundation", () => {
                 qtyReceived: 1,
               },
             ],
+          }
+        )
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
+
+  it("creates supplier bills from received goods and rejects over-billing", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-BILL", name: "Bill Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-BILL",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 6, unitCostMinor: 175 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-BILL",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 4,
+            },
+          ],
+        }
+      );
+
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-001",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 4,
+            },
+          ],
+        }
+      );
+
+      expect(bill.bill.totalMinor).toBe(700);
+      expect(bill.lines).toHaveLength(1);
+      expect(bill.lines[0]?.lineTotalMinor).toBe(700);
+      const audits = await tx.select().from(auditLog);
+      expect(audits.map((row) => row.action)).toContain(
+        "procurement.supplier_bill.create"
+      );
+      await expect(
+        createSupplierBill(
+          tx,
+          { tenantId: TENANT },
+          {
+            purchaseOrderId: po.id,
+            number: "BILL-OVER",
+            lines: [
+              {
+                goodsReceiptLineId: required(receipt.lines[0], "receipt line")
+                  .id,
+                qtyBilled: 1,
+              },
+            ],
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
+    });
+  });
+
+  it("rejects supplier bills against cross-tenant receipt lines", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-BILL-CROSS", name: "Bill Cross Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-BILL-CROSS",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 1, unitCostMinor: 100 }],
+        }
+      );
+      await expect(
+        createSupplierBill(
+          tx,
+          { tenantId: TENANT },
+          {
+            purchaseOrderId: po.id,
+            number: "BILL-CROSS",
+            lines: [{ goodsReceiptLineId: otherLocationId, qtyBilled: 1 }],
           }
         )
       ).rejects.toMatchObject({ code: "NOT_FOUND" });

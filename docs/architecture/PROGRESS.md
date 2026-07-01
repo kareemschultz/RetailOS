@@ -13,11 +13,16 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Phase D supplier bills — three-way match entities (verified, 2026-07-01)
+- **Scope:** added procurement supplier-bill backend slice on `feature/full-module-buildout`: `supplier_bill` + `supplier_bill_line` schema, generated migration `0027_supplier_bill_three_way_match`, fail-closed RLS block, service-level `createSupplierBill`, and `procurement.supplierBillCreate` API endpoint.
+- **Behavior:** validates same-tenant PO/GRN/receipt-line graph, serializes per PO with advisory lock, rejects cancelled POs, duplicate bill lines, cross-tenant receipt lines, currency/scale mismatches, and over-billing beyond received quantity. Totals are computed server-side from received unit cost, with audit action `procurement.supplier_bill.create` and outbox event `procurement.supplier_bill.created`.
+- **Verification:** TDD red was observed via `bun run check-types` before implementation; after implementation `bun run check-types` and the real disposable PG18 focused procurement RLS gate are green. Migration journal tag was corrected after renaming Drizzle's generated `0027_low_mojo` file so `drizzle-kit migrate` can resolve the SQL file.
+- **Remaining Phase D:** landed-cost pools/allocation, import/customs batch tracking, reorder suggestion → PO conversion, and procurement UI.
+
 ### Phase D GRN-lite — goods receipt against purchase orders (verified, 2026-07-01)
 - **Scope:** added procurement goods-receipt/GRN-lite backend slice on `feature/full-module-buildout`: `goods_receipt` + `goods_receipt_line` schema, generated migration `0026_goods_receipt_grn_lite`, fail-closed RLS block, service-level `receivePurchaseOrder`, and `procurement.goodsReceiptCreate` API endpoint.
 - **Behavior:** validates same-tenant PO/location/PO-line graph, rejects cancelled/fully received POs and over-receipts, appends immutable `stock_ledger` receipt movements via `appendStockMovement`, applies valuation via `applyValuation`, updates `purchase_order_line.qty_received`, rolls PO status to `partially_received`/`received`, records audit, and emits `inventory.received` outbox event.
-- **Verification:** TDD red was observed via `bun run check-types` before implementation; after implementation `bun run check`, `bun run check-types`, `bun run check:mojibake`, focused procurement RLS test file, and default `bun run test` are green. DB-gated RLS tests remain skipped locally because `RLS_TEST_DATABASE_URL` is unset in this shell.
-- **Caveat before merge/deploy:** run the real disposable PG18 RLS gate with migrations applied and `RLS_TEST_DATABASE_URL` set before claiming zero-skip database verification for the GRN slice.
+- **Verification:** TDD red was observed via `bun run check-types` before implementation; after implementation `bun run check`, `bun run check-types`, `bun run check:mojibake`, focused procurement RLS test file, and default `bun run test` are green. The previous DB-gated caveat is resolved for the focused procurement suite: disposable PG18 with migrations run as `retailos_migrator` and tests as `retailos_app` is green.
 
 ### Parallel module buildout integration — POS/offline + Commerce + Procurement/Financials (verified, 2026-07-01)
 - **Scope:** integrated three bounded feature lanes into `feature/full-module-buildout`: POS/offline terminal + durable mutation ingestion foundation, hostname-scoped Commerce/Shopix public read-model skeleton, and Procurement/Financials foundations for suppliers/POs and ledger/journal/posting-period services.

@@ -9,6 +9,8 @@ import {
   purchaseOrderLine,
   sku,
   supplier,
+  supplierBill,
+  supplierBillLine,
 } from "../schema";
 import type { TenantTransaction } from "../tenant";
 import { recordAudit } from "./audit";
@@ -200,6 +202,7 @@ export interface ReceivePurchaseOrderInput {
 
 type GoodsReceiptRow = typeof goodsReceipt.$inferSelect;
 type GoodsReceiptLineRow = typeof goodsReceiptLine.$inferSelect;
+type PurchaseOrderRow = typeof purchaseOrder.$inferSelect;
 type PurchaseOrderLineRow = typeof purchaseOrderLine.$inferSelect;
 
 async function assertReceivingLocation(
@@ -238,6 +241,277 @@ function assertReceiptablePurchaseOrder(status: string): void {
       "INVALID_STATE"
     );
   }
+}
+
+export interface CreateSupplierBillLineInput {
+  goodsReceiptLineId: string;
+  qtyBilled: number;
+}
+
+export interface CreateSupplierBillInput {
+  billDate?: Date | null;
+  dueDate?: Date | null;
+  lines: CreateSupplierBillLineInput[];
+  notes?: string | null;
+  number: string;
+  purchaseOrderId: string;
+}
+
+type SupplierBillRow = typeof supplierBill.$inferSelect;
+type SupplierBillLineRow = typeof supplierBillLine.$inferSelect;
+
+type BillableReceiptLine = GoodsReceiptLineRow & {
+  companyId: string;
+  purchaseOrderStatus: string;
+  receiptStatus: string;
+  supplierId: string;
+};
+
+async function loadBillableReceiptLine(
+  tx: TenantTransaction,
+  purchaseOrderId: string,
+  goodsReceiptLineId: string
+): Promise<BillableReceiptLine> {
+  const row = (
+    await tx
+      .select({
+        id: goodsReceiptLine.id,
+        tenantId: goodsReceiptLine.tenantId,
+        goodsReceiptId: goodsReceiptLine.goodsReceiptId,
+        purchaseOrderId: goodsReceiptLine.purchaseOrderId,
+        purchaseOrderLineId: goodsReceiptLine.purchaseOrderLineId,
+        productId: goodsReceiptLine.productId,
+        skuId: goodsReceiptLine.skuId,
+        qtyReceived: goodsReceiptLine.qtyReceived,
+        unitCostMinor: goodsReceiptLine.unitCostMinor,
+        currency: goodsReceiptLine.currency,
+        scale: goodsReceiptLine.scale,
+        movementId: goodsReceiptLine.movementId,
+        createdAt: goodsReceiptLine.createdAt,
+        updatedAt: goodsReceiptLine.updatedAt,
+        companyId: goodsReceipt.companyId,
+        supplierId: goodsReceipt.supplierId,
+        receiptStatus: goodsReceipt.status,
+        purchaseOrderStatus: purchaseOrder.status,
+      })
+      .from(goodsReceiptLine)
+      .innerJoin(
+        goodsReceipt,
+        and(
+          eq(goodsReceipt.id, goodsReceiptLine.goodsReceiptId),
+          eq(goodsReceipt.purchaseOrderId, purchaseOrderId)
+        )
+      )
+      .innerJoin(
+        purchaseOrder,
+        eq(purchaseOrder.id, goodsReceiptLine.purchaseOrderId)
+      )
+      .where(
+        and(
+          eq(goodsReceiptLine.id, goodsReceiptLineId),
+          eq(goodsReceiptLine.purchaseOrderId, purchaseOrderId)
+        )
+      )
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ProcurementError("Goods receipt line not found", "NOT_FOUND");
+  }
+  if (row.receiptStatus !== "posted") {
+    throw new ProcurementError(
+      "Only posted goods receipt lines can be billed",
+      "INVALID_STATE"
+    );
+  }
+  if (row.purchaseOrderStatus === "cancelled") {
+    throw new ProcurementError(
+      "Cancelled purchase order cannot be billed",
+      "INVALID_STATE"
+    );
+  }
+  return row;
+}
+
+function assertBillableLineMatchesPo(
+  receiptLine: BillableReceiptLine,
+  po: PurchaseOrderRow
+) {
+  if (
+    receiptLine.companyId !== po.companyId ||
+    receiptLine.supplierId !== po.supplierId
+  ) {
+    throw new ProcurementError(
+      "Goods receipt does not match purchase order header",
+      "NOT_FOUND"
+    );
+  }
+  if (receiptLine.currency !== po.currency || receiptLine.scale !== po.scale) {
+    throw new ProcurementError(
+      "Supplier bill lines must use the purchase order currency and scale",
+      "INVALID_STATE"
+    );
+  }
+}
+
+async function priorBilledQty(
+  tx: TenantTransaction,
+  goodsReceiptLineId: string
+): Promise<number> {
+  return (
+    await tx
+      .select({ qtyBilled: supplierBillLine.qtyBilled })
+      .from(supplierBillLine)
+      .innerJoin(
+        supplierBill,
+        eq(supplierBill.id, supplierBillLine.supplierBillId)
+      )
+      .where(
+        and(
+          eq(supplierBillLine.goodsReceiptLineId, goodsReceiptLineId),
+          eq(supplierBill.status, "posted")
+        )
+      )
+  ).reduce((sum, row) => sum + row.qtyBilled, 0);
+}
+
+export async function createSupplierBill(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  input: CreateSupplierBillInput
+): Promise<{ bill: SupplierBillRow; lines: SupplierBillLineRow[] }> {
+  if (input.lines.length === 0) {
+    throw new ProcurementError(
+      "At least one supplier bill line is required",
+      "INVALID_STATE"
+    );
+  }
+
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-bill:${ctx.tenantId}:${input.purchaseOrderId}`}, 0))`
+  );
+
+  const po = (
+    await tx
+      .select()
+      .from(purchaseOrder)
+      .where(eq(purchaseOrder.id, input.purchaseOrderId))
+      .limit(1)
+  ).at(0);
+  if (!po) {
+    throw new ProcurementError("Purchase order not found", "NOT_FOUND");
+  }
+  if (po.status === "cancelled") {
+    throw new ProcurementError(
+      "Cancelled purchase order cannot be billed",
+      "INVALID_STATE"
+    );
+  }
+
+  const seenReceiptLineIds = new Set<string>();
+  const billableLines: Array<BillableReceiptLine & { qtyBilled: number }> = [];
+  let totalMinor = 0;
+
+  for (const line of input.lines) {
+    if (line.qtyBilled <= 0) {
+      throw new ProcurementError(
+        "Bill quantity must be positive",
+        "INVALID_STATE"
+      );
+    }
+    if (seenReceiptLineIds.has(line.goodsReceiptLineId)) {
+      throw new ProcurementError(
+        "Duplicate goods receipt line on supplier bill",
+        "INVALID_STATE"
+      );
+    }
+    seenReceiptLineIds.add(line.goodsReceiptLineId);
+
+    const receiptLine = await loadBillableReceiptLine(
+      tx,
+      input.purchaseOrderId,
+      line.goodsReceiptLineId
+    );
+    assertBillableLineMatchesPo(receiptLine, po);
+
+    const alreadyBilled = await priorBilledQty(tx, receiptLine.id);
+    if (alreadyBilled + line.qtyBilled > receiptLine.qtyReceived) {
+      throw new ProcurementError(
+        "Supplier bill quantity exceeds received quantity",
+        "INVALID_STATE"
+      );
+    }
+
+    totalMinor += line.qtyBilled * receiptLine.unitCostMinor;
+    billableLines.push({ ...receiptLine, qtyBilled: line.qtyBilled });
+  }
+
+  const bill = (
+    await tx
+      .insert(supplierBill)
+      .values({
+        tenantId: ctx.tenantId,
+        companyId: po.companyId,
+        supplierId: po.supplierId,
+        purchaseOrderId: po.id,
+        number: input.number,
+        billDate: input.billDate ?? new Date(),
+        dueDate: input.dueDate ?? null,
+        currency: po.currency,
+        scale: po.scale,
+        totalMinor,
+        notes: input.notes ?? null,
+        createdBy: ctx.actorUserId ?? null,
+      })
+      .returning()
+  ).at(0);
+  if (!bill) {
+    throw new Error("createSupplierBill: header insert failed");
+  }
+
+  const lines = await tx
+    .insert(supplierBillLine)
+    .values(
+      billableLines.map((line) => ({
+        tenantId: ctx.tenantId,
+        supplierBillId: bill.id,
+        purchaseOrderId: po.id,
+        purchaseOrderLineId: line.purchaseOrderLineId,
+        goodsReceiptId: line.goodsReceiptId,
+        goodsReceiptLineId: line.id,
+        productId: line.productId,
+        skuId: line.skuId,
+        qtyBilled: line.qtyBilled,
+        unitCostMinor: line.unitCostMinor,
+        lineTotalMinor: line.qtyBilled * line.unitCostMinor,
+        currency: line.currency,
+        scale: line.scale,
+      }))
+    )
+    .returning();
+
+  await recordAudit(tx, ctx, {
+    action: "procurement.supplier_bill.create",
+    entityType: "supplier_bill",
+    entityId: bill.id,
+    after: { ...bill, lines },
+  });
+  await emitEvent(tx, ctx, {
+    payload: {
+      aggregateId: bill.id,
+      aggregateType: "supplier_bill",
+      companyId: bill.companyId,
+      purchaseOrderId: bill.purchaseOrderId,
+      supplierBillId: bill.id,
+      supplierId: bill.supplierId,
+      totalMinor: bill.totalMinor,
+      currency: bill.currency,
+      scale: bill.scale,
+      lines,
+    },
+    type: "procurement.supplier_bill.created",
+  });
+
+  return { bill, lines };
 }
 
 export async function receivePurchaseOrder(

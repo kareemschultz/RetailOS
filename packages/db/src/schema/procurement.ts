@@ -24,6 +24,7 @@ export const PURCHASE_ORDER_STATUSES = [
   "cancelled",
 ] as const;
 export const GOODS_RECEIPT_STATUSES = ["posted", "cancelled"] as const;
+export const SUPPLIER_BILL_STATUSES = ["draft", "posted", "cancelled"] as const;
 
 export const supplier = pgTable(
   "supplier",
@@ -204,6 +205,130 @@ export const goodsReceipt = pgTable(
       "goods_receipt_status_chk",
       sql`${table.status} IN ('posted','cancelled')`
     ),
+  ]
+);
+
+export const supplierBill = pgTable(
+  "supplier_bill",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    companyId: uuid("company_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    purchaseOrderId: uuid("purchase_order_id").notNull(),
+    number: text("number").notNull(),
+    status: text("status", { enum: SUPPLIER_BILL_STATUSES })
+      .default("posted")
+      .notNull(),
+    billDate: timestamp("bill_date").defaultNow().notNull(),
+    dueDate: timestamp("due_date"),
+    currency: text("currency").notNull(),
+    scale: bigint("scale", { mode: "number" }).default(2).notNull(),
+    totalMinor: bigint("total_minor", { mode: "number" }).notNull(),
+    notes: text("notes"),
+    ...timestamps,
+    ...actor,
+    ...softDelete,
+  },
+  (table) => [
+    index("supplier_bill_tenantId_idx").on(table.tenantId),
+    index("supplier_bill_supplier_idx").on(table.supplierId),
+    index("supplier_bill_purchase_order_idx").on(table.purchaseOrderId),
+    unique("supplier_bill_tenant_number_uq").on(table.tenantId, table.number),
+    unique("supplier_bill_tenant_id_uq").on(table.tenantId, table.id),
+    foreignKey({
+      columns: [table.tenantId, table.companyId],
+      foreignColumns: [company.tenantId, company.id],
+      name: "supplier_bill_company_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.supplierId],
+      foreignColumns: [supplier.tenantId, supplier.id],
+      name: "supplier_bill_supplier_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.purchaseOrderId],
+      foreignColumns: [purchaseOrder.tenantId, purchaseOrder.id],
+      name: "supplier_bill_po_composite_fk",
+    }),
+    check(
+      "supplier_bill_status_chk",
+      sql`${table.status} IN ('draft','posted','cancelled')`
+    ),
+    check("supplier_bill_total_nonnegative_chk", sql`${table.totalMinor} >= 0`),
+    check("supplier_bill_scale_nonnegative_chk", sql`${table.scale} >= 0`),
+  ]
+);
+
+export const supplierBillLine = pgTable(
+  "supplier_bill_line",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    supplierBillId: uuid("supplier_bill_id").notNull(),
+    purchaseOrderId: uuid("purchase_order_id").notNull(),
+    purchaseOrderLineId: uuid("purchase_order_line_id").notNull(),
+    goodsReceiptId: uuid("goods_receipt_id").notNull(),
+    goodsReceiptLineId: uuid("goods_receipt_line_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    skuId: uuid("sku_id").notNull(),
+    qtyBilled: bigint("qty_billed", { mode: "number" }).notNull(),
+    unitCostMinor: bigint("unit_cost_minor", { mode: "number" }).notNull(),
+    lineTotalMinor: bigint("line_total_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    scale: bigint("scale", { mode: "number" }).default(2).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("supplier_bill_line_tenantId_idx").on(table.tenantId),
+    index("supplier_bill_line_bill_idx").on(table.supplierBillId),
+    index("supplier_bill_line_grn_line_idx").on(table.goodsReceiptLineId),
+    unique("supplier_bill_line_tenant_id_uq").on(table.tenantId, table.id),
+    foreignKey({
+      columns: [table.tenantId, table.supplierBillId],
+      foreignColumns: [supplierBill.tenantId, supplierBill.id],
+      name: "supplier_bill_line_bill_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.purchaseOrderId],
+      foreignColumns: [purchaseOrder.tenantId, purchaseOrder.id],
+      name: "supplier_bill_line_po_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.purchaseOrderLineId],
+      foreignColumns: [purchaseOrderLine.tenantId, purchaseOrderLine.id],
+      name: "supplier_bill_line_po_line_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.goodsReceiptId],
+      foreignColumns: [goodsReceipt.tenantId, goodsReceipt.id],
+      name: "supplier_bill_line_grn_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.goodsReceiptLineId],
+      foreignColumns: [goodsReceiptLine.tenantId, goodsReceiptLine.id],
+      name: "supplier_bill_line_grn_line_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.productId],
+      foreignColumns: [product.tenantId, product.id],
+      name: "supplier_bill_line_product_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.productId, table.skuId],
+      foreignColumns: [sku.tenantId, sku.productId, sku.id],
+      name: "supplier_bill_line_sku_product_composite_fk",
+    }),
+    check("supplier_bill_line_qty_positive_chk", sql`${table.qtyBilled} > 0`),
+    check(
+      "supplier_bill_line_unit_cost_nonnegative_chk",
+      sql`${table.unitCostMinor} >= 0`
+    ),
+    check(
+      "supplier_bill_line_total_nonnegative_chk",
+      sql`${table.lineTotalMinor} >= 0`
+    ),
+    check("supplier_bill_line_scale_nonnegative_chk", sql`${table.scale} >= 0`),
   ]
 );
 

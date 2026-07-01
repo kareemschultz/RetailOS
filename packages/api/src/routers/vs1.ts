@@ -7474,6 +7474,41 @@ export const procurementRouter = {
         }
       });
     }),
+  supplierBillCreate: tenantProcedure
+    .input(
+      z.object({
+        purchaseOrderId: z.string().uuid(),
+        number: z.string().min(1).max(64),
+        billDate: z.coerce.date().optional(),
+        dueDate: z.coerce.date().optional(),
+        notes: z.string().max(2000).optional(),
+        lines: z
+          .array(
+            z.object({
+              goodsReceiptLineId: z.string().uuid(),
+              qtyBilled: z.number().int().positive(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "procurement.manage");
+        try {
+          return await services.createSupplierBill(tx, ctx, input);
+        } catch (error) {
+          if (error instanceof services.ProcurementError) {
+            if (error.code === "NOT_FOUND") {
+              throw new ORPCError("NOT_FOUND", { message: error.message });
+            }
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          }
+          throw error;
+        }
+      });
+    }),
 };
 
 export const accountingRouter = {
