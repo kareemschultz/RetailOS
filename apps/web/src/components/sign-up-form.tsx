@@ -9,9 +9,13 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { client } from "@/utils/orpc";
 
 const schema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
+  businessName: z
+    .string()
+    .min(2, "Business name must be at least 2 characters"),
   email: z.email("Enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
@@ -21,14 +25,18 @@ export default function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm({
-    defaultValues: { email: "", password: "", name: "" },
+    defaultValues: { email: "", password: "", name: "", businessName: "" },
     onSubmit: async ({ value }) => {
       await authClient.signUp.email(
         { email: value.email, password: value.password, name: value.name },
         {
-          onSuccess: () => {
+          onSuccess: async () => {
+            await client.tenant.bootstrapSelfServe({
+              businessName: value.businessName,
+              storeName: "Main Store",
+            });
             navigate({ to: "/pos" });
-            toast.success("Account created");
+            toast.success("Account and store created");
           },
           onError: (error) => {
             toast.error(error.error.message || error.error.statusText);
@@ -62,6 +70,31 @@ export default function SignUpForm() {
               onBlur={field.handleBlur}
               onChange={(e) => field.handleChange(e.target.value)}
               placeholder="Enter your full name"
+              value={field.state.value}
+            />
+            {field.state.meta.errors.map((error) => (
+              <p className="text-destructive text-xs" key={error?.message}>
+                {error?.message}
+              </p>
+            ))}
+          </div>
+        )}
+      </form.Field>
+
+      <form.Field name="businessName">
+        {(field) => (
+          <div className="space-y-2">
+            <Label className="leading-5" htmlFor={field.name}>
+              Business name
+            </Label>
+            <Input
+              autoComplete="organization"
+              className="h-11 rounded-lg"
+              id={field.name}
+              name={field.name}
+              onBlur={field.handleBlur}
+              onChange={(e) => field.handleChange(e.target.value)}
+              placeholder="Your store or company name"
               value={field.state.value}
             />
             {field.state.meta.errors.map((error) => (

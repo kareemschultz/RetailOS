@@ -1,6 +1,7 @@
 import { auth } from "@RetailOS/auth";
 import type { TenantTransaction } from "@RetailOS/db";
 import { db, schema, services, withTenant } from "@RetailOS/db";
+import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import {
   and,
@@ -106,6 +107,40 @@ function catalogImportPreviewRow(
   };
 }
 
+function selfServeSlug(name: string) {
+  const base = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return `${base || "retailos"}-${randomUUID().slice(0, 8)}`;
+}
+
+function tenantIdFromUuid() {
+  return `org_${randomUUID().replace(/-/g, "")}`;
+}
+
+function assertSelfServeRecoveryAllowed(
+  existingMember: { organizationId: string } | undefined,
+  existingRetailMembership: { role: string } | undefined
+) {
+  if (!existingMember) {
+    return;
+  }
+  if (!existingRetailMembership) {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "Existing organization membership cannot self-provision RetailOS admin access",
+    });
+  }
+  if (existingRetailMembership.role !== "tenant_admin") {
+    throw new ORPCError("FORBIDDEN", {
+      message: "Self-serve recovery requires an existing tenant admin role",
+    });
+  }
+}
+
 export const tenantRouter = {
   // Sets the active organization (tenant) on the session via Better Auth. Not a
   // tenantProcedure — it runs before a tenant is active.
@@ -117,6 +152,177 @@ export const tenantRouter = {
         body: { organizationId: input.organizationId },
       });
       return { activeOrganizationId: input.organizationId };
+    }),
+  // Self-serve signup bridge: Better Auth creates the user, then this endpoint
+  // provisions the RetailOS tenant skeleton before any tenantProcedure can run.
+  bootstrapSelfServe: protectedProcedure
+    .input(
+      z.object({
+        businessName: z.string().trim().min(2).max(120),
+        storeName: z.string().trim().min(1).max(120).default("Main Store"),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      const userId = context.session?.user?.id;
+      if (!userId) {
+        throw new ORPCError("UNAUTHORIZED");
+      }
+
+      const provisioned = await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`tenant.bootstrapSelfServe:${userId}`}, 0))`
+        );
+        const existingMembers = await tx
+          .select({ organizationId: schema.member.organizationId })
+          .from(schema.member)
+          .where(eq(schema.member.userId, userId))
+          .limit(2);
+        if (existingMembers.length > 1) {
+          throw new ORPCError("FORBIDDEN", {
+            message:
+              "Multiple organizations already exist; select an organization instead of self-serve onboarding",
+          });
+        }
+        const existingMember = existingMembers.at(0);
+        const tenantId = existingMember?.organizationId ?? tenantIdFromUuid();
+        const now = new Date();
+
+        if (!existingMember) {
+          await tx.insert(schema.organization).values({
+            id: tenantId,
+            name: input.businessName,
+            slug: selfServeSlug(input.businessName),
+          });
+          await tx.insert(schema.member).values({
+            id: `mem_${randomUUID().replace(/-/g, "")}`,
+            organizationId: tenantId,
+            userId,
+            role: "owner",
+          });
+        }
+
+        await tx.execute(
+          sql`select set_config('app.tenant_id', ${tenantId}, true)`
+        );
+
+        const existingRetailMembership = (
+          await tx
+            .select({ id: schema.membership.id, role: schema.membership.role })
+            .from(schema.membership)
+            .where(eq(schema.membership.userId, userId))
+            .limit(1)
+        ).at(0);
+        assertSelfServeRecoveryAllowed(
+          existingMember,
+          existingRetailMembership
+        );
+        if (!existingRetailMembership) {
+          await tx.insert(schema.membership).values({
+            tenantId,
+            userId,
+            role: "tenant_admin",
+            createdBy: userId,
+          });
+        }
+
+        const existingCompany = (
+          await tx
+            .select({ id: schema.company.id })
+            .from(schema.company)
+            .where(isNull(schema.company.deletedAt))
+            .limit(1)
+        ).at(0);
+        const company =
+          existingCompany ??
+          (
+            await tx
+              .insert(schema.company)
+              .values({
+                tenantId,
+                name: input.businessName,
+                createdBy: userId,
+              })
+              .returning({ id: schema.company.id })
+          ).at(0);
+        if (!company) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Expected company provisioning row",
+          });
+        }
+
+        const existingStore = (
+          await tx
+            .select({ id: schema.location.id })
+            .from(schema.location)
+            .where(
+              and(
+                eq(schema.location.companyId, company.id),
+                eq(schema.location.type, "store"),
+                isNull(schema.location.deletedAt)
+              )
+            )
+            .limit(1)
+        ).at(0);
+        const store =
+          existingStore ??
+          (
+            await tx
+              .insert(schema.location)
+              .values({
+                tenantId,
+                companyId: company.id,
+                name: input.storeName,
+                type: "store",
+                isSellable: true,
+                createdBy: userId,
+              })
+              .returning({ id: schema.location.id })
+          ).at(0);
+        if (!store) {
+          throw new ORPCError("INTERNAL_SERVER_ERROR", {
+            message: "Expected location provisioning row",
+          });
+        }
+
+        const ctx: RequestContext = {
+          tenantId,
+          organizationId: tenantId,
+          actorUserId: userId,
+          sessionId: context.session?.session?.id ?? null,
+          impersonatorUserId: null,
+          requestId: context.meta.requestId,
+          correlationId: context.meta.correlationId,
+          source: context.meta.source,
+          deploymentMode: context.meta.deploymentMode,
+        };
+        await services.recordAudit(tx, ctx, {
+          action: "tenant.self_serve.bootstrap",
+          entityType: "organization",
+          entityId: tenantId,
+          after: {
+            tenantId,
+            companyId: company.id,
+            locationId: store.id,
+            firstProvisioning: !existingMember,
+          },
+        });
+
+        const sessionId = context.session?.session?.id;
+        if (sessionId) {
+          await tx
+            .update(schema.session)
+            .set({ activeOrganizationId: tenantId, updatedAt: now })
+            .where(eq(schema.session.id, sessionId));
+        }
+
+        return {
+          activeOrganizationId: tenantId,
+          companyId: company.id,
+          locationId: store.id,
+        };
+      });
+
+      return provisioned;
     }),
 };
 

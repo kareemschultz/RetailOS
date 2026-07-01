@@ -16,6 +16,11 @@ const CASHIER = "u_cashier_e2e";
 // A second tenant, for the cross-tenant FK-bypass regression test.
 const ORG_B = "org_e2e_b";
 const ADMIN_B = "u_admin_e2e_b";
+const SELF_SERVE = "u_selfserve_e2e";
+const EXISTING_MEMBER = "u_existing_member_e2e";
+const EXISTING_MEMBER_ORG = "org_existing_member_e2e";
+const GENERATED_ORG_ID_RE = /^org_/;
+const SELF_PROVISION_RE = /cannot self-provision RetailOS admin access/;
 const STORED_VALUE_TENDER_RESERVED_RE = /Stored-value tenders are reserved/;
 const UNDERPAYMENT_RE = /Underpayment/;
 // #20 corollary: the action endpoints must independently reject an ungranted
@@ -117,6 +122,22 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.location);
         await tx.delete(schema.company);
       });
+    const cleanIdentityUser = async (userId: string) => {
+      const memberships = await db
+        .select({ organizationId: schema.member.organizationId })
+        .from(schema.member)
+        .where(eq(schema.member.userId, userId));
+      for (const row of memberships) {
+        await cleanTenant(row.organizationId);
+        await db
+          .delete(schema.organization)
+          .where(eq(schema.organization.id, row.organizationId));
+      }
+      await db.delete(schema.session).where(eq(schema.session.userId, userId));
+      await db.delete(schema.member).where(eq(schema.member.userId, userId));
+    };
+    await cleanIdentityUser(SELF_SERVE);
+    await cleanIdentityUser(EXISTING_MEMBER);
     await cleanTenant(ORG);
     await cleanTenant(ORG_B);
     // Identity tables are not RLS-scoped (managed by Better Auth) — upsert.
@@ -126,6 +147,16 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         { id: ADMIN, name: "Admin", email: "admin_e2e@example.com" },
         { id: CASHIER, name: "Cashier", email: "cashier_e2e@example.com" },
         { id: ADMIN_B, name: "Admin B", email: "admin_e2e_b@example.com" },
+        {
+          id: SELF_SERVE,
+          name: "Self Serve",
+          email: "selfserve_e2e@example.com",
+        },
+        {
+          id: EXISTING_MEMBER,
+          name: "Existing Member",
+          email: "existing_member_e2e@example.com",
+        },
       ])
       .onConflictDoNothing();
     await db
@@ -150,6 +181,124 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
 
   afterAll(async () => {
     await db?.$client?.end?.();
+  });
+
+  it("self-serve signup provisions an active tenant, admin role, company and sellable store", async () => {
+    const sessionId = `sess_${SELF_SERVE}`;
+    await db
+      .insert(schema.session)
+      .values({
+        id: sessionId,
+        token: `token_${SELF_SERVE}`,
+        userId: SELF_SERVE,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        activeOrganizationId: null,
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing();
+
+    const selfServe = { context: makeCtx(SELF_SERVE, null) };
+    const provisioned = await call(
+      appRouter.tenant.bootstrapSelfServe,
+      { businessName: "Client Trial Co", storeName: "Client Main Store" },
+      selfServe
+    );
+
+    expect(provisioned.activeOrganizationId).toMatch(GENERATED_ORG_ID_RE);
+    expect(provisioned.companyId).toBeTruthy();
+    expect(provisioned.locationId).toBeTruthy();
+
+    const activeSession = (
+      await db
+        .select({ activeOrganizationId: schema.session.activeOrganizationId })
+        .from(schema.session)
+        .where(eq(schema.session.id, sessionId))
+        .limit(1)
+    ).at(0);
+    expect(activeSession?.activeOrganizationId).toBe(
+      provisioned.activeOrganizationId
+    );
+
+    const tenantCtx = makeCtx(SELF_SERVE, provisioned.activeOrganizationId);
+    const posLocations = await call(
+      appRouter.pos.locationList,
+      {},
+      { context: tenantCtx }
+    );
+    expect(posLocations.autoSelect).toBe(true);
+    expect(posLocations.locations).toEqual([
+      expect.objectContaining({
+        id: provisioned.locationId,
+        displayName: "Client Main Store",
+        isSellable: true,
+      }),
+    ]);
+
+    const rows = await withTenant(
+      db,
+      provisioned.activeOrganizationId,
+      async (tx) => ({
+        memberships: await tx
+          .select({ role: schema.membership.role })
+          .from(schema.membership)
+          .where(eq(schema.membership.userId, SELF_SERVE)),
+        companies: await tx
+          .select({ id: schema.company.id })
+          .from(schema.company),
+        locations: await tx
+          .select({ id: schema.location.id, type: schema.location.type })
+          .from(schema.location),
+      })
+    );
+    expect(rows.memberships).toEqual([{ role: "tenant_admin" }]);
+    expect(rows.companies).toHaveLength(1);
+    expect(rows.locations).toEqual([
+      { id: provisioned.locationId, type: "store" },
+    ]);
+
+    const retry = await call(
+      appRouter.tenant.bootstrapSelfServe,
+      { businessName: "Client Trial Co", storeName: "Client Main Store" },
+      selfServe
+    );
+    expect(retry).toEqual(provisioned);
+  });
+
+  it("blocks existing Better Auth members from self-promoting into RetailOS tenant admins", async () => {
+    await db.insert(schema.organization).values({
+      id: EXISTING_MEMBER_ORG,
+      name: "Existing Member Org",
+    });
+    await db.insert(schema.member).values({
+      id: "mem_existing_member_e2e",
+      organizationId: EXISTING_MEMBER_ORG,
+      userId: EXISTING_MEMBER,
+      role: "member",
+    });
+
+    await expect(
+      call(
+        appRouter.tenant.bootstrapSelfServe,
+        { businessName: "Should Not Provision", storeName: "Store" },
+        { context: makeCtx(EXISTING_MEMBER, null) }
+      )
+    ).rejects.toThrow(SELF_PROVISION_RE);
+
+    const rows = await withTenant(db, EXISTING_MEMBER_ORG, async (tx) => ({
+      memberships: await tx
+        .select({ role: schema.membership.role })
+        .from(schema.membership)
+        .where(eq(schema.membership.userId, EXISTING_MEMBER)),
+      companies: await tx
+        .select({ id: schema.company.id })
+        .from(schema.company),
+      locations: await tx
+        .select({ id: schema.location.id })
+        .from(schema.location),
+    }));
+    expect(rows.memberships).toEqual([]);
+    expect(rows.companies).toEqual([]);
+    expect(rows.locations).toEqual([]);
   });
 
   it("runs Org→Company→Location→Product→Receipt→Sale→Invoice→Report, idempotently", async () => {
