@@ -176,6 +176,13 @@
       "when": 1782869647272,
       "tag": "0024_proc_fin_foundations",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1782870748380,
+      "tag": "0025_pos_offline_sync",
+      "breakpoints": true
     }
   ]
 }

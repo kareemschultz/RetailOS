@@ -13,6 +13,12 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Parallel module buildout integration — POS/offline + Commerce + Procurement/Financials (verified, 2026-07-01)
+- **Scope:** integrated three bounded feature lanes into `feature/full-module-buildout`: POS/offline terminal + durable mutation ingestion foundation, hostname-scoped Commerce/Shopix public read-model skeleton, and Procurement/Financials foundations for suppliers/POs and ledger/journal/posting-period services.
+- **Migration repair:** parallel lanes both produced `0024_*`; integration keeps `0024_proc_fin_foundations` and moves offline sync to canonical `0025_pos_offline_sync` with generated `0025_snapshot.json`, updated `_journal.json`, and explicit ENABLE + FORCE RLS + `tenant_isolation` policies for all offline sync tables.
+- **Verification:** `bun run check`, `bun run check-types`, `bun run check:mojibake`, default `bun run test`, and `bun run build` are green. Focused contract tests pass; DB-gated RLS suites are present but skipped locally because neither shell nor `apps/server/.env` provides `RLS_TEST_DATABASE_URL` in this worktree. Independent staged-diff review passed with no security or logic blockers.
+- **Caveat before merge/deploy:** run the real disposable PG18 RLS gate with `RLS_TEST_DATABASE_URL` set before claiming zero-skip database verification; current local evidence is structural/default-gate only for DB suites.
+
 ### Client-submission hardening — operations cockpit + production route pruning (verified, 2026-06-30)
 - **Scope:** removed exposed AdminCN/template/demo routes from the TanStack route tree/source route set; narrowed navigation to real RetailOS modules only; added `/operations` as an AdminCN-style progressive-disclosure operations cockpit backed by the new `reports.operationsSummary` oRPC endpoint. Also neutralized visible placeholder/demo strings in product media + sale void fields and fixed the deleted-`/users` row action to open the edit dialog instead of linking to a removed route.
 - **Backend:** `reports.operationsSummary` is tenant-scoped, gated by `reports.view`, accepts optional company/location filters with visibility checks, and returns operational counts only for transfers, bonds, and shifts — no drawer cash, tender totals, duty values, or client-side financial math.

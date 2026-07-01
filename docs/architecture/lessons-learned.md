@@ -492,3 +492,11 @@
 - **Fix:** Regenerate/check the TanStack route tree through the web type gate, inspect diffs for deleted route references, and replace broken latent links with workflow-local actions.
 - **Rule:** Route pruning is a three-part change: delete the source route, regenerate/commit `routeTree.gen.ts`, and scan/repair all links/actions that targeted the deleted path.
 
+
+### 38. Parallel Drizzle migrations must be renumbered through the generator, not Git-merged by filename
+- **Date:** 2026-07-01
+- **Context:** integrating parallel POS/offline and Procurement/Financials lanes after both independently generated `0024_*` migrations.
+- **Mistake:** Git merged cleanly while leaving two SQL files numbered `0024` and only one `meta/0024_snapshot.json`, which looked conflict-free but was not a coherent Drizzle migration chain.
+- **Root cause:** Drizzle migration metadata is a linear chain (`_journal.json` + numbered snapshots); Git can merge sibling SQL files without understanding that they both claim the same migration index.
+- **Fix:** keep one lane as the existing index (`0024_proc_fin_foundations`), run `drizzle-kit generate` from the integrated schema to produce the next metadata snapshot, rename the generated SQL to the intended canonical tag (`0025_pos_offline_sync`), update `_journal.json`, and then fold any hand-authored policy block (ENABLE/FORCE RLS + tenant policy) into the canonical SQL.
+- **Rule:** after parallel schema lanes merge, inspect `packages/db/src/migrations/meta/_journal.json` and `meta/*_snapshot.json` before gates. If two branches used the same number, repair with Drizzle generation from the integrated schema; do not hand-author snapshots or trust a clean Git merge as a valid migration chain.
