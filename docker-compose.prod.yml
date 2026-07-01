@@ -12,9 +12,11 @@
 # via the standard machine-identity token — same pattern as the other apps' infisical-entrypoint.
 # DATABASE_URL / REDIS_URL / S3_* live in Infisical, never in this file.
 #
-# Usage (on the VPS):  docker compose -f docker-compose.prod.yml up -d --build
-# NOTE: the RetailOS server image/Dockerfile lands in the CI/CD phase (charter §28/§11); until then
-# this is the wiring template — `app` builds the web client; add the `server` service when it exists.
+# Usage (on the VPS):
+#   1. infisical run --env=prod --path=/credentials/retailos -- bun -F @RetailOS/db db:migrate
+#   2. infisical run --env=prod --path=/credentials/retailos -- docker compose -f docker-compose.prod.yml up -d --build
+#
+# The web and server Dockerfiles are both present; production deploys both services.
 
 name: retailos
 
@@ -45,6 +47,18 @@ services:
       NODE_ENV: production
     networks: [pangolin, retailos-internal]
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:3001/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     # Bound resources so one app can't starve the shared VPS (noisy-neighbour, charter §8).
     deploy:
       resources:
@@ -80,6 +94,18 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     networks: [pangolin, retailos-internal]
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     deploy:
       resources:
         limits:

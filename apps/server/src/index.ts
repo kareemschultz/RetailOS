@@ -14,6 +14,13 @@ import { logger } from "hono/logger";
 const app = new Hono();
 
 app.use(logger());
+
+app.get("/health", (c) =>
+  c.json({
+    service: "retailos-server",
+    status: "ok",
+  })
+);
 app.use(
   "/*",
   cors({

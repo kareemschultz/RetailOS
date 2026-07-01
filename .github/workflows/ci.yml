@@ -35,7 +35,7 @@ jobs:
       # Playwright visual-regression. Wire as these land in Phase 1+.
 
   docker:
-    name: Docker image build (web)
+    name: Docker image build (web + server)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -63,6 +63,24 @@ jobs:
           echo "web image size: ${mb} MB"
           if [ "$mb" -gt 350 ]; then
             echo "::error::web image ${mb} MB exceeds 350 MB budget (charter §28)"
+            exit 1
+          fi
+      - name: Build server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          load: true
+          tags: retailos-server:ci
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
+      - name: Enforce image-size budget (server ≤ 450 MB)
+        run: |
+          bytes=$(docker image inspect retailos-server:ci --format '{{.Size}}')
+          mb=$(( bytes / 1024 / 1024 ))
+          echo "server image size: ${mb} MB"
+          if [ "$mb" -gt 450 ]; then
+            echo "::error::server image ${mb} MB exceeds 450 MB budget (charter §28)"
             exit 1
           fi
 

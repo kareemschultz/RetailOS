@@ -40,6 +40,16 @@ Three stages in `apps/web/Dockerfile`:
 **Result:** fat single-stage baseline **2.38 GB → 168 MB** (~93% smaller). Verified: the container boots and
 serves (`Listening on http://localhost:3001/`).
 
+## `apps/server` image (implemented)
+
+`apps/server/Dockerfile` now mirrors the web hardening pattern for the Hono/oRPC API server:
+
+1. **pruner** (`oven/bun:1.3.12-alpine`) — `bunx turbo prune server --docker` creates the minimal workspace.
+2. **builder** — installs the pruned dependency set, builds `apps/server/dist`, then prunes to production runtime deps.
+3. **runtime** (`oven/bun:1.3.12-distroless`, `USER nonroot:nonroot`) — ships the bundled server output plus production node_modules for external runtime packages.
+
+The server exposes a cheap unauthenticated `/health` liveness endpoint before auth/RPC context creation so Docker, Pangolin, and deploy smoke checks do not require database/session work just to prove the process is alive.
+
 ## `.dockerignore`
 
 Excludes `node_modules`, `.git`, `.github`, `.claude`, `.agents`, `docs`, test/coverage artifacts, build
@@ -50,16 +60,18 @@ matters (don't upload gigabytes; never leak secrets into a layer).
 
 - **quality** job: `check`, `check-types`, `test`, `build` (`turbo build --filter=!fumadocs` — the docs-site
   addon is excluded from the product build gate; see `lessons-learned.md`).
-- **docker** job: builds the `apps/web` image with `docker/build-push-action` + Buildx, **GHA layer cache**
-  (`cache-from/cache-to: type=gha,scope=web`), and enforces an **image-size budget** (web ≤ 350 MB) so a
-  regression (dev dep leaking into runtime, etc.) fails the build (§28). Build-only (`load`, no push) for now.
+- **docker** job: builds both production images with `docker/build-push-action` + Buildx and **GHA layer cache**
+  (`cache-from/cache-to: type=gha`). The web image is budgeted at **≤ 350 MB** and the server image at
+  **≤ 450 MB** so runtime dependency regressions fail CI (§28). Build-only (`load`, no push) for now.
+- **db-rls** job: boots Postgres 18, runs `roles.sql` as superuser, applies migrations as `retailos_migrator`, then runs the full test suite as `retailos_app` with `RLS_TEST_DATABASE_URL` set.
 - **e2e** job: Playwright (uploads traces/report on failure).
 
 ## Production compose hardening (`docker-compose.prod.yml`)
 
-Per-service **resource limits** (`deploy.resources.limits` — app 1 CPU/512M, minio 0.5 CPU/256M) so one
-container can't starve the shared VPS (noisy-neighbour, §8), and **json-file logging** with rotation
-(`max-size: 10m`, `max-file: 3`) to cap log growth (§26). See ADR-0004 for the central-infra-reuse model.
+Per-service **resource limits** (`deploy.resources.limits` — app 1 CPU/512M, server 1 CPU/512M, minio 0.5 CPU/256M) so one
+container can't starve the shared VPS (noisy-neighbour, §8), **json-file logging** with rotation
+(`max-size: 10m`, `max-file: 3`) to cap log growth (§26), and Docker healthchecks for web `/` and server `/health`.
+Deployment must run migrations with `MIGRATION_DATABASE_URL` through Infisical before `docker compose up -d --build`.
 
 ## Size-audit ritual (§28)
 
@@ -70,14 +82,10 @@ automatically.
 
 ## Deferred / roadmap (not yet wired — tracked for later phases)
 
-- **`apps/server` Dockerfile** — same Bun multi-stage pattern (distroless bun runtime) once the server image
-  is needed for deployment. The prod compose `app` is the web client; a `server` service is added then.
 - **Image registry + push + signing** — GHCR push, multi-arch (amd64+arm64) buildx, keyless **cosign**
   signatures + **SLSA provenance** + **SBOM**. Needs a registry/namespace decision; deferred until deployment.
 - **Container vulnerability scanning (Trivy)** and **base-image digest pinning** (§28) — wire into the docker
   CI job.
-- **Web `HEALTHCHECK`** — deferred until a dedicated `/health` route exists (Phase 1); `/` currently 500s
-  without a DB, which would make a healthcheck flaky. Add a bun-based healthcheck against `/health` then.
 - **Base-image refresh cadence** — re-pin base images quarterly for security patches.
 - **Bun `--compile` single-binary images** (post-MVP) — compile the server to a standalone binary to shave a further ~40–60 MB off the runtime image.
 
