@@ -109,7 +109,7 @@
 4. [x] Partial receiving and over-receipt rejection/disposition baseline — partial receipt updates status; over-receipt is blocked pending owner policy.
 5. [x] Supplier bills and three-way match entities — backend slice added in `0027_supplier_bill_three_way_match`; AP posting/vendor payment UI deferred.
 6. [x] Landed cost pools/allocation with per-pool largest-remainder math — backend slice added in `0028_landed_cost_pools`; FIFO/live-costing allocation remains explicitly rejected pending policy.
-7. Import batch/customs tracking using Phase-3 bond seams.
+7. [x] Import batch/customs tracking using Phase-3 bond seams — backend slice added in `0029_import_batch_tracking`; service now binds supplier/PO/GRN/bill/landed-cost and bond customs seams with RLS regressions.
 8. Reorder suggestion → PO conversion.
 9. Procurement UI: suppliers, purchase orders, receiving, bills, landed costs.
 

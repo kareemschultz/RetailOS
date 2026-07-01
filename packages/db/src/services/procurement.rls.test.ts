@@ -7,9 +7,12 @@ import * as schema from "../schema";
 import {
   auditLog,
   avgCost,
+  bondReceipt,
   company,
   goodsReceipt,
   goodsReceiptLine,
+  importBatch,
+  importBatchLine,
   landedCostAllocation,
   landedCostPool,
   location,
@@ -27,6 +30,7 @@ import {
 } from "../schema";
 import { withTenant } from "../tenant";
 import {
+  createImportBatch,
   createLandedCostPools,
   createPurchaseOrder,
   createSupplier,
@@ -68,6 +72,9 @@ describe.skipIf(!url)("Phase D procurement foundation", () => {
     for (const tenant of [TENANT, OTHER_TENANT]) {
       await withTenant(db, tenant, async (tx) => {
         await tx.delete(landedCostAllocation);
+        await tx.delete(importBatchLine);
+        await tx.delete(importBatch);
+        await tx.delete(bondReceipt);
         await tx.delete(landedCostPool);
         await tx.delete(supplierBillLine);
         await tx.delete(supplierBill);
@@ -947,6 +954,502 @@ describe.skipIf(!url)("Phase D procurement foundation", () => {
           }
         )
       ).rejects.toMatchObject({ code: "INVALID_STATE" });
+    });
+  });
+
+  it("creates an import batch that links supplier, PO, GRN, bill, and landed-cost context", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-IMP", name: "Import Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-IMP",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 2, unitCostMinor: 500 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-IMP",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 2,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-IMP",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 2,
+            },
+          ],
+        }
+      );
+      const landed = await createLandedCostPools(
+        tx,
+        { tenantId: TENANT },
+        {
+          supplierBillId: bill.bill.id,
+          pools: [{ kind: "duty", basis: "quantity", amountMinor: 25 }],
+        }
+      );
+
+      const result = await createImportBatch(
+        tx,
+        { tenantId: TENANT, actorUserId: "import-agent" },
+        {
+          companyId,
+          supplierId: vendor.id,
+          purchaseOrderId: po.id,
+          supplierBillId: bill.bill.id,
+          number: "IMP-001",
+          currency: "GYD",
+          customsReference: "C72-2026-001",
+          bondReceiptId: null,
+          declarationNumber: "DEC-001",
+          vesselName: "MV RetailOS",
+          portOfEntry: "GEO",
+          eta: new Date("2026-07-10T00:00:00.000Z"),
+          arrivedAt: new Date("2026-07-11T00:00:00.000Z"),
+          clearedAt: new Date("2026-07-12T00:00:00.000Z"),
+          notes: "Tracked only; no GL posting",
+          lines: [
+            {
+              goodsReceiptId: receipt.receipt.id,
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              supplierBillLineId: required(bill.lines[0], "bill line").id,
+              landedCostPoolId: required(landed.pools[0], "landed pool").id,
+              landedCostAllocationId: required(
+                landed.allocations[0],
+                "landed allocation"
+              ).id,
+              customsLineReference: "LINE-1",
+            },
+          ],
+        }
+      );
+
+      expect(result.batch.number).toBe("IMP-001");
+      expect(result.batch.customsReference).toBe("C72-2026-001");
+      expect(result.batch.currency).toBe("GYD");
+      expect(result.lines).toHaveLength(1);
+      expect(result.lines[0]?.goodsReceiptId).toBe(receipt.receipt.id);
+      expect(result.lines[0]?.supplierBillLineId).toBe(
+        required(bill.lines[0], "bill line").id
+      );
+      const audits = await tx.select().from(auditLog);
+      expect(audits.map((row) => row.action)).toContain(
+        "procurement.import_batch.create"
+      );
+    });
+  });
+
+  it("rejects import batches with mismatched supplier bill currency", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-IMP-CUR", name: "Import Currency Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-IMP-CUR",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 1, unitCostMinor: 100 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-IMP-CUR",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 1,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-IMP-CUR",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 1,
+            },
+          ],
+        }
+      );
+
+      await expect(
+        createImportBatch(
+          tx,
+          { tenantId: TENANT },
+          {
+            companyId,
+            supplierId: vendor.id,
+            purchaseOrderId: po.id,
+            supplierBillId: bill.bill.id,
+            number: "IMP-CUR",
+            currency: "USD",
+            lines: [
+              {
+                goodsReceiptId: receipt.receipt.id,
+                goodsReceiptLineId: required(receipt.lines[0], "receipt line")
+                  .id,
+                supplierBillLineId: required(bill.lines[0], "bill line").id,
+              },
+            ],
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
+    });
+  });
+
+  it("rejects import batches with invalid lifecycle dates", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-IMP-DATE", name: "Import Date Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-IMP-DATE",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 1, unitCostMinor: 100 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-IMP-DATE",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 1,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-IMP-DATE",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 1,
+            },
+          ],
+        }
+      );
+
+      await expect(
+        createImportBatch(
+          tx,
+          { tenantId: TENANT },
+          {
+            companyId,
+            supplierId: vendor.id,
+            purchaseOrderId: po.id,
+            supplierBillId: bill.bill.id,
+            number: "IMP-DATE",
+            currency: "GYD",
+            clearedAt: new Date("2026-07-12T00:00:00.000Z"),
+            lines: [
+              {
+                goodsReceiptId: receipt.receipt.id,
+                goodsReceiptLineId: required(receipt.lines[0], "receipt line")
+                  .id,
+                supplierBillLineId: required(bill.lines[0], "bill line").id,
+              },
+            ],
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
+    });
+  });
+
+  it("rejects import batch bond receipts with mismatched customs seams", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-IMP-BOND", name: "Import Bond Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-IMP-BOND",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 1, unitCostMinor: 100 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-IMP-BOND",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 1,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-IMP-BOND",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 1,
+            },
+          ],
+        }
+      );
+      const bond = required(
+        (
+          await tx
+            .insert(bondReceipt)
+            .values({
+              tenantId: TENANT,
+              companyId,
+              locationId,
+              number: "BND-IMP-MISMATCH",
+              customsReference: "C72-OTHER",
+              landedCostReference: bill.bill.id,
+            })
+            .returning()
+        ).at(0),
+        "bond receipt"
+      );
+
+      await expect(
+        createImportBatch(
+          tx,
+          { tenantId: TENANT },
+          {
+            companyId,
+            supplierId: vendor.id,
+            purchaseOrderId: po.id,
+            supplierBillId: bill.bill.id,
+            bondReceiptId: bond.id,
+            number: "IMP-BOND",
+            currency: "GYD",
+            customsReference: "C72-EXPECTED",
+            lines: [
+              {
+                goodsReceiptId: receipt.receipt.id,
+                goodsReceiptLineId: required(receipt.lines[0], "receipt line")
+                  .id,
+                supplierBillLineId: required(bill.lines[0], "bill line").id,
+              },
+            ],
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
+    });
+  });
+
+  it("rejects landed-cost pool references without the matching allocation", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-IMP-LC", name: "Import LC Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-IMP-LC",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 1, unitCostMinor: 100 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-IMP-LC",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 1,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-IMP-LC",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 1,
+            },
+          ],
+        }
+      );
+      const landed = await createLandedCostPools(
+        tx,
+        { tenantId: TENANT },
+        {
+          supplierBillId: bill.bill.id,
+          pools: [{ kind: "duty", basis: "quantity", amountMinor: 9 }],
+        }
+      );
+
+      await expect(
+        createImportBatch(
+          tx,
+          { tenantId: TENANT },
+          {
+            companyId,
+            supplierId: vendor.id,
+            purchaseOrderId: po.id,
+            supplierBillId: bill.bill.id,
+            number: "IMP-LC-POOL-ONLY",
+            currency: "GYD",
+            lines: [
+              {
+                goodsReceiptId: receipt.receipt.id,
+                goodsReceiptLineId: required(receipt.lines[0], "receipt line")
+                  .id,
+                supplierBillLineId: required(bill.lines[0], "bill line").id,
+                landedCostPoolId: required(landed.pools[0], "landed pool").id,
+              },
+            ],
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
+    });
+  });
+
+  it("rejects cross-tenant import batch graph references", async () => {
+    let supplierBillId = "";
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-IMP-CROSS", name: "Import Cross Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-IMP-CROSS",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 1, unitCostMinor: 100 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-IMP-CROSS",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 1,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-IMP-CROSS",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 1,
+            },
+          ],
+        }
+      );
+      supplierBillId = bill.bill.id;
+    });
+
+    await withTenant(db, OTHER_TENANT, async (tx) => {
+      await expect(
+        createImportBatch(
+          tx,
+          { tenantId: OTHER_TENANT },
+          {
+            companyId,
+            supplierId: otherSupplierId,
+            purchaseOrderId: otherLocationId,
+            supplierBillId,
+            number: "IMP-CROSS",
+            currency: "GYD",
+            lines: [],
+          }
+        )
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
   });
 

@@ -7541,6 +7541,56 @@ export const procurementRouter = {
         }
       });
     }),
+  importBatchCreate: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid(),
+        supplierId: z.string().uuid(),
+        purchaseOrderId: z.string().uuid(),
+        supplierBillId: z.string().uuid(),
+        bondReceiptId: z.string().uuid().nullable().optional(),
+        number: z.string().min(1).max(64),
+        currency: z.string().min(3).max(3),
+        scale: z.number().int().min(0).max(6).optional(),
+        customsReference: z.string().max(128).nullable().optional(),
+        declarationNumber: z.string().max(128).nullable().optional(),
+        portOfEntry: z.string().max(128).nullable().optional(),
+        vesselName: z.string().max(255).nullable().optional(),
+        eta: z.coerce.date().nullable().optional(),
+        arrivedAt: z.coerce.date().nullable().optional(),
+        clearedAt: z.coerce.date().nullable().optional(),
+        notes: z.string().max(2000).nullable().optional(),
+        lines: z
+          .array(
+            z.object({
+              goodsReceiptId: z.string().uuid(),
+              goodsReceiptLineId: z.string().uuid(),
+              supplierBillLineId: z.string().uuid(),
+              landedCostPoolId: z.string().uuid().nullable().optional(),
+              landedCostAllocationId: z.string().uuid().nullable().optional(),
+              customsLineReference: z.string().max(128).nullable().optional(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "procurement.manage");
+        try {
+          return await services.createImportBatch(tx, ctx, input);
+        } catch (error) {
+          if (error instanceof services.ProcurementError) {
+            if (error.code === "NOT_FOUND") {
+              throw new ORPCError("NOT_FOUND", { message: error.message });
+            }
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          }
+          throw error;
+        }
+      });
+    }),
 };
 
 export const accountingRouter = {

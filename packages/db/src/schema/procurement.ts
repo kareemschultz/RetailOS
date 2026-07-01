@@ -10,6 +10,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { bondReceipt } from "./bond";
 import { actor, softDelete, tenantId, timestamps } from "./columns";
 import { company, location } from "./company";
 import { stockLedger } from "./inventory";
@@ -26,6 +27,12 @@ export const PURCHASE_ORDER_STATUSES = [
 export const GOODS_RECEIPT_STATUSES = ["posted", "cancelled"] as const;
 export const SUPPLIER_BILL_STATUSES = ["draft", "posted", "cancelled"] as const;
 export const LANDED_COST_POOL_STATUSES = ["posted"] as const;
+export const IMPORT_BATCH_STATUSES = [
+  "open",
+  "arrived",
+  "cleared",
+  "cancelled",
+] as const;
 export const LANDED_COST_KINDS = [
   "freight",
   "insurance",
@@ -548,5 +555,147 @@ export const goodsReceiptLine = pgTable(
       sql`${table.unitCostMinor} >= 0`
     ),
     check("goods_receipt_line_scale_nonnegative_chk", sql`${table.scale} >= 0`),
+  ]
+);
+
+export const importBatch = pgTable(
+  "import_batch",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    companyId: uuid("company_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    purchaseOrderId: uuid("purchase_order_id").notNull(),
+    supplierBillId: uuid("supplier_bill_id").notNull(),
+    bondReceiptId: uuid("bond_receipt_id"),
+    number: text("number").notNull(),
+    status: text("status", { enum: IMPORT_BATCH_STATUSES })
+      .default("open")
+      .notNull(),
+    customsReference: text("customs_reference"),
+    declarationNumber: text("declaration_number"),
+    portOfEntry: text("port_of_entry"),
+    vesselName: text("vessel_name"),
+    eta: timestamp("eta"),
+    arrivedAt: timestamp("arrived_at"),
+    clearedAt: timestamp("cleared_at"),
+    currency: text("currency").notNull(),
+    scale: bigint("scale", { mode: "number" }).default(2).notNull(),
+    notes: text("notes"),
+    ...timestamps,
+    ...actor,
+    ...softDelete,
+  },
+  (table) => [
+    index("import_batch_tenantId_idx").on(table.tenantId),
+    index("import_batch_supplier_idx").on(table.supplierId),
+    index("import_batch_purchase_order_idx").on(table.purchaseOrderId),
+    index("import_batch_supplier_bill_idx").on(table.supplierBillId),
+    unique("import_batch_tenant_number_uq").on(table.tenantId, table.number),
+    unique("import_batch_tenant_id_uq").on(table.tenantId, table.id),
+    foreignKey({
+      columns: [table.tenantId, table.companyId],
+      foreignColumns: [company.tenantId, company.id],
+      name: "import_batch_company_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.supplierId],
+      foreignColumns: [supplier.tenantId, supplier.id],
+      name: "import_batch_supplier_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.purchaseOrderId],
+      foreignColumns: [purchaseOrder.tenantId, purchaseOrder.id],
+      name: "import_batch_po_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.supplierBillId],
+      foreignColumns: [supplierBill.tenantId, supplierBill.id],
+      name: "import_batch_bill_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.bondReceiptId],
+      foreignColumns: [bondReceipt.tenantId, bondReceipt.id],
+      name: "import_batch_bond_receipt_composite_fk",
+    }),
+    check(
+      "import_batch_status_chk",
+      sql`${table.status} IN ('open','arrived','cleared','cancelled')`
+    ),
+    check("import_batch_scale_nonnegative_chk", sql`${table.scale} >= 0`),
+  ]
+);
+
+export const importBatchLine = pgTable(
+  "import_batch_line",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    importBatchId: uuid("import_batch_id").notNull(),
+    goodsReceiptId: uuid("goods_receipt_id").notNull(),
+    goodsReceiptLineId: uuid("goods_receipt_line_id").notNull(),
+    supplierBillLineId: uuid("supplier_bill_line_id"),
+    landedCostPoolId: uuid("landed_cost_pool_id"),
+    landedCostAllocationId: uuid("landed_cost_allocation_id"),
+    productId: uuid("product_id").notNull(),
+    skuId: uuid("sku_id").notNull(),
+    qtyReceived: bigint("qty_received", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    scale: bigint("scale", { mode: "number" }).default(2).notNull(),
+    customsLineReference: text("customs_line_reference"),
+    ...timestamps,
+  },
+  (table) => [
+    index("import_batch_line_tenantId_idx").on(table.tenantId),
+    index("import_batch_line_batch_idx").on(table.importBatchId),
+    index("import_batch_line_grn_line_idx").on(table.goodsReceiptLineId),
+    unique("import_batch_line_tenant_id_uq").on(table.tenantId, table.id),
+    unique("import_batch_line_batch_grn_line_uq").on(
+      table.tenantId,
+      table.importBatchId,
+      table.goodsReceiptLineId
+    ),
+    foreignKey({
+      columns: [table.tenantId, table.importBatchId],
+      foreignColumns: [importBatch.tenantId, importBatch.id],
+      name: "import_batch_line_batch_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.goodsReceiptId],
+      foreignColumns: [goodsReceipt.tenantId, goodsReceipt.id],
+      name: "import_batch_line_grn_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.goodsReceiptLineId],
+      foreignColumns: [goodsReceiptLine.tenantId, goodsReceiptLine.id],
+      name: "import_batch_line_grn_line_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.supplierBillLineId],
+      foreignColumns: [supplierBillLine.tenantId, supplierBillLine.id],
+      name: "import_batch_line_bill_line_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.landedCostPoolId],
+      foreignColumns: [landedCostPool.tenantId, landedCostPool.id],
+      name: "import_batch_line_landed_pool_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.landedCostAllocationId],
+      foreignColumns: [landedCostAllocation.tenantId, landedCostAllocation.id],
+      name: "import_batch_line_landed_allocation_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.productId],
+      foreignColumns: [product.tenantId, product.id],
+      name: "import_batch_line_product_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.productId, table.skuId],
+      foreignColumns: [sku.tenantId, sku.productId, sku.id],
+      name: "import_batch_line_sku_product_composite_fk",
+    }),
+    check("import_batch_line_qty_positive_chk", sql`${table.qtyReceived} > 0`),
+    check("import_batch_line_scale_nonnegative_chk", sql`${table.scale} >= 0`),
   ]
 );

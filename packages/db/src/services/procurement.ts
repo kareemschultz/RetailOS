@@ -1,8 +1,12 @@
 import { and, eq, sql } from "drizzle-orm";
 import {
+  bondReceipt,
+  bondReceiptLine,
   company,
   goodsReceipt,
   goodsReceiptLine,
+  importBatch,
+  importBatchLine,
   landedCostAllocation,
   landedCostPool,
   location as locationTable,
@@ -857,6 +861,478 @@ export async function createLandedCostPools(
 
   await recordLandedCostPoolCreated(tx, ctx, bill, pools, allocations);
   return { pools, allocations };
+}
+
+export interface CreateImportBatchLineInput {
+  customsLineReference?: string | null;
+  goodsReceiptId: string;
+  goodsReceiptLineId: string;
+  landedCostAllocationId?: string | null;
+  landedCostPoolId?: string | null;
+  supplierBillLineId: string;
+}
+
+export interface CreateImportBatchInput {
+  arrivedAt?: Date | null;
+  bondReceiptId?: string | null;
+  clearedAt?: Date | null;
+  companyId: string;
+  currency: string;
+  customsReference?: string | null;
+  declarationNumber?: string | null;
+  eta?: Date | null;
+  lines: CreateImportBatchLineInput[];
+  notes?: string | null;
+  number: string;
+  portOfEntry?: string | null;
+  purchaseOrderId: string;
+  scale?: number;
+  supplierBillId: string;
+  supplierId: string;
+  vesselName?: string | null;
+}
+
+type ImportBatchRow = typeof importBatch.$inferSelect;
+type ImportBatchLineRow = typeof importBatchLine.$inferSelect;
+
+interface ImportBatchGraph {
+  bill: SupplierBillRow;
+  bondReceipt?: typeof bondReceipt.$inferSelect;
+  po: PurchaseOrderRow;
+}
+
+type ImportReceiptLine = GoodsReceiptLineRow & {
+  goodsReceiptCompanyId: string;
+  goodsReceiptLocationId: string;
+  goodsReceiptStatus: string;
+  goodsReceiptSupplierId: string;
+};
+
+function importBatchStatus(input: CreateImportBatchInput) {
+  if (input.clearedAt) {
+    return "cleared";
+  }
+  if (input.arrivedAt) {
+    return "arrived";
+  }
+  return "open";
+}
+
+function assertImportBatchDates(input: CreateImportBatchInput) {
+  if (input.clearedAt && !input.arrivedAt) {
+    throw new ProcurementError(
+      "Import batch clearedAt requires arrivedAt",
+      "INVALID_STATE"
+    );
+  }
+  if (input.eta && input.arrivedAt && input.eta > input.arrivedAt) {
+    throw new ProcurementError(
+      "Import batch eta cannot be after arrivedAt",
+      "INVALID_STATE"
+    );
+  }
+  if (input.arrivedAt && input.clearedAt && input.arrivedAt > input.clearedAt) {
+    throw new ProcurementError(
+      "Import batch arrivedAt cannot be after clearedAt",
+      "INVALID_STATE"
+    );
+  }
+}
+
+async function loadImportBatchGraph(
+  tx: TenantTransaction,
+  input: CreateImportBatchInput
+): Promise<ImportBatchGraph> {
+  const po = (
+    await tx
+      .select()
+      .from(purchaseOrder)
+      .where(eq(purchaseOrder.id, input.purchaseOrderId))
+      .limit(1)
+  ).at(0) as PurchaseOrderRow | undefined;
+  if (!po) {
+    throw new ProcurementError("Purchase order not found", "NOT_FOUND");
+  }
+  const bill = (
+    await tx
+      .select()
+      .from(supplierBill)
+      .where(eq(supplierBill.id, input.supplierBillId))
+      .limit(1)
+  ).at(0) as SupplierBillRow | undefined;
+  if (!bill) {
+    throw new ProcurementError("Supplier bill not found", "NOT_FOUND");
+  }
+  if (
+    po.companyId !== input.companyId ||
+    po.supplierId !== input.supplierId ||
+    bill.companyId !== input.companyId ||
+    bill.supplierId !== input.supplierId ||
+    bill.purchaseOrderId !== po.id
+  ) {
+    throw new ProcurementError(
+      "Import batch header references do not share the same purchase graph",
+      "NOT_FOUND"
+    );
+  }
+  if (bill.status !== "posted") {
+    throw new ProcurementError(
+      "Only posted supplier bills can be linked to import batches",
+      "INVALID_STATE"
+    );
+  }
+  const scale = input.scale ?? bill.scale;
+  if (input.currency !== bill.currency || scale !== bill.scale) {
+    throw new ProcurementError(
+      "Import batch currency and scale must match the supplier bill",
+      "INVALID_STATE"
+    );
+  }
+  let linkedBondReceipt: typeof bondReceipt.$inferSelect | undefined;
+  if (input.bondReceiptId) {
+    const receipt = (
+      await tx
+        .select()
+        .from(bondReceipt)
+        .where(eq(bondReceipt.id, input.bondReceiptId))
+        .limit(1)
+    ).at(0);
+    if (!receipt || receipt.companyId !== input.companyId) {
+      throw new ProcurementError("Bond receipt not found", "NOT_FOUND");
+    }
+    if (
+      !(input.customsReference && receipt.customsReference) ||
+      receipt.customsReference !== input.customsReference
+    ) {
+      throw new ProcurementError(
+        "Bond receipt customs reference must match the import batch",
+        "INVALID_STATE"
+      );
+    }
+    if (
+      receipt.landedCostReference &&
+      receipt.landedCostReference !== input.supplierBillId
+    ) {
+      throw new ProcurementError(
+        "Bond receipt landed-cost reference must match the supplier bill",
+        "INVALID_STATE"
+      );
+    }
+    linkedBondReceipt = receipt;
+  }
+  return { bill, bondReceipt: linkedBondReceipt, po };
+}
+
+async function loadImportReceiptLine(
+  tx: TenantTransaction,
+  graph: ImportBatchGraph,
+  line: CreateImportBatchLineInput
+): Promise<ImportReceiptLine> {
+  const row = (
+    await tx
+      .select({
+        id: goodsReceiptLine.id,
+        tenantId: goodsReceiptLine.tenantId,
+        goodsReceiptId: goodsReceiptLine.goodsReceiptId,
+        purchaseOrderId: goodsReceiptLine.purchaseOrderId,
+        purchaseOrderLineId: goodsReceiptLine.purchaseOrderLineId,
+        productId: goodsReceiptLine.productId,
+        skuId: goodsReceiptLine.skuId,
+        qtyReceived: goodsReceiptLine.qtyReceived,
+        unitCostMinor: goodsReceiptLine.unitCostMinor,
+        currency: goodsReceiptLine.currency,
+        scale: goodsReceiptLine.scale,
+        movementId: goodsReceiptLine.movementId,
+        createdAt: goodsReceiptLine.createdAt,
+        updatedAt: goodsReceiptLine.updatedAt,
+        goodsReceiptCompanyId: goodsReceipt.companyId,
+        goodsReceiptLocationId: goodsReceipt.locationId,
+        goodsReceiptStatus: goodsReceipt.status,
+        goodsReceiptSupplierId: goodsReceipt.supplierId,
+      })
+      .from(goodsReceiptLine)
+      .innerJoin(
+        goodsReceipt,
+        eq(goodsReceipt.id, goodsReceiptLine.goodsReceiptId)
+      )
+      .where(
+        and(
+          eq(goodsReceiptLine.id, line.goodsReceiptLineId),
+          eq(goodsReceiptLine.goodsReceiptId, line.goodsReceiptId)
+        )
+      )
+      .limit(1)
+  ).at(0);
+  if (!row) {
+    throw new ProcurementError("Goods receipt line not found", "NOT_FOUND");
+  }
+  if (
+    row.purchaseOrderId !== graph.po.id ||
+    row.goodsReceiptCompanyId !== graph.po.companyId ||
+    row.goodsReceiptSupplierId !== graph.po.supplierId ||
+    row.goodsReceiptStatus !== "posted"
+  ) {
+    throw new ProcurementError(
+      "Goods receipt line does not match the import batch graph",
+      "NOT_FOUND"
+    );
+  }
+  return row;
+}
+
+async function assertImportBillLine(
+  tx: TenantTransaction,
+  graph: ImportBatchGraph,
+  receiptLine: ImportReceiptLine,
+  supplierBillLineId: string
+): Promise<typeof supplierBillLine.$inferSelect> {
+  const line = (
+    await tx
+      .select()
+      .from(supplierBillLine)
+      .where(eq(supplierBillLine.id, supplierBillLineId))
+      .limit(1)
+  ).at(0);
+  if (
+    !line ||
+    line.supplierBillId !== graph.bill.id ||
+    line.purchaseOrderId !== graph.po.id ||
+    line.goodsReceiptLineId !== receiptLine.id ||
+    line.goodsReceiptId !== receiptLine.goodsReceiptId ||
+    line.productId !== receiptLine.productId ||
+    line.skuId !== receiptLine.skuId
+  ) {
+    throw new ProcurementError(
+      "Supplier bill line does not match the import batch graph",
+      "NOT_FOUND"
+    );
+  }
+  return line;
+}
+
+async function assertImportBondReceiptLine(
+  tx: TenantTransaction,
+  graph: ImportBatchGraph,
+  receiptLine: ImportReceiptLine
+): Promise<void> {
+  if (!graph.bondReceipt) {
+    return;
+  }
+  const bondLine = (
+    await tx
+      .select()
+      .from(bondReceiptLine)
+      .where(eq(bondReceiptLine.bondReceiptId, graph.bondReceipt.id))
+  ).find(
+    (row) =>
+      row.productId === receiptLine.productId &&
+      row.skuId === receiptLine.skuId &&
+      row.qty === receiptLine.qtyReceived
+  );
+  if (!bondLine) {
+    throw new ProcurementError(
+      "Bond receipt line does not match the import batch goods receipt line",
+      "NOT_FOUND"
+    );
+  }
+}
+
+async function assertImportLandedCost(
+  tx: TenantTransaction,
+  graph: ImportBatchGraph,
+  receiptLine: ImportReceiptLine,
+  billLine: typeof supplierBillLine.$inferSelect,
+  line: CreateImportBatchLineInput
+): Promise<void> {
+  if (line.landedCostPoolId && !line.landedCostAllocationId) {
+    throw new ProcurementError(
+      "Landed cost pool references require a matching allocation",
+      "INVALID_STATE"
+    );
+  }
+  if (line.landedCostAllocationId && !line.landedCostPoolId) {
+    throw new ProcurementError(
+      "Landed cost allocation references require a matching pool",
+      "INVALID_STATE"
+    );
+  }
+  if (!(line.landedCostPoolId && line.landedCostAllocationId)) {
+    return;
+  }
+  const pool = (
+    await tx
+      .select()
+      .from(landedCostPool)
+      .where(eq(landedCostPool.id, line.landedCostPoolId))
+      .limit(1)
+  ).at(0);
+  if (
+    !pool ||
+    pool.supplierBillId !== graph.bill.id ||
+    pool.companyId !== graph.bill.companyId ||
+    pool.currency !== graph.bill.currency ||
+    pool.scale !== graph.bill.scale
+  ) {
+    throw new ProcurementError(
+      "Landed cost pool does not match the import batch graph",
+      "NOT_FOUND"
+    );
+  }
+  const allocation = (
+    await tx
+      .select()
+      .from(landedCostAllocation)
+      .where(eq(landedCostAllocation.id, line.landedCostAllocationId))
+      .limit(1)
+  ).at(0);
+  if (
+    !allocation ||
+    allocation.landedCostPoolId !== pool.id ||
+    allocation.supplierBillId !== graph.bill.id ||
+    allocation.supplierBillLineId !== billLine.id ||
+    allocation.goodsReceiptLineId !== receiptLine.id ||
+    allocation.goodsReceiptId !== receiptLine.goodsReceiptId ||
+    allocation.productId !== receiptLine.productId ||
+    allocation.skuId !== receiptLine.skuId
+  ) {
+    throw new ProcurementError(
+      "Landed cost allocation does not match the import batch graph",
+      "NOT_FOUND"
+    );
+  }
+}
+async function createImportBatchLine(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  batch: ImportBatchRow,
+  graph: ImportBatchGraph,
+  line: CreateImportBatchLineInput
+): Promise<ImportBatchLineRow> {
+  const receiptLine = await loadImportReceiptLine(tx, graph, line);
+  const billLine = await assertImportBillLine(
+    tx,
+    graph,
+    receiptLine,
+    line.supplierBillLineId
+  );
+  await assertImportBondReceiptLine(tx, graph, receiptLine);
+  await assertImportLandedCost(tx, graph, receiptLine, billLine, line);
+  const row = (
+    await tx
+      .insert(importBatchLine)
+      .values({
+        tenantId: ctx.tenantId,
+        importBatchId: batch.id,
+        goodsReceiptId: receiptLine.goodsReceiptId,
+        goodsReceiptLineId: receiptLine.id,
+        supplierBillLineId: billLine.id,
+        landedCostPoolId: line.landedCostPoolId ?? null,
+        landedCostAllocationId: line.landedCostAllocationId ?? null,
+        productId: receiptLine.productId,
+        skuId: receiptLine.skuId,
+        qtyReceived: receiptLine.qtyReceived,
+        currency: receiptLine.currency,
+        scale: receiptLine.scale,
+        customsLineReference: line.customsLineReference ?? null,
+      })
+      .returning()
+  ).at(0);
+  if (!row) {
+    throw new Error("createImportBatch: line insert failed");
+  }
+  return row;
+}
+
+export async function createImportBatch(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  input: CreateImportBatchInput
+): Promise<{ batch: ImportBatchRow; lines: ImportBatchLineRow[] }> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`import-batch:${ctx.tenantId}:${input.supplierBillId}`}, 0))`
+  );
+  assertImportBatchDates(input);
+  const graph = await loadImportBatchGraph(tx, input);
+  if (input.lines.length === 0) {
+    throw new ProcurementError(
+      "At least one import batch line is required",
+      "INVALID_STATE"
+    );
+  }
+  const seenReceiptLineIds = new Set<string>();
+  for (const line of input.lines) {
+    if (seenReceiptLineIds.has(line.goodsReceiptLineId)) {
+      throw new ProcurementError(
+        "Duplicate goods receipt line on import batch",
+        "INVALID_STATE"
+      );
+    }
+    seenReceiptLineIds.add(line.goodsReceiptLineId);
+  }
+  const batch = (
+    await tx
+      .insert(importBatch)
+      .values({
+        tenantId: ctx.tenantId,
+        companyId: input.companyId,
+        supplierId: input.supplierId,
+        purchaseOrderId: graph.po.id,
+        supplierBillId: graph.bill.id,
+        bondReceiptId: input.bondReceiptId ?? null,
+        number: input.number,
+        status: importBatchStatus(input),
+        customsReference: input.customsReference ?? null,
+        declarationNumber: input.declarationNumber ?? null,
+        portOfEntry: input.portOfEntry ?? null,
+        vesselName: input.vesselName ?? null,
+        eta: input.eta ?? null,
+        arrivedAt: input.arrivedAt ?? null,
+        clearedAt: input.clearedAt ?? null,
+        currency: input.currency,
+        scale: input.scale ?? graph.bill.scale,
+        notes: input.notes ?? null,
+        createdBy: ctx.actorUserId ?? null,
+      })
+      .returning()
+  ).at(0);
+  if (!batch) {
+    throw new Error("createImportBatch: batch insert failed");
+  }
+  const lines: ImportBatchLineRow[] = [];
+  for (const line of input.lines) {
+    lines.push(await createImportBatchLine(tx, ctx, batch, graph, line));
+  }
+  await recordAudit(tx, ctx, {
+    action: "procurement.import_batch.create",
+    entityType: "import_batch",
+    entityId: batch.id,
+    after: { ...batch, lines },
+  });
+  await emitEvent(tx, ctx, {
+    payload: {
+      aggregateId: batch.id,
+      aggregateType: "import_batch",
+      companyId: batch.companyId,
+      currency: batch.currency,
+      importBatchId: batch.id,
+      purchaseOrderId: batch.purchaseOrderId,
+      scale: batch.scale,
+      supplierBillId: batch.supplierBillId,
+      supplierId: batch.supplierId,
+      status: batch.status,
+      bondReceiptId: batch.bondReceiptId,
+      customsReference: batch.customsReference,
+      declarationNumber: batch.declarationNumber,
+      portOfEntry: batch.portOfEntry,
+      vesselName: batch.vesselName,
+      eta: batch.eta,
+      arrivedAt: batch.arrivedAt,
+      clearedAt: batch.clearedAt,
+      lines,
+    },
+    type: "procurement.import_batch.created",
+  });
+  return { batch, lines };
 }
 
 export async function receivePurchaseOrder(
