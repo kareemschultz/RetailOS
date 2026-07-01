@@ -18,15 +18,9 @@ function ReportsLanding() {
         },
         {
           description:
-            "Stock, transfer, bonded-goods, shift, and sales reporting screens backed by live APIs.",
-          label: "Operational reports",
-          to: "/inventory",
-        },
-        {
-          description:
-            "Sales lookup, details, and void workflow for store operations.",
-          label: "Sales reports",
-          to: "/sales",
+            "Accounting reports remain hidden until the GL, journals, and posting periods are real.",
+          label: "Financial report status",
+          to: "/reports/financial",
         },
       ]}
       eyebrow="Reports"
@@ -40,9 +34,9 @@ function ReportsLanding() {
         },
         {
           description:
-            "Stock, transfer, bonded-goods, shift, and sales screens are available from the operations menu today.",
+            "Stock, transfer, bond, and shift reporting should be promoted here as backend DTOs stabilize.",
           label: "Operational reports",
-          status: "Available",
+          status: "In build",
         },
         {
           description:
