@@ -3,12 +3,14 @@ import type { RouterClient } from "@orpc/server";
 import { protectedProcedure, publicProcedure } from "../index";
 import { commerceRouter } from "./commerce";
 import {
+  accountingRouter,
   bondRouter,
   catalogRouter,
   companyRouter,
   inventoryRouter,
   locationRouter,
   posRouter,
+  procurementRouter,
   productRouter,
   reportsRouter,
   tenantRouter,
@@ -30,6 +32,8 @@ export const appRouter = {
   inventory: inventoryRouter,
   transfer: transferRouter,
   bond: bondRouter,
+  procurement: procurementRouter,
+  accounting: accountingRouter,
   pos: posRouter,
   reports: reportsRouter,
   // Shopix Commerce Experience — public, hostname-resolved storefront API.

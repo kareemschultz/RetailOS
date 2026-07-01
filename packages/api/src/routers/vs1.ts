@@ -7382,3 +7382,141 @@ export const bondRouter = {
       });
     }),
 };
+
+export const procurementRouter = {
+  supplierCreate: tenantProcedure
+    .input(
+      z.object({
+        code: z.string().min(1).max(64),
+        name: z.string().min(1).max(255),
+        email: z.string().email().optional(),
+        phone: z.string().max(64).optional(),
+        taxIdentificationNumber: z.string().max(128).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "procurement.manage");
+        return services.createSupplier(tx, ctx, input);
+      });
+    }),
+  purchaseOrderCreate: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid(),
+        supplierId: z.string().uuid(),
+        number: z.string().min(1).max(64),
+        currency: z.string().min(3).max(3),
+        scale: z.number().int().min(0).max(6).default(2),
+        notes: z.string().max(2000).optional(),
+        lines: z
+          .array(
+            z.object({
+              productId: z.string().uuid(),
+              skuId: z.string().uuid(),
+              description: z.string().max(500).optional(),
+              qtyOrdered: z.number().int().positive(),
+              unitCostMinor: z.number().int().nonnegative(),
+              currency: z.string().min(3).max(3).optional(),
+              scale: z.number().int().min(0).max(6).optional(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "procurement.manage");
+        try {
+          return await services.createPurchaseOrder(tx, ctx, input);
+        } catch (error) {
+          if (error instanceof services.ProcurementError) {
+            throw new ORPCError("NOT_FOUND", { message: error.message });
+          }
+          throw error;
+        }
+      });
+    }),
+};
+
+export const accountingRouter = {
+  ledgerAccountCreate: tenantProcedure
+    .input(
+      z.object({
+        code: z.string().min(1).max(64),
+        name: z.string().min(1).max(255),
+        type: z.enum(schema.ACCOUNT_TYPES),
+        normalBalance: z.enum(schema.NORMAL_BALANCES),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "accounting.manage");
+        return services.createLedgerAccount(tx, ctx, input);
+      });
+    }),
+  postingPeriodCreate: tenantProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(128),
+        startsOn: z.coerce.date(),
+        endsOn: z.coerce.date(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "accounting.manage");
+        return services.createPostingPeriod(tx, ctx, input);
+      });
+    }),
+  journalCreateDraft: tenantProcedure
+    .input(
+      z.object({
+        postingPeriodId: z.string().uuid(),
+        memo: z.string().max(1000).optional(),
+        source: z.enum(["manual", "opening_balance", "procurement"]).optional(),
+        sourceDocumentId: z.string().uuid().optional(),
+        lines: z
+          .array(
+            z.object({
+              accountId: z.string().uuid(),
+              debitMinor: z.number().int().nonnegative().optional(),
+              creditMinor: z.number().int().nonnegative().optional(),
+              currency: z.string().min(3).max(3),
+              scale: z.number().int().min(0).max(6).default(2),
+              memo: z.string().max(500).optional(),
+            })
+          )
+          .min(2),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "accounting.manage");
+        return services.createDraftJournal(tx, ctx, input);
+      });
+    }),
+  journalPost: tenantProcedure
+    .input(z.object({ journalId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "accounting.manage");
+        try {
+          return await services.postJournal(tx, ctx, input.journalId);
+        } catch (error) {
+          if (error instanceof services.AccountingError) {
+            const code =
+              error.code === "NOT_FOUND" ? "NOT_FOUND" : "BAD_REQUEST";
+            throw new ORPCError(code, { message: error.message });
+          }
+          throw error;
+        }
+      });
+    }),
+};

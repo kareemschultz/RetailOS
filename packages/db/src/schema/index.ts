@@ -1,6 +1,8 @@
 // Schema barrel — every table the Drizzle client and Better Auth adapter use.
 // `columns.ts` (shared column builders, not tables) is intentionally NOT
 // re-exported here.
+
+export * from "./accounting";
 export * from "./audit";
 export * from "./auth";
 export * from "./bond";
@@ -14,6 +16,7 @@ export * from "./numbering";
 export * from "./offline_sync";
 export * from "./organization";
 export * from "./outbox";
+export * from "./procurement";
 export * from "./product";
 export * from "./sales";
 export * from "./shift";

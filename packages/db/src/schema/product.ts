@@ -282,6 +282,13 @@ export const sku = pgTable(
     index("sku_baseUomId_idx").on(table.baseUomId),
     // Composite-FK target (Phase 3 #5).
     unique("sku_tenant_id_uq").on(table.tenantId, table.id),
+    // Composite-FK target for callers that need to prove a SKU belongs to the
+    // supplied product at the DB layer (procurement PO lines, GRNs).
+    unique("sku_tenant_product_id_uq").on(
+      table.tenantId,
+      table.productId,
+      table.id
+    ),
   ]
 );
 
