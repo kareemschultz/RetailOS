@@ -7,14 +7,6 @@ import {
 } from "@RetailOS/ui/components/card";
 import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@RetailOS/ui/components/select";
 import { Textarea } from "@RetailOS/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
@@ -48,25 +40,6 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 48);
-}
-
-const TAX_PRESETS = [
-  { label: "VAT / sales tax", name: "Sales tax", code: "VAT", rate: "14" },
-  { label: "GST", name: "GST", code: "GST", rate: "14" },
-  { label: "No tax / exempt", name: "No tax", code: "NONE", rate: "0" },
-] as const;
-
-const TAX_CODES = ["VAT", "GST", "TAX", "NONE"] as const;
-const TAX_RATES = ["0", "8", "10", "12", "14", "15"] as const;
-
-function getSubmissionSlug(slug: string, name: string) {
-  const enteredSlug = slugify(slug);
-  if (enteredSlug.length >= 2) {
-    return enteredSlug;
-  }
-
-  const nameSlug = slugify(name);
-  return nameSlug.length >= 2 ? nameSlug : enteredSlug;
 }
 
 function OnboardingScreen() {
@@ -128,17 +101,7 @@ function OnboardingScreen() {
           className="grid gap-6 lg:grid-cols-[1fr_22rem]"
           onSubmit={async (event) => {
             event.preventDefault();
-            const normalizedSlug = getSubmissionSlug(
-              businessSlug,
-              businessName
-            );
             const rateBps = Math.round(Number(taxPercent || "0") * 100);
-            if (normalizedSlug && normalizedSlug.length < 2) {
-              toast.error(
-                "Workspace slug must be at least 2 characters. Use the business name or enter a longer slug."
-              );
-              return;
-            }
             if (!Number.isFinite(rateBps)) {
               toast.error("Enter a valid tax percentage.");
               return;
@@ -146,7 +109,7 @@ function OnboardingScreen() {
             try {
               await complete.mutateAsync({
                 businessName,
-                businessSlug: normalizedSlug || undefined,
+                businessSlug: businessSlug || undefined,
                 locationName,
                 taxName,
                 taxCode,
@@ -191,27 +154,15 @@ function OnboardingScreen() {
                 <Label htmlFor="businessSlug">Workspace slug</Label>
                 <Input
                   id="businessSlug"
-                  minLength={2}
-                  onBlur={() => {
-                    const normalizedSlug = getSubmissionSlug(
-                      businessSlug,
-                      businessName
-                    );
-                    if (normalizedSlug !== businessSlug) {
-                      setBusinessSlug(normalizedSlug);
-                    }
-                  }}
                   onChange={(event) =>
                     setBusinessSlug(slugify(event.target.value))
                   }
-                  pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                   placeholder="acme-retail"
                   value={businessSlug}
                 />
                 <p className="text-muted-foreground text-xs">
                   Used for tenant identity and future storefront/subdomain
-                  setup. If this is left blank or too short, RetailOS will use
-                  the business name.
+                  setup.
                 </p>
               </div>
               <div className="grid gap-2">
@@ -246,113 +197,34 @@ function OnboardingScreen() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="taxProfile">Tax profile</Label>
-                  <Select
-                    onValueChange={(value) => {
-                      if (!value) {
-                        return;
-                      }
-                      const preset = TAX_PRESETS.find(
-                        (option) => option.label === value
-                      );
-                      if (!preset) {
-                        return;
-                      }
-                      setTaxName(preset.name);
-                      setTaxCode(preset.code);
-                      setTaxPercent(preset.rate);
-                    }}
-                    value={
-                      TAX_PRESETS.find(
-                        (option) =>
-                          option.name === taxName &&
-                          option.code === taxCode &&
-                          option.rate === taxPercent
-                      )?.label ?? "Custom"
-                    }
-                  >
-                    <SelectTrigger
-                      className="h-11 w-full text-sm"
-                      id="taxProfile"
-                    >
-                      <SelectValue placeholder="Choose tax profile" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {TAX_PRESETS.map((preset) => (
-                          <SelectItem key={preset.label} value={preset.label}>
-                            {preset.label} ({preset.code} {preset.rate}%)
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="Custom">Custom</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="taxName">Tax profile</Label>
+                  <Input
+                    id="taxName"
+                    minLength={2}
+                    onChange={(event) => setTaxName(event.target.value)}
+                    required
+                    value={taxName}
+                  />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-[1fr_1fr_7rem]">
+                <div className="grid grid-cols-[1fr_7rem] gap-3">
                   <div className="grid gap-2">
-                    <Label htmlFor="taxName">Name</Label>
+                    <Label htmlFor="taxCode">Code</Label>
                     <Input
-                      id="taxName"
-                      minLength={2}
-                      onChange={(event) => setTaxName(event.target.value)}
+                      id="taxCode"
+                      onChange={(event) => setTaxCode(event.target.value)}
                       required
-                      value={taxName}
+                      value={taxCode}
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="taxCode">Code</Label>
-                    <Select
-                      onValueChange={(value) => {
-                        if (value) {
-                          setTaxCode(value);
-                        }
-                      }}
-                      value={taxCode}
-                    >
-                      <SelectTrigger
-                        className="h-11 w-full text-sm"
-                        id="taxCode"
-                      >
-                        <SelectValue placeholder="Code" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {TAX_CODES.map((code) => (
-                            <SelectItem key={code} value={code}>
-                              {code}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
                     <Label htmlFor="taxPercent">Rate %</Label>
-                    <Select
-                      onValueChange={(value) => {
-                        if (value) {
-                          setTaxPercent(value);
-                        }
-                      }}
+                    <Input
+                      id="taxPercent"
+                      inputMode="decimal"
+                      onChange={(event) => setTaxPercent(event.target.value)}
+                      required
                       value={taxPercent}
-                    >
-                      <SelectTrigger
-                        className="h-11 w-full text-sm"
-                        id="taxPercent"
-                      >
-                        <SelectValue placeholder="Rate" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {TAX_RATES.map((rate) => (
-                            <SelectItem key={rate} value={rate}>
-                              {rate}%
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                    />
                   </div>
                 </div>
                 <Button className="h-11 w-full" disabled={isBusy} type="submit">
