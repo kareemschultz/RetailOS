@@ -2,11 +2,13 @@ import type { LinkProps } from "@tanstack/react-router";
 import {
   ArrowLeftRight,
   BadgeCheck,
+  BarChart3,
   Boxes,
   CircleDollarSign,
-  FileClock,
+  ClipboardList,
   FolderTree,
   History,
+  Landmark,
   Layers,
   LayoutDashboard,
   type LucideIcon,
@@ -16,6 +18,7 @@ import {
   Ruler,
   ScanLine,
   ShieldCheck,
+  Store,
   Workflow,
 } from "lucide-react";
 
@@ -103,9 +106,31 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    groupLabel: "Procurement",
+    items: [
+      { icon: ClipboardList, label: "Purchase orders", to: "/procurement" },
+    ],
+  },
+  {
+    groupLabel: "Commerce",
+    items: [{ icon: Store, label: "Storefront", to: "/commerce" }],
+  },
+  {
+    groupLabel: "Financials",
+    items: [{ icon: Landmark, label: "Accounting", to: "/financials" }],
+  },
+  {
     groupLabel: "Reports",
     items: [
-      { icon: FileClock, label: "Number leases", to: "/reports/number-leases" },
+      {
+        icon: BarChart3,
+        label: "Reports",
+        childItems: [
+          { label: "Overview", to: "/reports" },
+          { label: "Number leases", to: "/reports/number-leases" },
+          { label: "Financial status", to: "/reports/financial" },
+        ],
+      },
     ],
   },
 ];

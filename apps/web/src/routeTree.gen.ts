@@ -20,17 +20,21 @@ import { Route as AppStockLedgerRouteImport } from './routes/_app/stock-ledger'
 import { Route as AppSkusRouteImport } from './routes/_app/skus'
 import { Route as AppShiftsRouteImport } from './routes/_app/shifts'
 import { Route as AppSalesRouteImport } from './routes/_app/sales'
+import { Route as AppReportsRouteImport } from './routes/_app/reports'
+import { Route as AppProcurementRouteImport } from './routes/_app/procurement'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
 import { Route as AppOperationsRouteImport } from './routes/_app/operations'
 import { Route as AppLotsRouteImport } from './routes/_app/lots'
 import { Route as AppLocationsRouteImport } from './routes/_app/locations'
 import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
+import { Route as AppFinancialsRouteImport } from './routes/_app/financials'
 import { Route as AppErrorMaintenanceRouteImport } from './routes/_app/error-maintenance'
 import { Route as AppError500RouteImport } from './routes/_app/error-500'
 import { Route as AppError404RouteImport } from './routes/_app/error-404'
 import { Route as AppError403RouteImport } from './routes/_app/error-403'
 import { Route as AppError401RouteImport } from './routes/_app/error-401'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppCommerceRouteImport } from './routes/_app/commerce'
 import { Route as AppCategoriesRouteImport } from './routes/_app/categories'
 import { Route as AppBrandsRouteImport } from './routes/_app/brands'
 import { Route as AppBondsRouteImport } from './routes/_app/bonds'
@@ -94,6 +98,16 @@ const AppSalesRoute = AppSalesRouteImport.update({
   path: '/sales',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppProcurementRoute = AppProcurementRouteImport.update({
+  id: '/procurement',
+  path: '/procurement',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppPosRoute = AppPosRouteImport.update({
   id: '/pos',
   path: '/pos',
@@ -117,6 +131,11 @@ const AppLocationsRoute = AppLocationsRouteImport.update({
 const AppInventoryRoute = AppInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppFinancialsRoute = AppFinancialsRouteImport.update({
+  id: '/financials',
+  path: '/financials',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppErrorMaintenanceRoute = AppErrorMaintenanceRouteImport.update({
@@ -149,6 +168,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppCommerceRoute = AppCommerceRouteImport.update({
+  id: '/commerce',
+  path: '/commerce',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppCategoriesRoute = AppCategoriesRouteImport.update({
   id: '/categories',
   path: '/categories',
@@ -175,14 +199,14 @@ const AppProductsIndexRoute = AppProductsIndexRouteImport.update({
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppReportsNumberLeasesRoute = AppReportsNumberLeasesRouteImport.update({
-  id: '/reports/number-leases',
-  path: '/reports/number-leases',
-  getParentRoute: () => AppRouteRoute,
+  id: '/number-leases',
+  path: '/number-leases',
+  getParentRoute: () => AppReportsRoute,
 } as any)
 const AppReportsFinancialRoute = AppReportsFinancialRouteImport.update({
-  id: '/reports/financial',
-  path: '/reports/financial',
-  getParentRoute: () => AppRouteRoute,
+  id: '/financial',
+  path: '/financial',
+  getParentRoute: () => AppReportsRoute,
 } as any)
 const AppProductsProductIdRoute = AppProductsProductIdRouteImport.update({
   id: '/products/$productId',
@@ -197,17 +221,21 @@ export interface FileRoutesByFullPath {
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
   '/categories': typeof AppCategoriesRoute
+  '/commerce': typeof AppCommerceRoute
   '/dashboard': typeof AppDashboardRoute
   '/error-401': typeof AppError401Route
   '/error-403': typeof AppError403Route
   '/error-404': typeof AppError404Route
   '/error-500': typeof AppError500Route
   '/error-maintenance': typeof AppErrorMaintenanceRoute
+  '/financials': typeof AppFinancialsRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
   '/lots': typeof AppLotsRoute
   '/operations': typeof AppOperationsRoute
   '/pos': typeof AppPosRoute
+  '/procurement': typeof AppProcurementRoute
+  '/reports': typeof AppReportsRouteWithChildren
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
@@ -228,17 +256,21 @@ export interface FileRoutesByTo {
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
   '/categories': typeof AppCategoriesRoute
+  '/commerce': typeof AppCommerceRoute
   '/dashboard': typeof AppDashboardRoute
   '/error-401': typeof AppError401Route
   '/error-403': typeof AppError403Route
   '/error-404': typeof AppError404Route
   '/error-500': typeof AppError500Route
   '/error-maintenance': typeof AppErrorMaintenanceRoute
+  '/financials': typeof AppFinancialsRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
   '/lots': typeof AppLotsRoute
   '/operations': typeof AppOperationsRoute
   '/pos': typeof AppPosRoute
+  '/procurement': typeof AppProcurementRoute
+  '/reports': typeof AppReportsRouteWithChildren
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
@@ -261,17 +293,21 @@ export interface FileRoutesById {
   '/_app/bonds': typeof AppBondsRoute
   '/_app/brands': typeof AppBrandsRoute
   '/_app/categories': typeof AppCategoriesRoute
+  '/_app/commerce': typeof AppCommerceRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/error-401': typeof AppError401Route
   '/_app/error-403': typeof AppError403Route
   '/_app/error-404': typeof AppError404Route
   '/_app/error-500': typeof AppError500Route
   '/_app/error-maintenance': typeof AppErrorMaintenanceRoute
+  '/_app/financials': typeof AppFinancialsRoute
   '/_app/inventory': typeof AppInventoryRoute
   '/_app/locations': typeof AppLocationsRoute
   '/_app/lots': typeof AppLotsRoute
   '/_app/operations': typeof AppOperationsRoute
   '/_app/pos': typeof AppPosRoute
+  '/_app/procurement': typeof AppProcurementRoute
+  '/_app/reports': typeof AppReportsRouteWithChildren
   '/_app/sales': typeof AppSalesRoute
   '/_app/shifts': typeof AppShiftsRoute
   '/_app/skus': typeof AppSkusRoute
@@ -294,17 +330,21 @@ export interface FileRouteTypes {
     | '/bonds'
     | '/brands'
     | '/categories'
+    | '/commerce'
     | '/dashboard'
     | '/error-401'
     | '/error-403'
     | '/error-404'
     | '/error-500'
     | '/error-maintenance'
+    | '/financials'
     | '/inventory'
     | '/locations'
     | '/lots'
     | '/operations'
     | '/pos'
+    | '/procurement'
+    | '/reports'
     | '/sales'
     | '/shifts'
     | '/skus'
@@ -325,17 +365,21 @@ export interface FileRouteTypes {
     | '/bonds'
     | '/brands'
     | '/categories'
+    | '/commerce'
     | '/dashboard'
     | '/error-401'
     | '/error-403'
     | '/error-404'
     | '/error-500'
     | '/error-maintenance'
+    | '/financials'
     | '/inventory'
     | '/locations'
     | '/lots'
     | '/operations'
     | '/pos'
+    | '/procurement'
+    | '/reports'
     | '/sales'
     | '/shifts'
     | '/skus'
@@ -357,17 +401,21 @@ export interface FileRouteTypes {
     | '/_app/bonds'
     | '/_app/brands'
     | '/_app/categories'
+    | '/_app/commerce'
     | '/_app/dashboard'
     | '/_app/error-401'
     | '/_app/error-403'
     | '/_app/error-404'
     | '/_app/error-500'
     | '/_app/error-maintenance'
+    | '/_app/financials'
     | '/_app/inventory'
     | '/_app/locations'
     | '/_app/lots'
     | '/_app/operations'
     | '/_app/pos'
+    | '/_app/procurement'
+    | '/_app/reports'
     | '/_app/sales'
     | '/_app/shifts'
     | '/_app/skus'
@@ -467,6 +515,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSalesRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/reports': {
+      id: '/_app/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/procurement': {
+      id: '/_app/procurement'
+      path: '/procurement'
+      fullPath: '/procurement'
+      preLoaderRoute: typeof AppProcurementRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/pos': {
       id: '/_app/pos'
       path: '/pos'
@@ -500,6 +562,13 @@ declare module '@tanstack/react-router' {
       path: '/inventory'
       fullPath: '/inventory'
       preLoaderRoute: typeof AppInventoryRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/financials': {
+      id: '/_app/financials'
+      path: '/financials'
+      fullPath: '/financials'
+      preLoaderRoute: typeof AppFinancialsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/error-maintenance': {
@@ -544,6 +613,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/commerce': {
+      id: '/_app/commerce'
+      path: '/commerce'
+      fullPath: '/commerce'
+      preLoaderRoute: typeof AppCommerceRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/categories': {
       id: '/_app/categories'
       path: '/categories'
@@ -581,17 +657,17 @@ declare module '@tanstack/react-router' {
     }
     '/_app/reports/number-leases': {
       id: '/_app/reports/number-leases'
-      path: '/reports/number-leases'
+      path: '/number-leases'
       fullPath: '/reports/number-leases'
       preLoaderRoute: typeof AppReportsNumberLeasesRouteImport
-      parentRoute: typeof AppRouteRoute
+      parentRoute: typeof AppReportsRoute
     }
     '/_app/reports/financial': {
       id: '/_app/reports/financial'
-      path: '/reports/financial'
+      path: '/financial'
       fullPath: '/reports/financial'
       preLoaderRoute: typeof AppReportsFinancialRouteImport
-      parentRoute: typeof AppRouteRoute
+      parentRoute: typeof AppReportsRoute
     }
     '/_app/products/$productId': {
       id: '/_app/products/$productId'
@@ -603,22 +679,40 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppReportsRouteChildren {
+  AppReportsFinancialRoute: typeof AppReportsFinancialRoute
+  AppReportsNumberLeasesRoute: typeof AppReportsNumberLeasesRoute
+}
+
+const AppReportsRouteChildren: AppReportsRouteChildren = {
+  AppReportsFinancialRoute: AppReportsFinancialRoute,
+  AppReportsNumberLeasesRoute: AppReportsNumberLeasesRoute,
+}
+
+const AppReportsRouteWithChildren = AppReportsRoute._addFileChildren(
+  AppReportsRouteChildren,
+)
+
 interface AppRouteRouteChildren {
   AppBarcodesRoute: typeof AppBarcodesRoute
   AppBondsRoute: typeof AppBondsRoute
   AppBrandsRoute: typeof AppBrandsRoute
   AppCategoriesRoute: typeof AppCategoriesRoute
+  AppCommerceRoute: typeof AppCommerceRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppError401Route: typeof AppError401Route
   AppError403Route: typeof AppError403Route
   AppError404Route: typeof AppError404Route
   AppError500Route: typeof AppError500Route
   AppErrorMaintenanceRoute: typeof AppErrorMaintenanceRoute
+  AppFinancialsRoute: typeof AppFinancialsRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppLocationsRoute: typeof AppLocationsRoute
   AppLotsRoute: typeof AppLotsRoute
   AppOperationsRoute: typeof AppOperationsRoute
   AppPosRoute: typeof AppPosRoute
+  AppProcurementRoute: typeof AppProcurementRoute
+  AppReportsRoute: typeof AppReportsRouteWithChildren
   AppSalesRoute: typeof AppSalesRoute
   AppShiftsRoute: typeof AppShiftsRoute
   AppSkusRoute: typeof AppSkusRoute
@@ -628,8 +722,6 @@ interface AppRouteRouteChildren {
   AppUomConversionsRoute: typeof AppUomConversionsRoute
   AppVariantsRoute: typeof AppVariantsRoute
   AppProductsProductIdRoute: typeof AppProductsProductIdRoute
-  AppReportsFinancialRoute: typeof AppReportsFinancialRoute
-  AppReportsNumberLeasesRoute: typeof AppReportsNumberLeasesRoute
   AppProductsIndexRoute: typeof AppProductsIndexRoute
 }
 
@@ -638,17 +730,21 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppBondsRoute: AppBondsRoute,
   AppBrandsRoute: AppBrandsRoute,
   AppCategoriesRoute: AppCategoriesRoute,
+  AppCommerceRoute: AppCommerceRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppError401Route: AppError401Route,
   AppError403Route: AppError403Route,
   AppError404Route: AppError404Route,
   AppError500Route: AppError500Route,
   AppErrorMaintenanceRoute: AppErrorMaintenanceRoute,
+  AppFinancialsRoute: AppFinancialsRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppLocationsRoute: AppLocationsRoute,
   AppLotsRoute: AppLotsRoute,
   AppOperationsRoute: AppOperationsRoute,
   AppPosRoute: AppPosRoute,
+  AppProcurementRoute: AppProcurementRoute,
+  AppReportsRoute: AppReportsRouteWithChildren,
   AppSalesRoute: AppSalesRoute,
   AppShiftsRoute: AppShiftsRoute,
   AppSkusRoute: AppSkusRoute,
@@ -658,8 +754,6 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppUomConversionsRoute: AppUomConversionsRoute,
   AppVariantsRoute: AppVariantsRoute,
   AppProductsProductIdRoute: AppProductsProductIdRoute,
-  AppReportsFinancialRoute: AppReportsFinancialRoute,
-  AppReportsNumberLeasesRoute: AppReportsNumberLeasesRoute,
   AppProductsIndexRoute: AppProductsIndexRoute,
 }
 
