@@ -136,6 +136,7 @@ CREATE TABLE "supplier" (
 );
 --> statement-breakpoint
 ALTER TABLE "journal" ADD CONSTRAINT "journal_posting_period_id_posting_period_id_fk" FOREIGN KEY ("posting_period_id") REFERENCES "public"."posting_period"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "outbox_event" ADD CONSTRAINT "outbox_event_tenant_id_uq" UNIQUE("tenant_id","id");--> statement-breakpoint
 ALTER TABLE "journal" ADD CONSTRAINT "journal_source_outbox_event_id_outbox_event_id_fk" FOREIGN KEY ("source_outbox_event_id") REFERENCES "public"."outbox_event"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "journal" ADD CONSTRAINT "journal_period_composite_fk" FOREIGN KEY ("tenant_id","posting_period_id") REFERENCES "public"."posting_period"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "journal" ADD CONSTRAINT "journal_outbox_event_composite_fk" FOREIGN KEY ("tenant_id","source_outbox_event_id") REFERENCES "public"."outbox_event"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -150,6 +151,7 @@ ALTER TABLE "purchase_order" ADD CONSTRAINT "purchase_order_supplier_composite_f
 ALTER TABLE "purchase_order_line" ADD CONSTRAINT "purchase_order_line_purchase_order_id_purchase_order_id_fk" FOREIGN KEY ("purchase_order_id") REFERENCES "public"."purchase_order"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "purchase_order_line" ADD CONSTRAINT "purchase_order_line_product_id_product_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."product"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "purchase_order_line" ADD CONSTRAINT "purchase_order_line_sku_id_sku_id_fk" FOREIGN KEY ("sku_id") REFERENCES "public"."sku"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sku" ADD CONSTRAINT "sku_tenant_product_id_uq" UNIQUE("tenant_id","product_id","id");--> statement-breakpoint
 ALTER TABLE "purchase_order_line" ADD CONSTRAINT "purchase_order_line_po_composite_fk" FOREIGN KEY ("tenant_id","purchase_order_id") REFERENCES "public"."purchase_order"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "purchase_order_line" ADD CONSTRAINT "purchase_order_line_product_composite_fk" FOREIGN KEY ("tenant_id","product_id") REFERENCES "public"."product"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "purchase_order_line" ADD CONSTRAINT "purchase_order_line_sku_product_composite_fk" FOREIGN KEY ("tenant_id","product_id","sku_id") REFERENCES "public"."sku"("tenant_id","product_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -165,7 +167,6 @@ CREATE INDEX "purchase_order_supplier_idx" ON "purchase_order" USING btree ("sup
 CREATE INDEX "purchase_order_line_tenantId_idx" ON "purchase_order_line" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "purchase_order_line_po_idx" ON "purchase_order_line" USING btree ("purchase_order_id");--> statement-breakpoint
 CREATE INDEX "supplier_tenantId_idx" ON "supplier" USING btree ("tenant_id");--> statement-breakpoint
-ALTER TABLE "sku" ADD CONSTRAINT "sku_tenant_product_id_uq" UNIQUE("tenant_id","product_id","id");--> statement-breakpoint
 CREATE OR REPLACE FUNCTION retailos_validate_journal_posting()
 RETURNS trigger
 LANGUAGE plpgsql

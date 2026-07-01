@@ -276,6 +276,10 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
       name: "Coffee Beans",
       category: { handle: "PUBLIC-CAT", name: "Public Category" },
       price: { amountMinor: 1250, currency: "USD", scale: 2 },
+      primaryImage: {
+        url: "https://cdn.example.test/coffee.jpg",
+        altText: "Bag of coffee beans",
+      },
       images: [
         {
           url: "https://cdn.example.test/coffee.jpg",

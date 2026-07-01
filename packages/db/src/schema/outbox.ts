@@ -5,6 +5,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import { tenantId } from "./columns";
@@ -30,5 +31,6 @@ export const outboxEvent = pgTable(
   (table) => [
     index("outbox_event_tenantId_idx").on(table.tenantId),
     index("outbox_event_status_idx").on(table.status),
+    unique("outbox_event_tenant_id_uq").on(table.tenantId, table.id),
   ]
 );
