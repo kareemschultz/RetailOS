@@ -1,7 +1,25 @@
 import type { AppRouterClient } from "@RetailOS/api/routers/index";
 import { Badge } from "@RetailOS/ui/components/badge";
+import { Button } from "@RetailOS/ui/components/button";
 import { Card, CardContent } from "@RetailOS/ui/components/card";
 import { DataTableCard } from "@RetailOS/ui/components/data-table-card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@RetailOS/ui/components/dialog";
+import { Input } from "@RetailOS/ui/components/input";
+import { Label } from "@RetailOS/ui/components/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@RetailOS/ui/components/select";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
 import {
   Table,
@@ -11,17 +29,20 @@ import {
   TableHeader,
   TableRow,
 } from "@RetailOS/ui/components/table";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Building2,
   type LucideIcon,
   MapPin,
+  Plus,
   ShieldCheck,
   TriangleAlert,
   Warehouse,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 import { orpc } from "@/utils/orpc";
 
@@ -45,6 +66,104 @@ const TYPE_LABELS: Record<string, string> = {
   distribution_center: "Distribution center",
   fulfillment_center: "Fulfillment center",
 };
+
+type LocationType =
+  | "store"
+  | "warehouse"
+  | "bonded"
+  | "distribution_center"
+  | "fulfillment_center";
+
+const LOCATION_TYPES: Array<{ label: string; value: LocationType }> = [
+  { label: "Store", value: "store" },
+  { label: "Warehouse", value: "warehouse" },
+  { label: "Bonded", value: "bonded" },
+  { label: "Distribution center", value: "distribution_center" },
+  { label: "Fulfillment center", value: "fulfillment_center" },
+];
+
+function LocationDialog({
+  companyId,
+  isSaving,
+  onCreated,
+  onOpenChange,
+  open,
+}: {
+  companyId?: string;
+  isSaving: boolean;
+  onCreated: (values: {
+    companyId: string;
+    name: string;
+    type: LocationType;
+  }) => Promise<void>;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState<LocationType>("store");
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>New location</DialogTitle>
+          <DialogDescription>
+            Add a store, warehouse, or bonded facility for POS and inventory.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-4"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!companyId) {
+              toast.error("Load an existing company before adding a location.");
+              return;
+            }
+            await onCreated({ companyId, name: name.trim(), type });
+          }}
+        >
+          <div className="grid gap-2">
+            <Label htmlFor="location-name">Name</Label>
+            <Input
+              autoFocus
+              id="location-name"
+              minLength={1}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Main Store"
+              required
+              value={name}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label>Type</Label>
+            <Select
+              onValueChange={(value) =>
+                setType((value ?? "store") as LocationType)
+              }
+              value={type}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LOCATION_TYPES.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button disabled={isSaving || !companyId} type="submit">
+              {isSaving ? "Saving…" : "Create location"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function KpiCard({
   label,
@@ -191,10 +310,13 @@ function LocationsTable({
 function LocationsScreen() {
   // location.list returns a display-safe DTO; counts below are plain array
   // tallies (not money/business math), so deriving them client-side is safe.
+  const [dialogOpen, setDialogOpen] = useState(false);
   const locations = useQuery(orpc.location.list.queryOptions({ input: {} }));
+  const createLocation = useMutation(orpc.location.create.mutationOptions());
 
   const rows = locations.data ?? [];
   const settled = !(locations.isLoading || locations.isError);
+  const companyId = rows.at(0)?.companyId;
 
   const storeCount = rows.filter((l) => l.type === "store").length;
   const warehouseCount = rows.filter((l) => l.type === "warehouse").length;
@@ -245,6 +367,20 @@ function LocationsScreen() {
       )}
 
       <DataTableCard
+        actions={
+          <Button
+            disabled={!companyId}
+            onClick={() => setDialogOpen(true)}
+            title={
+              companyId
+                ? "Add location"
+                : "At least one existing company/location must load first"
+            }
+          >
+            <Plus className="size-4" />
+            New location
+          </Button>
+        }
         count={settled ? rows.length : undefined}
         footer={
           settled && rows.length > 0
@@ -260,6 +396,28 @@ function LocationsScreen() {
           rows={rows}
         />
       </DataTableCard>
+      {dialogOpen ? (
+        <LocationDialog
+          companyId={companyId}
+          isSaving={createLocation.isPending}
+          onCreated={async (values) => {
+            try {
+              await createLocation.mutateAsync(values);
+              toast.success("Location created");
+              setDialogOpen(false);
+              await locations.refetch();
+            } catch (error) {
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : "Could not create location."
+              );
+            }
+          }}
+          onOpenChange={setDialogOpen}
+          open={dialogOpen}
+        />
+      ) : null}
     </div>
   );
 }
