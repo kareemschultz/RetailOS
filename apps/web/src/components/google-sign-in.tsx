@@ -35,7 +35,7 @@ export function GoogleSignIn() {
     try {
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: `${window.location.origin}/onboarding`,
+        callbackURL: `${window.location.origin}/pos`,
       });
     } catch {
       toast.error(

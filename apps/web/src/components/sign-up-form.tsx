@@ -27,8 +27,8 @@ export default function SignUpForm() {
         { email: value.email, password: value.password, name: value.name },
         {
           onSuccess: () => {
-            navigate({ to: "/onboarding" });
-            toast.success("Account created — finish your workspace setup");
+            navigate({ to: "/pos" });
+            toast.success("Account created");
           },
           onError: (error) => {
             toast.error(error.error.message || error.error.statusText);

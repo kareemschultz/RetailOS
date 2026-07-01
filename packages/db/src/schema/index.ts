@@ -16,5 +16,4 @@ export * from "./outbox";
 export * from "./product";
 export * from "./sales";
 export * from "./shift";
-export * from "./tax";
 export * from "./transfer";

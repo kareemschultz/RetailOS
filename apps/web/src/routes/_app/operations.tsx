@@ -437,10 +437,10 @@ function OperationsTabs({ data }: { data: OperationsSummary | undefined }) {
             </Button>
             <Button
               nativeButton={false}
-              render={<Link to="/reports/number-leases" />}
+              render={<Link to="/reports/financial" />}
               variant="outline"
             >
-              Number leases report
+              Financial reports
             </Button>
             <Button
               nativeButton={false}
