@@ -55,6 +55,11 @@ import { ReceiptPreview } from "@/components/pos/receipt-preview";
 import type { PosLocation } from "@/components/pos/types";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/states";
 import { formatMoney } from "@/lib/format";
+import {
+  buildFullRefundInput,
+  getRefundableTotalMinor,
+  type TenderMethod,
+} from "@/lib/sales-refund";
 import { orpc } from "@/utils/orpc";
 
 export const Route = createFileRoute("/_app/sales")({
@@ -81,10 +86,16 @@ const REFUND_LABELS: Record<SaleDetail["refundState"]["status"], string> = {
 function SalesConsole() {
   const searchFieldId = useId();
   const voidReasonId = useId();
+  const refundReasonId = useId();
   const [location, setLocation] = useState<PosLocation | null>(null);
   const [queryText, setQueryText] = useState("");
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
   const [reprintSaleId, setReprintSaleId] = useState<string | null>(null);
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundMethod, setRefundMethod] = useState<TenderMethod>("cash");
+  const [refundDoNotRestock, setRefundDoNotRestock] = useState(false);
+  const [refundKey, setRefundKey] = useState<string | null>(null);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [voidKey, setVoidKey] = useState<string | null>(null);
@@ -108,6 +119,7 @@ function SalesConsole() {
       enabled: selectedSaleId != null,
     })
   );
+  const refundSale = useMutation(orpc.pos.refund.mutationOptions());
   const voidSale = useMutation(orpc.pos.void.mutationOptions());
 
   useEffect(() => {
@@ -129,6 +141,42 @@ function SalesConsole() {
     setVoidKey(crypto.randomUUID());
     setVoidReason("");
     setVoidDialogOpen(true);
+  }
+
+  function openRefundDialog() {
+    if (!detail.data) {
+      return;
+    }
+    setRefundKey(crypto.randomUUID());
+    setRefundReason("");
+    setRefundMethod("cash");
+    setRefundDoNotRestock(false);
+    setRefundDialogOpen(true);
+  }
+
+  function confirmRefund() {
+    if (!(detail.data && refundKey) || refundSale.isPending) {
+      return;
+    }
+
+    refundSale.mutate(
+      buildFullRefundInput({
+        detail: detail.data,
+        doNotRestock: refundDoNotRestock,
+        idempotencyKey: refundKey,
+        method: refundMethod,
+        refundReason,
+      }),
+      {
+        onSuccess: () => {
+          toast.success("Refund recorded");
+          setRefundDialogOpen(false);
+          setRefundKey(null);
+          detail.refetch();
+          sales.refetch();
+        },
+      }
+    );
   }
 
   function confirmVoid() {
@@ -236,12 +284,107 @@ function SalesConsole() {
           detail={detail.data}
           isError={detail.isError}
           isLoading={detail.isLoading}
+          onOpenRefund={openRefundDialog}
           onOpenReprint={(saleId) => setReprintSaleId(saleId)}
           onOpenVoid={openVoidDialog}
           onRetry={() => detail.refetch()}
           selectedSaleId={selectedSaleId}
         />
       </div>
+
+      <Dialog
+        onOpenChange={(open) => {
+          setRefundDialogOpen(open);
+          if (!open) {
+            setRefundKey(null);
+          }
+        }}
+        open={refundDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refund sale</DialogTitle>
+            <DialogDescription>
+              Records a full refund for the remaining refundable quantity on
+              this sale.
+            </DialogDescription>
+          </DialogHeader>
+          {detail.data ? (
+            <Alert>
+              <RotateCcw />
+              <AlertTitle>
+                Refund total:{" "}
+                {formatMoney(
+                  getRefundableTotalMinor(detail.data),
+                  detail.data.receipt.currency,
+                  detail.data.receipt.scale
+                )}
+              </AlertTitle>
+              <AlertDescription>
+                The refund tender must match the remaining refundable value. By
+                default, stock is returned to the original sale location.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="refund-method">Refund method</Label>
+              <select
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                id="refund-method"
+                onChange={(event) =>
+                  setRefundMethod(event.target.value as TenderMethod)
+                }
+                value={refundMethod}
+              >
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="bank_transfer">Bank transfer</option>
+                <option value="mobile_money">Mobile money</option>
+                <option value="cheque">Cheque</option>
+                <option value="store_credit">Store credit</option>
+                <option value="gift_card">Gift card</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <input
+                checked={refundDoNotRestock}
+                onChange={(event) =>
+                  setRefundDoNotRestock(event.target.checked)
+                }
+                type="checkbox"
+              />
+              Do not restock returned items
+            </label>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={refundReasonId}>Reason</Label>
+            <Input
+              id={refundReasonId}
+              onChange={(event) => setRefundReason(event.target.value)}
+              placeholder="Enter approved refund reason"
+              value={refundReason}
+            />
+          </div>
+          {refundSale.isError ? (
+            <p className="text-destructive text-sm">
+              {refundSale.error.message}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              disabled={refundSale.isPending}
+              onClick={() => setRefundDialogOpen(false)}
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button disabled={refundSale.isPending} onClick={confirmRefund}>
+              {refundSale.isPending ? "Recording..." : "Record refund"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         onOpenChange={(open) => {
@@ -359,6 +502,7 @@ function SaleDetailPanel({
   isLoading,
   isError,
   onRetry,
+  onOpenRefund,
   onOpenReprint,
   onOpenVoid,
 }: {
@@ -367,6 +511,7 @@ function SaleDetailPanel({
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
+  onOpenRefund: () => void;
   onOpenReprint: (saleId: string) => void;
   onOpenVoid: () => void;
 }) {
@@ -506,11 +651,14 @@ function SaleDetailPanel({
               <Printer data-icon="inline-start" />
               Reprint receipt
             </Button>
-            <ActionRow
-              active={detail.availableActions.canRefund}
-              icon="refund"
-              label="Refund"
-            />
+            {detail.availableActions.canRefund ? (
+              <Button onClick={onOpenRefund} variant="outline">
+                <RotateCcw data-icon="inline-start" />
+                Refund
+              </Button>
+            ) : (
+              <ActionRow active={false} icon="refund" label="Refund" />
+            )}
             {detail.availableActions.canVoid ? (
               <Button onClick={onOpenVoid} variant="outline">
                 <CircleOff data-icon="inline-start" />
