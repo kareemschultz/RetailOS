@@ -7,9 +7,7 @@ export const env = createEnv({
     DATABASE_URL: z.string().min(1),
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
-    // Comma-separated list of web origins allowed to call the API. Production
-    // may be served from both the KareTech subdomain and the client apex domain.
-    CORS_ORIGIN: z.string().min(1),
+    CORS_ORIGIN: z.url(),
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
