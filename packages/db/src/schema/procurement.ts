@@ -25,6 +25,16 @@ export const PURCHASE_ORDER_STATUSES = [
 ] as const;
 export const GOODS_RECEIPT_STATUSES = ["posted", "cancelled"] as const;
 export const SUPPLIER_BILL_STATUSES = ["draft", "posted", "cancelled"] as const;
+export const LANDED_COST_POOL_STATUSES = ["posted"] as const;
+export const LANDED_COST_KINDS = [
+  "freight",
+  "insurance",
+  "duty",
+  "tax",
+  "handling",
+  "other",
+] as const;
+export const LANDED_COST_ALLOCATION_BASES = ["line_value", "quantity"] as const;
 
 export const supplier = pgTable(
   "supplier",
@@ -329,6 +339,150 @@ export const supplierBillLine = pgTable(
       sql`${table.lineTotalMinor} >= 0`
     ),
     check("supplier_bill_line_scale_nonnegative_chk", sql`${table.scale} >= 0`),
+  ]
+);
+
+export const landedCostPool = pgTable(
+  "landed_cost_pool",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    supplierBillId: uuid("supplier_bill_id").notNull(),
+    companyId: uuid("company_id").notNull(),
+    kind: text("kind", { enum: LANDED_COST_KINDS }).notNull(),
+    basis: text("basis", { enum: LANDED_COST_ALLOCATION_BASES }).notNull(),
+    status: text("status", { enum: LANDED_COST_POOL_STATUSES })
+      .default("posted")
+      .notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    scale: bigint("scale", { mode: "number" }).default(2).notNull(),
+    ...timestamps,
+    ...actor,
+  },
+  (table) => [
+    index("landed_cost_pool_tenantId_idx").on(table.tenantId),
+    index("landed_cost_pool_bill_idx").on(table.supplierBillId),
+    unique("landed_cost_pool_tenant_id_uq").on(table.tenantId, table.id),
+    foreignKey({
+      columns: [table.tenantId, table.supplierBillId],
+      foreignColumns: [supplierBill.tenantId, supplierBill.id],
+      name: "landed_cost_pool_bill_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.companyId],
+      foreignColumns: [company.tenantId, company.id],
+      name: "landed_cost_pool_company_composite_fk",
+    }),
+    check(
+      "landed_cost_pool_kind_chk",
+      sql`${table.kind} IN ('freight','insurance','duty','tax','handling','other')`
+    ),
+    check(
+      "landed_cost_pool_basis_chk",
+      sql`${table.basis} IN ('line_value','quantity')`
+    ),
+    check("landed_cost_pool_status_chk", sql`${table.status} IN ('posted')`),
+    check(
+      "landed_cost_pool_amount_positive_chk",
+      sql`${table.amountMinor} > 0`
+    ),
+    check("landed_cost_pool_scale_nonnegative_chk", sql`${table.scale} >= 0`),
+  ]
+);
+
+export const landedCostAllocation = pgTable(
+  "landed_cost_allocation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    landedCostPoolId: uuid("landed_cost_pool_id").notNull(),
+    supplierBillId: uuid("supplier_bill_id").notNull(),
+    supplierBillLineId: uuid("supplier_bill_line_id").notNull(),
+    goodsReceiptId: uuid("goods_receipt_id").notNull(),
+    goodsReceiptLineId: uuid("goods_receipt_line_id").notNull(),
+    productId: uuid("product_id").notNull(),
+    skuId: uuid("sku_id").notNull(),
+    locationId: uuid("location_id").notNull(),
+    companyId: uuid("company_id").notNull(),
+    valuationAdjustmentMovementId: uuid(
+      "valuation_adjustment_movement_id"
+    ).notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    scale: bigint("scale", { mode: "number" }).default(2).notNull(),
+    basisQuantity: bigint("basis_quantity", { mode: "number" }).notNull(),
+    basisLineValueMinor: bigint("basis_line_value_minor", {
+      mode: "number",
+    }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("landed_cost_allocation_tenantId_idx").on(table.tenantId),
+    index("landed_cost_allocation_pool_idx").on(table.landedCostPoolId),
+    index("landed_cost_allocation_bill_idx").on(table.supplierBillId),
+    unique("landed_cost_allocation_tenant_id_uq").on(table.tenantId, table.id),
+    foreignKey({
+      columns: [table.tenantId, table.landedCostPoolId],
+      foreignColumns: [landedCostPool.tenantId, landedCostPool.id],
+      name: "landed_cost_allocation_pool_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.supplierBillId],
+      foreignColumns: [supplierBill.tenantId, supplierBill.id],
+      name: "landed_cost_allocation_bill_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.supplierBillLineId],
+      foreignColumns: [supplierBillLine.tenantId, supplierBillLine.id],
+      name: "landed_cost_allocation_bill_line_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.goodsReceiptId],
+      foreignColumns: [goodsReceipt.tenantId, goodsReceipt.id],
+      name: "landed_cost_allocation_grn_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.goodsReceiptLineId],
+      foreignColumns: [goodsReceiptLine.tenantId, goodsReceiptLine.id],
+      name: "landed_cost_allocation_grn_line_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.productId],
+      foreignColumns: [product.tenantId, product.id],
+      name: "landed_cost_allocation_product_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.productId, table.skuId],
+      foreignColumns: [sku.tenantId, sku.productId, sku.id],
+      name: "landed_cost_allocation_sku_product_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.companyId, table.locationId],
+      foreignColumns: [location.tenantId, location.companyId, location.id],
+      name: "landed_cost_allocation_location_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.valuationAdjustmentMovementId],
+      foreignColumns: [stockLedger.id],
+      name: "landed_cost_allocation_movement_fk",
+    }),
+    check(
+      "landed_cost_allocation_amount_nonnegative_chk",
+      sql`${table.amountMinor} >= 0`
+    ),
+    check(
+      "landed_cost_allocation_basis_qty_nonnegative_chk",
+      sql`${table.basisQuantity} >= 0`
+    ),
+    check(
+      "landed_cost_allocation_basis_value_nonnegative_chk",
+      sql`${table.basisLineValueMinor} >= 0`
+    ),
+    check(
+      "landed_cost_allocation_scale_nonnegative_chk",
+      sql`${table.scale} >= 0`
+    ),
   ]
 );
 

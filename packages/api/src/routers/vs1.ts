@@ -7509,6 +7509,38 @@ export const procurementRouter = {
         }
       });
     }),
+  landedCostPoolCreate: tenantProcedure
+    .input(
+      z.object({
+        supplierBillId: z.string().uuid(),
+        pools: z
+          .array(
+            z.object({
+              kind: z.enum(schema.LANDED_COST_KINDS),
+              basis: z.enum(schema.LANDED_COST_ALLOCATION_BASES),
+              amountMinor: z.number().int().positive(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "procurement.manage");
+        try {
+          return await services.createLandedCostPools(tx, ctx, input);
+        } catch (error) {
+          if (error instanceof services.ProcurementError) {
+            if (error.code === "NOT_FOUND") {
+              throw new ORPCError("NOT_FOUND", { message: error.message });
+            }
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          }
+          throw error;
+        }
+      });
+    }),
 };
 
 export const accountingRouter = {

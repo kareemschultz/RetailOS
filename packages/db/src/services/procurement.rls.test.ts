@@ -10,6 +10,8 @@ import {
   company,
   goodsReceipt,
   goodsReceiptLine,
+  landedCostAllocation,
+  landedCostPool,
   location,
   organization,
   product,
@@ -25,6 +27,7 @@ import {
 } from "../schema";
 import { withTenant } from "../tenant";
 import {
+  createLandedCostPools,
   createPurchaseOrder,
   createSupplier,
   createSupplierBill,
@@ -64,6 +67,8 @@ describe.skipIf(!url)("Phase D procurement foundation", () => {
       .onConflictDoNothing();
     for (const tenant of [TENANT, OTHER_TENANT]) {
       await withTenant(db, tenant, async (tx) => {
+        await tx.delete(landedCostAllocation);
+        await tx.delete(landedCostPool);
         await tx.delete(supplierBillLine);
         await tx.delete(supplierBill);
         await tx.delete(goodsReceiptLine);
@@ -550,6 +555,398 @@ describe.skipIf(!url)("Phase D procurement foundation", () => {
           }
         )
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
+
+  it("creates landed cost pools with exact largest-remainder allocations and valuation adjustments", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const beforeAvg = (
+        await tx.select().from(avgCost).where(eq(avgCost.skuId, skuId))
+      ).at(0);
+      const beforeValueMinor = beforeAvg?.totalValueMinor ?? 0;
+      const beforeQty = beforeAvg?.qtyOnHand ?? 0;
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-LC", name: "Landed Cost Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-LC",
+          currency: "GYD",
+          lines: [
+            { productId, skuId, qtyOrdered: 3, unitCostMinor: 101 },
+            { productId, skuId, qtyOrdered: 2, unitCostMinor: 101 },
+          ],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-LC",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "first po line").id,
+              qtyReceived: 3,
+            },
+            {
+              purchaseOrderLineId: required(po.lines[1], "second po line").id,
+              qtyReceived: 2,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-LC",
+          lines: receipt.lines.map((line) => ({
+            goodsReceiptLineId: line.id,
+            qtyBilled: line.qtyReceived,
+          })),
+        }
+      );
+
+      const result = await createLandedCostPools(
+        tx,
+        { tenantId: TENANT },
+        {
+          supplierBillId: bill.bill.id,
+          pools: [{ kind: "freight", basis: "quantity", amountMinor: 10 }],
+        }
+      );
+
+      expect(result.pools).toHaveLength(1);
+      expect(result.allocations.map((row) => row.amountMinor)).toEqual([6, 4]);
+      const movements = await tx
+        .select()
+        .from(stockLedger)
+        .where(eq(stockLedger.refId, required(result.pools[0], "pool").id));
+      expect(movements.map((row) => row.movementType)).toEqual([
+        "valuation_adjustment",
+        "valuation_adjustment",
+      ]);
+      expect(movements.map((row) => row.qtyDelta)).toEqual([0, 0]);
+      expect(movements.map((row) => row.valueDeltaMinor)).toEqual([6, 4]);
+      const avg = required(
+        (await tx.select().from(avgCost).where(eq(avgCost.skuId, skuId))).at(0),
+        "avg cost"
+      );
+      expect(avg.totalValueMinor).toBe(beforeValueMinor + 515);
+      expect(avg.qtyOnHand).toBe(beforeQty + 5);
+    });
+  });
+
+  it("allocates each landed cost pool independently", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-LC-TINY", name: "Tiny Pool Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-LC-TINY",
+          currency: "GYD",
+          lines: [
+            { productId, skuId, qtyOrdered: 1, unitCostMinor: 100 },
+            { productId, skuId, qtyOrdered: 1, unitCostMinor: 100 },
+            { productId, skuId, qtyOrdered: 1, unitCostMinor: 100 },
+          ],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-LC-TINY",
+          lines: po.lines.map((line) => ({
+            purchaseOrderLineId: line.id,
+            qtyReceived: 1,
+          })),
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-LC-TINY",
+          lines: receipt.lines.map((line) => ({
+            goodsReceiptLineId: line.id,
+            qtyBilled: 1,
+          })),
+        }
+      );
+
+      const result = await createLandedCostPools(
+        tx,
+        { tenantId: TENANT },
+        {
+          supplierBillId: bill.bill.id,
+          pools: [
+            { kind: "duty", basis: "quantity", amountMinor: 1 },
+            { kind: "handling", basis: "quantity", amountMinor: 1 },
+          ],
+        }
+      );
+
+      expect(result.pools).toHaveLength(2);
+      for (const pool of result.pools) {
+        const allocations = result.allocations.filter(
+          (allocation) => allocation.landedCostPoolId === pool.id
+        );
+        expect(allocations.reduce((sum, row) => sum + row.amountMinor, 0)).toBe(
+          1
+        );
+        expect(allocations.map((row) => row.amountMinor)).toEqual([1, 0, 0]);
+      }
+    });
+  });
+
+  it("rejects cross-tenant landed cost supplier bills", async () => {
+    let supplierBillId = "";
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-LC-CROSS", name: "Cross LC Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-LC-CROSS",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 1, unitCostMinor: 100 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-LC-CROSS",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 1,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-LC-CROSS",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 1,
+            },
+          ],
+        }
+      );
+      supplierBillId = bill.bill.id;
+    });
+    await withTenant(db, OTHER_TENANT, async (tx) => {
+      await expect(
+        createLandedCostPools(
+          tx,
+          { tenantId: OTHER_TENANT },
+          {
+            supplierBillId,
+            pools: [{ kind: "freight", basis: "quantity", amountMinor: 1 }],
+          }
+        )
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
+
+  it("rejects unsupported FIFO landed cost valuation adjustments", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const uom = required(
+        (
+          await tx
+            .select()
+            .from(unitOfMeasure)
+            .where(eq(unitOfMeasure.code, "EA-PROC"))
+        ).at(0),
+        "uom"
+      );
+      const fifoProduct = required(
+        (
+          await tx
+            .insert(product)
+            .values({
+              tenantId: TENANT,
+              sku: "PROC-FIFO-LC",
+              name: "FIFO Landed Cost Product",
+              baseUomId: uom.id,
+              priceMinor: 1000,
+              currency: "GYD",
+              costingMethod: "fifo",
+            })
+            .returning()
+        ).at(0),
+        "fifo product"
+      );
+      const fifoSku = required(
+        (
+          await tx
+            .insert(sku)
+            .values({
+              tenantId: TENANT,
+              productId: fifoProduct.id,
+              code: "PROC-FIFO-LC-SKU",
+              baseUomId: uom.id,
+            })
+            .returning()
+        ).at(0),
+        "fifo sku"
+      );
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-LC-FIFO", name: "FIFO LC Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-LC-FIFO",
+          currency: "GYD",
+          lines: [
+            {
+              productId: fifoProduct.id,
+              skuId: fifoSku.id,
+              qtyOrdered: 1,
+              unitCostMinor: 100,
+            },
+          ],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-LC-FIFO",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 1,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-LC-FIFO",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 1,
+            },
+          ],
+        }
+      );
+      await expect(
+        createLandedCostPools(
+          tx,
+          { tenantId: TENANT },
+          {
+            supplierBillId: bill.bill.id,
+            pools: [{ kind: "freight", basis: "quantity", amountMinor: 1 }],
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
+    });
+  });
+
+  it("rejects zero line-value landed cost allocation basis", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        { code: "SUP-LC-ZERO", name: "Zero Basis LC Supplier" }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-LC-ZERO",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 1, unitCostMinor: 0 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-LC-ZERO",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 1,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-LC-ZERO",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 1,
+            },
+          ],
+        }
+      );
+      await expect(
+        createLandedCostPools(
+          tx,
+          { tenantId: TENANT },
+          {
+            supplierBillId: bill.bill.id,
+            pools: [{ kind: "freight", basis: "line_value", amountMinor: 1 }],
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
     });
   });
 

@@ -13,6 +13,12 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Phase D landed costs — per-pool allocation backend (verified, 2026-07-01)
+- **Scope:** added procurement landed-cost backend slice on `feature/full-module-buildout`: `landed_cost_pool` + `landed_cost_allocation` schema, generated migration `0028_landed_cost_pools`, fail-closed RLS block, service-level `createLandedCostPools`, and `procurement.landedCostPoolCreate` API endpoint.
+- **Behavior:** supplier-bill-scoped pools allocate independently by deterministic largest-remainder math across billed receipt lines using `line_value` or `quantity` basis. Each allocation writes a `valuation_adjustment` stock movement via `appendStockMovement`, applies AVCO valuation via `applyValuation`, stores the allocation-to-movement link, records audit `procurement.landed_cost_pool.create`, and emits outbox event `procurement.landed_cost.allocated`. Non-positive pools, zero allocation basis, cross-tenant bills, malformed bill/receipt graphs, and FIFO/live-costing value-only adjustments are rejected.
+- **Verification:** TDD red was observed through the real disposable PG18 focused procurement RLS gate before fixes; after implementation/fixes `bun run check-types` is green and disposable PG18 (`roles.sql` as superuser → migrations as `retailos_migrator` → focused procurement tests as `retailos_app`) is green: `procurement.rls.test.ts` 13/13 passed.
+- **Remaining Phase D:** import/customs batch tracking, reorder suggestion → PO conversion, AP posting/vendor payment seam, and procurement UI.
+
 ### Phase D supplier bills — three-way match entities (verified, 2026-07-01)
 - **Scope:** added procurement supplier-bill backend slice on `feature/full-module-buildout`: `supplier_bill` + `supplier_bill_line` schema, generated migration `0027_supplier_bill_three_way_match`, fail-closed RLS block, service-level `createSupplierBill`, and `procurement.supplierBillCreate` API endpoint.
 - **Behavior:** validates same-tenant PO/GRN/receipt-line graph, serializes per PO with advisory lock, rejects cancelled POs, duplicate bill lines, cross-tenant receipt lines, currency/scale mismatches, and over-billing beyond received quantity. Totals are computed server-side from received unit cost, with audit action `procurement.supplier_bill.create` and outbox event `procurement.supplier_bill.created`.

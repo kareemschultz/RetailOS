@@ -3,6 +3,8 @@ import {
   company,
   goodsReceipt,
   goodsReceiptLine,
+  landedCostAllocation,
+  landedCostPool,
   location as locationTable,
   product,
   purchaseOrder,
@@ -14,7 +16,7 @@ import {
 } from "../schema";
 import type { TenantTransaction } from "../tenant";
 import { recordAudit } from "./audit";
-import { applyValuation } from "./costing";
+import { applyValuation, resolveCostingMethod } from "./costing";
 import { DomainEventType, emitEvent } from "./outbox";
 import { appendStockMovement } from "./stock-ledger";
 import type { ServiceContext } from "./types";
@@ -512,6 +514,349 @@ export async function createSupplierBill(
   });
 
   return { bill, lines };
+}
+
+export type LandedCostKind =
+  | "freight"
+  | "insurance"
+  | "duty"
+  | "tax"
+  | "handling"
+  | "other";
+export type LandedCostAllocationBasis = "line_value" | "quantity";
+
+export interface CreateLandedCostPoolInput {
+  amountMinor: number;
+  basis: LandedCostAllocationBasis;
+  kind: LandedCostKind;
+}
+
+export interface CreateLandedCostPoolsInput {
+  pools: CreateLandedCostPoolInput[];
+  supplierBillId: string;
+}
+
+type LandedCostPoolRow = typeof landedCostPool.$inferSelect;
+type LandedCostAllocationRow = typeof landedCostAllocation.$inferSelect;
+
+type LandedCostBillLine = SupplierBillLineRow & {
+  companyId: string;
+  locationId: string;
+  supplierBillStatus: string;
+};
+
+interface AllocationDraft {
+  amountMinor: number;
+  basisLineValueMinor: number;
+  basisQuantity: number;
+  line: LandedCostBillLine;
+}
+
+function largestRemainderAllocations(
+  amountMinor: number,
+  basisRows: Array<{ basis: number; line: LandedCostBillLine }>
+): AllocationDraft[] {
+  const totalBasis = basisRows.reduce((sum, row) => sum + row.basis, 0);
+  if (totalBasis <= 0) {
+    throw new ProcurementError(
+      "Landed cost allocation basis must be positive",
+      "INVALID_STATE"
+    );
+  }
+  const drafts = basisRows.map((row, index) => {
+    const numerator = amountMinor * row.basis;
+    return {
+      amountMinor: Math.trunc(numerator / totalBasis),
+      basisLineValueMinor: row.line.lineTotalMinor,
+      basisQuantity: row.line.qtyBilled,
+      index,
+      line: row.line,
+      remainder: numerator % totalBasis,
+    };
+  });
+  let remainderMinor =
+    amountMinor - drafts.reduce((sum, draft) => sum + draft.amountMinor, 0);
+  const ranked = [...drafts].sort(
+    (a, b) => b.remainder - a.remainder || a.index - b.index
+  );
+  for (const draft of ranked) {
+    if (remainderMinor <= 0) {
+      break;
+    }
+    draft.amountMinor += 1;
+    remainderMinor -= 1;
+  }
+  return drafts
+    .sort((a, b) => a.index - b.index)
+    .map(({ index: _index, remainder: _remainder, ...draft }) => draft);
+}
+
+async function loadLandedCostBill(
+  tx: TenantTransaction,
+  supplierBillId: string
+): Promise<{ bill: SupplierBillRow; lines: LandedCostBillLine[] }> {
+  const bill = (
+    await tx
+      .select()
+      .from(supplierBill)
+      .where(eq(supplierBill.id, supplierBillId))
+      .limit(1)
+  ).at(0);
+  if (!bill) {
+    throw new ProcurementError("Supplier bill not found", "NOT_FOUND");
+  }
+  if (bill.status !== "posted") {
+    throw new ProcurementError(
+      "Only posted supplier bills can receive landed cost pools",
+      "INVALID_STATE"
+    );
+  }
+  const lines = await tx
+    .select({
+      id: supplierBillLine.id,
+      tenantId: supplierBillLine.tenantId,
+      supplierBillId: supplierBillLine.supplierBillId,
+      purchaseOrderId: supplierBillLine.purchaseOrderId,
+      purchaseOrderLineId: supplierBillLine.purchaseOrderLineId,
+      goodsReceiptId: supplierBillLine.goodsReceiptId,
+      goodsReceiptLineId: supplierBillLine.goodsReceiptLineId,
+      productId: supplierBillLine.productId,
+      skuId: supplierBillLine.skuId,
+      qtyBilled: supplierBillLine.qtyBilled,
+      unitCostMinor: supplierBillLine.unitCostMinor,
+      lineTotalMinor: supplierBillLine.lineTotalMinor,
+      currency: supplierBillLine.currency,
+      scale: supplierBillLine.scale,
+      createdAt: supplierBillLine.createdAt,
+      updatedAt: supplierBillLine.updatedAt,
+      companyId: goodsReceipt.companyId,
+      locationId: goodsReceipt.locationId,
+      supplierBillStatus: supplierBill.status,
+    })
+    .from(supplierBillLine)
+    .innerJoin(
+      goodsReceipt,
+      and(
+        eq(goodsReceipt.id, supplierBillLine.goodsReceiptId),
+        eq(goodsReceipt.purchaseOrderId, supplierBillLine.purchaseOrderId)
+      )
+    )
+    .innerJoin(
+      supplierBill,
+      eq(supplierBill.id, supplierBillLine.supplierBillId)
+    )
+    .where(eq(supplierBillLine.supplierBillId, supplierBillId));
+  if (lines.length === 0) {
+    throw new ProcurementError(
+      "Supplier bill has no allocatable lines",
+      "INVALID_STATE"
+    );
+  }
+  for (const line of lines) {
+    if (
+      line.currency !== bill.currency ||
+      line.scale !== bill.scale ||
+      line.companyId !== bill.companyId
+    ) {
+      throw new ProcurementError(
+        "Supplier bill line graph does not match the supplier bill header",
+        "NOT_FOUND"
+      );
+    }
+  }
+  return { bill, lines };
+}
+
+async function assertLandedCostAvcoOnly(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  lines: LandedCostBillLine[]
+) {
+  for (const line of lines) {
+    const method = await resolveCostingMethod(tx, ctx, {
+      productId: line.productId,
+      skuId: line.skuId,
+    });
+    if (method !== "avco") {
+      throw new ProcurementError(
+        "Only AVCO landed cost value-only adjustments are supported in this slice",
+        "INVALID_STATE"
+      );
+    }
+  }
+}
+
+async function insertLandedCostPool(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  bill: SupplierBillRow,
+  poolInput: CreateLandedCostPoolInput
+): Promise<LandedCostPoolRow> {
+  if (poolInput.amountMinor <= 0) {
+    throw new ProcurementError(
+      "Landed cost pool amount must be positive",
+      "INVALID_STATE"
+    );
+  }
+  const pool = (
+    await tx
+      .insert(landedCostPool)
+      .values({
+        tenantId: ctx.tenantId,
+        supplierBillId: bill.id,
+        companyId: bill.companyId,
+        kind: poolInput.kind,
+        basis: poolInput.basis,
+        amountMinor: poolInput.amountMinor,
+        currency: bill.currency,
+        scale: bill.scale,
+        createdBy: ctx.actorUserId ?? null,
+      })
+      .returning()
+  ).at(0);
+  if (!pool) {
+    throw new Error("createLandedCostPools: pool insert failed");
+  }
+  return pool;
+}
+
+function allocationBasisRows(
+  poolInput: CreateLandedCostPoolInput,
+  lines: LandedCostBillLine[]
+) {
+  return lines.map((line) => ({
+    basis:
+      poolInput.basis === "line_value" ? line.lineTotalMinor : line.qtyBilled,
+    line,
+  }));
+}
+
+async function createLandedCostAllocation(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  bill: SupplierBillRow,
+  pool: LandedCostPoolRow,
+  draft: AllocationDraft
+): Promise<LandedCostAllocationRow> {
+  const movement = await appendStockMovement(tx, ctx, {
+    costCurrency: bill.currency,
+    costScale: bill.scale,
+    locationId: draft.line.locationId,
+    movementType: "valuation_adjustment",
+    productId: draft.line.productId,
+    qtyDelta: 0,
+    refId: pool.id,
+    refType: "landed_cost_pool",
+    skuId: draft.line.skuId,
+    unitCostMinor: 0,
+    valueDeltaMinor: draft.amountMinor,
+  });
+  try {
+    await applyValuation(tx, ctx, movement);
+  } catch (error) {
+    throw new ProcurementError(
+      error instanceof Error ? error.message : "Landed cost valuation failed",
+      "INVALID_STATE"
+    );
+  }
+  const allocation = (
+    await tx
+      .insert(landedCostAllocation)
+      .values({
+        tenantId: ctx.tenantId,
+        landedCostPoolId: pool.id,
+        supplierBillId: bill.id,
+        supplierBillLineId: draft.line.id,
+        goodsReceiptId: draft.line.goodsReceiptId,
+        goodsReceiptLineId: draft.line.goodsReceiptLineId,
+        productId: draft.line.productId,
+        skuId: draft.line.skuId,
+        locationId: draft.line.locationId,
+        companyId: draft.line.companyId,
+        valuationAdjustmentMovementId: movement.id,
+        amountMinor: draft.amountMinor,
+        currency: bill.currency,
+        scale: bill.scale,
+        basisQuantity: draft.basisQuantity,
+        basisLineValueMinor: draft.basisLineValueMinor,
+      })
+      .returning()
+  ).at(0);
+  if (!allocation) {
+    throw new Error("createLandedCostPools: allocation insert failed");
+  }
+  return allocation;
+}
+
+async function recordLandedCostPoolCreated(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  bill: SupplierBillRow,
+  pools: LandedCostPoolRow[],
+  allocations: LandedCostAllocationRow[]
+) {
+  await recordAudit(tx, ctx, {
+    action: "procurement.landed_cost_pool.create",
+    entityType: "landed_cost_pool",
+    entityId: pools[0]?.id ?? bill.id,
+    after: { supplierBillId: bill.id, pools, allocations },
+  });
+  await emitEvent(tx, ctx, {
+    payload: {
+      aggregateId: bill.id,
+      aggregateType: "supplier_bill",
+      companyId: bill.companyId,
+      currency: bill.currency,
+      scale: bill.scale,
+      supplierBillId: bill.id,
+      pools,
+      allocations,
+    },
+    type: "procurement.landed_cost.allocated",
+  });
+}
+
+export async function createLandedCostPools(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  input: CreateLandedCostPoolsInput
+): Promise<{
+  allocations: LandedCostAllocationRow[];
+  pools: LandedCostPoolRow[];
+}> {
+  if (input.pools.length === 0) {
+    throw new ProcurementError(
+      "At least one landed cost pool is required",
+      "INVALID_STATE"
+    );
+  }
+
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`landed-cost:${ctx.tenantId}:${input.supplierBillId}`}, 0))`
+  );
+
+  const { bill, lines } = await loadLandedCostBill(tx, input.supplierBillId);
+  await assertLandedCostAvcoOnly(tx, ctx, lines);
+
+  const pools: LandedCostPoolRow[] = [];
+  const allocations: LandedCostAllocationRow[] = [];
+
+  for (const poolInput of input.pools) {
+    const pool = await insertLandedCostPool(tx, ctx, bill, poolInput);
+    pools.push(pool);
+    const drafts = largestRemainderAllocations(
+      poolInput.amountMinor,
+      allocationBasisRows(poolInput, lines)
+    );
+    for (const draft of drafts) {
+      allocations.push(
+        await createLandedCostAllocation(tx, ctx, bill, pool, draft)
+      );
+    }
+  }
+
+  await recordLandedCostPoolCreated(tx, ctx, bill, pools, allocations);
+  return { pools, allocations };
 }
 
 export async function receivePurchaseOrder(
