@@ -13,6 +13,12 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Phase D GRN-lite — goods receipt against purchase orders (verified, 2026-07-01)
+- **Scope:** added procurement goods-receipt/GRN-lite backend slice on `feature/full-module-buildout`: `goods_receipt` + `goods_receipt_line` schema, generated migration `0026_goods_receipt_grn_lite`, fail-closed RLS block, service-level `receivePurchaseOrder`, and `procurement.goodsReceiptCreate` API endpoint.
+- **Behavior:** validates same-tenant PO/location/PO-line graph, rejects cancelled/fully received POs and over-receipts, appends immutable `stock_ledger` receipt movements via `appendStockMovement`, applies valuation via `applyValuation`, updates `purchase_order_line.qty_received`, rolls PO status to `partially_received`/`received`, records audit, and emits `inventory.received` outbox event.
+- **Verification:** TDD red was observed via `bun run check-types` before implementation; after implementation `bun run check`, `bun run check-types`, `bun run check:mojibake`, focused procurement RLS test file, and default `bun run test` are green. DB-gated RLS tests remain skipped locally because `RLS_TEST_DATABASE_URL` is unset in this shell.
+- **Caveat before merge/deploy:** run the real disposable PG18 RLS gate with migrations applied and `RLS_TEST_DATABASE_URL` set before claiming zero-skip database verification for the GRN slice.
+
 ### Parallel module buildout integration — POS/offline + Commerce + Procurement/Financials (verified, 2026-07-01)
 - **Scope:** integrated three bounded feature lanes into `feature/full-module-buildout`: POS/offline terminal + durable mutation ingestion foundation, hostname-scoped Commerce/Shopix public read-model skeleton, and Procurement/Financials foundations for suppliers/POs and ledger/journal/posting-period services.
 - **Migration repair:** parallel lanes both produced `0024_*`; integration keeps `0024_proc_fin_foundations` and moves offline sync to canonical `0025_pos_offline_sync` with generated `0025_snapshot.json`, updated `_journal.json`, and explicit ENABLE + FORCE RLS + `tenant_isolation` policies for all offline sync tables.

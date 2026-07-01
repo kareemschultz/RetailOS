@@ -183,6 +183,13 @@
       "when": 1782870748380,
       "tag": "0025_pos_offline_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1782898809231,
+      "tag": "0026_goods_receipt_grn_lite",
+      "breakpoints": true
     }
   ]
 }
