@@ -85,6 +85,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.saleLine);
         await tx.delete(schema.invoice);
         await tx.delete(schema.sale);
+        await tx.delete(schema.taxRate);
         await tx.delete(schema.stockCountLine);
         await tx.delete(schema.stockCount);
         await tx.delete(schema.avgCost);
@@ -4323,6 +4324,69 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       cashier
     );
     expect(quote.totals.totalMinor).toBe(sale.totalMinor);
+  });
+
+  it("quote and createSale apply active sales tax identically and persist tax stamps", async () => {
+    const { locationId, productId, skuId } = await seedSellable("taxed");
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    await withTenant(db, ORG, async (tx) => {
+      await tx.insert(schema.taxRate).values({
+        code: "VAT14",
+        name: "VAT 14%",
+        rateBps: 1400,
+        tenantId: ORG,
+      });
+    });
+
+    const lines = [{ productId, qty: 3, skuId }];
+    const tenders = [
+      { amountMinor: 3420, currency: "USD", method: "cash" as const },
+    ];
+
+    const quote = await call(
+      appRouter.pos.quote,
+      { lines, locationId, tenders },
+      cashier
+    );
+    expect(quote.totals.subtotalMinor).toBe(3000);
+    expect(quote.totals.taxMinor).toBe(420);
+    expect(quote.totals.totalMinor).toBe(3420);
+    expect(quote.lines[0]?.taxMinor).toBe(420);
+    expect(quote.taxBreakdown[0]).toMatchObject({
+      baseMinor: 3000,
+      name: "VAT 14%",
+      rateBps: 1400,
+      taxMinor: 420,
+    });
+    expect(quote.payments.settleable).toBe(true);
+
+    const sale = await call(
+      appRouter.pos.createSale,
+      { idempotencyKey: "taxed-key", lines, locationId, tenders },
+      cashier
+    );
+    expect(sale.totalMinor).toBe(quote.totals.totalMinor);
+
+    const persisted = await withTenant(db, ORG, async (tx) => {
+      const saleRows = await tx
+        .select({
+          taxMinor: schema.sale.taxMinor,
+          totalMinor: schema.sale.totalMinor,
+        })
+        .from(schema.sale)
+        .where(eq(schema.sale.id, sale.saleId));
+      const lineRows = await tx
+        .select({
+          lineTaxMinor: schema.saleLine.lineTaxMinor,
+          taxRateId: schema.saleLine.taxRateId,
+        })
+        .from(schema.saleLine)
+        .where(eq(schema.saleLine.saleId, sale.saleId));
+      return { line: lineRows.at(0), sale: saleRows.at(0) };
+    });
+    expect(persisted.sale).toMatchObject({ taxMinor: 420, totalMinor: 3420 });
+    expect(persisted.line?.lineTaxMinor).toBe(420);
+    expect(persisted.line?.taxRateId).toBe(quote.taxBreakdown[0]?.taxRateId);
   });
 
   it("quote computes cash change on overpayment", async () => {
