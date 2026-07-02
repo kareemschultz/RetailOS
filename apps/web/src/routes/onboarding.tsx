@@ -15,14 +15,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@RetailOS/ui/components/select";
-import { Textarea } from "@RetailOS/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  redirect,
+  useNavigate,
+} from "@tanstack/react-router";
 import {
   Building2,
   CheckCircle2,
   Loader2,
   Store,
+  Upload,
   WandSparkles,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -69,6 +74,43 @@ function getSubmissionSlug(slug: string, name: string) {
   return nameSlug.length >= 2 ? nameSlug : enteredSlug;
 }
 
+// Post-completion hand-off: the natural next step for a real store is loading
+// their catalog (QuickBooks/Excel import), so that's the primary action.
+function OnboardingSuccess({ businessName }: { businessName: string }) {
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-muted/40 px-4 py-8">
+      <Card className="w-full max-w-lg shadow-sm">
+        <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <CheckCircle2 className="size-7" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="font-semibold text-2xl tracking-tight">
+              {businessName || "Your workspace"} is ready
+            </h1>
+            <p className="text-muted-foreground">
+              Tenant, first store, and tax profile are set. Next: bring in your
+              products — import your QuickBooks or Excel item list in minutes.
+            </p>
+          </div>
+          <div className="mt-2 flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
+            <Button render={<Link to="/products/import" />}>
+              <Upload className="size-4" />
+              Import products
+            </Button>
+            <Button render={<Link to="/pos" />} variant="outline">
+              Open the POS
+            </Button>
+            <Button render={<Link to="/dashboard" />} variant="outline">
+              Dashboard
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
+
 function OnboardingScreen() {
   const navigate = useNavigate({ from: "/onboarding" });
   const status = useQuery(orpc.onboarding.status.queryOptions({ input: {} }));
@@ -79,15 +121,24 @@ function OnboardingScreen() {
   const [taxName, setTaxName] = useState("Sales tax");
   const [taxCode, setTaxCode] = useState("VAT");
   const [taxPercent, setTaxPercent] = useState("0");
-  const [notes, setNotes] = useState("");
+  const [completed, setCompleted] = useState(false);
 
   useEffect(() => {
+    // Freshly-completed onboarding shows the success hand-off instead of
+    // bouncing straight to the POS.
+    if (completed) {
+      return;
+    }
     if (status.data && !status.data.requiresOnboarding) {
       navigate({ to: "/pos" });
     }
-  }, [navigate, status.data]);
+  }, [completed, navigate, status.data]);
 
   const isBusy = complete.isPending || status.isLoading;
+
+  if (completed) {
+    return <OnboardingSuccess businessName={businessName} />;
+  }
 
   return (
     <main className="min-h-dvh bg-muted/40 px-4 py-8">
@@ -153,7 +204,7 @@ function OnboardingScreen() {
                 taxRateBps: rateBps,
               });
               toast.success("RetailOS workspace created");
-              await navigate({ to: "/pos" });
+              setCompleted(true);
             } catch (error) {
               toast.error(
                 error instanceof Error
@@ -213,15 +264,6 @@ function OnboardingScreen() {
                   setup. If this is left blank or too short, RetailOS will use
                   the business name.
                 </p>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="notes">Business notes</Label>
-                <Textarea
-                  id="notes"
-                  onChange={(event) => setNotes(event.target.value)}
-                  placeholder="Optional internal notes for setup handoff"
-                  value={notes}
-                />
               </div>
             </CardContent>
           </Card>
