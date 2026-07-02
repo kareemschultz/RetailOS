@@ -45,6 +45,24 @@
   the same allow-listed url/altText). Fixed by listing the needed fields explicitly instead of
   spreading. Gate: check-types 7/7, ultracite clean (1 auto-fix), mojibake clean, db 99 +
   **api 75** (71→75, +4 commerce tests) zero skips.
+- **Task 4 DONE:** ported the offline sync ingestion foundation — `offline_terminal`/
+  `offline_sync_batch`/`offline_sync_mutation` tables (composite `(tenant_id,id)` UNIQUE targets
+  + composite FKs from day one, per the H1 lesson), the `offline-sync.ts` service
+  (`ingestOfflineSyncBatch`), `packages/api/src/offline-queue-contract.ts` (the SQLite↔server
+  batch/mutation Zod contract), `posRouter.ingestOfflineBatch`, and leased-number consumption in
+  `runCreateSaleMsp`/`createSale` (`resolveSaleNumbers` + `consumeNumberFromLease` after both
+  sale+invoice exist, wired through `saleDocument`/`invoiceDocument` optional inputs — backward
+  compatible, falls back to `allocateSaleNumber` when absent). New files copied verbatim from
+  `56fe9cf`; shared-file hunks (`vs1.ts`, `schema/index.ts`, `services/index.ts`) hand-applied
+  against this branch's diverged line numbers (source line ~4035 vs our ~4816 — same logical
+  insertion points, located by symbol name not line number). Migration **regenerated** as
+  `0026_broad_ender_wiggin.sql` (not copied — source was `0024`, would have collided); RLS
+  block appended verbatim from the source SQL; fresh-chain 0000→0026 verified on a disposable
+  PG18. Gate: check-types 7/7 (first pass, no errors from the hand-applied hunks), ultracite
+  clean (2 files auto-fixed — drizzle-kit's JSON array formatting doesn't match biome's style,
+  whitespace-only, verified `0026_snapshot.json` still parses), mojibake clean, db 99→**101**
+  (+2: offline-sync.rls.test.ts) + api 75→**77** (+2: offline-queue-contract.test.ts) zero
+  skips, `tenant-isolation-coverage` green, `bun -F web build` green.
 
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing

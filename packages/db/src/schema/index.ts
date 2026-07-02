@@ -11,6 +11,7 @@ export * from "./idempotency";
 export * from "./inventory";
 export * from "./membership";
 export * from "./numbering";
+export * from "./offline_sync";
 export * from "./organization";
 export * from "./outbox";
 export * from "./product";

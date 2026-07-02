@@ -20,6 +20,7 @@ import {
 import { aliasedTable } from "drizzle-orm/alias";
 import { z } from "zod";
 import { protectedProcedure, tenantProcedure } from "../index";
+import { offlineSyncBatchSchema } from "../offline-queue-contract";
 import type { RequestContext } from "../request-context";
 
 const fromUom = aliasedTable(schema.unitOfMeasure, "from_uom");
@@ -4824,14 +4825,39 @@ async function allocateSaleNumber(tx: TenantTransaction, tenantId: string) {
   return { saleNumber: `SALE-${saleSeq}`, invoiceNumber: `INV-${invoiceSeq}` };
 }
 
+async function resolveSaleNumbers(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: {
+    invoiceDocument?: { leaseId: string; number: number };
+    saleDocument?: { leaseId: string; number: number };
+  }
+) {
+  if (input.saleDocument || input.invoiceDocument) {
+    if (!(input.saleDocument && input.invoiceDocument)) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "Both saleDocument and invoiceDocument are required for leased sale numbering",
+      });
+    }
+    return {
+      invoiceNumber: `INV-${input.invoiceDocument.number}`,
+      saleNumber: `SALE-${input.saleDocument.number}`,
+    };
+  }
+  return await allocateSaleNumber(tx, ctx.tenantId);
+}
+
 async function runCreateSaleMsp(
   tx: TenantTransaction,
   ctx: RequestContext,
   input: {
     customerId?: string;
     idempotencyKey: string;
+    invoiceDocument?: { leaseId: string; number: number };
     lines: MspLineInput[];
     locationId: string;
+    saleDocument?: { leaseId: string; number: number };
     salesRepId?: string;
     shiftId?: string;
     terminalId?: string;
@@ -4888,9 +4914,10 @@ async function runCreateSaleMsp(
     subtotal.scale
   );
   const settled = settleTenders(input.tenders, total);
-  const { saleNumber, invoiceNumber } = await allocateSaleNumber(
+  const { saleNumber, invoiceNumber } = await resolveSaleNumbers(
     tx,
-    ctx.tenantId
+    ctx,
+    input
   );
 
   const sale = firstOrThrow(
@@ -5024,6 +5051,21 @@ async function runCreateSaleMsp(
         .returning()
     ).at(0)
   );
+
+  if (input.saleDocument && input.invoiceDocument) {
+    await services.consumeNumberFromLease(tx, ctx, {
+      leaseId: input.saleDocument.leaseId,
+      number: input.saleDocument.number,
+      sourceId: sale.id,
+      sourceType: "sale",
+    });
+    await services.consumeNumberFromLease(tx, ctx, {
+      leaseId: input.invoiceDocument.leaseId,
+      number: input.invoiceDocument.number,
+      sourceId: invoice.id,
+      sourceType: "invoice",
+    });
+  }
 
   await services.recordAudit(tx, ctx, {
     action: "pos.create_sale",
@@ -6388,11 +6430,43 @@ async function runNumberLeaseList(
 }
 
 export const posRouter = {
+  ingestOfflineBatch: tenantProcedure
+    .input(offlineSyncBatchSchema)
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "pos.create_sale");
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
+        return services.ingestOfflineSyncBatch(tx, ctx, {
+          ...input,
+          locationId: input.locationId ?? null,
+          mutations: input.mutations.map((mutation) => ({
+            ...mutation,
+            clientCreatedAt: mutation.clientCreatedAt ?? null,
+          })),
+        });
+      });
+    }),
+
   createSale: tenantProcedure
     .input(
       z.object({
         locationId: z.string().uuid(),
         idempotencyKey: z.string().min(1),
+        saleDocument: z
+          .object({
+            leaseId: z.string().uuid(),
+            number: z.number().int().positive(),
+          })
+          .optional(),
+        invoiceDocument: z
+          .object({
+            leaseId: z.string().uuid(),
+            number: z.number().int().positive(),
+          })
+          .optional(),
         salesRepId: z.string().min(1).optional(),
         customerId: z.string().uuid().optional(),
         shiftId: z.string().uuid().optional(),
