@@ -1141,6 +1141,7 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         ctxWrap
       );
       return {
+        companyId: company.id,
         locationId: location.id,
         productId: product.id,
         skuId: sku.id,
@@ -1232,6 +1233,39 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
           call(
             appRouter.inventory.reorderEvaluate,
             { locationId: a.locationId, skuId: b.skuId },
+            admin
+          ),
+      },
+      {
+        fk: "numberLeaseAllocate.companyId",
+        attempt: () =>
+          call(
+            appRouter.pos.numberLeaseAllocate,
+            {
+              companyId: b.companyId,
+              docType: "sale",
+              idempotencyKey: crypto.randomUUID(),
+              leaseSize: 10,
+              series: "default",
+              terminalId: "terminal-h1-company",
+            },
+            admin
+          ),
+      },
+      {
+        fk: "numberLeaseAllocate.locationId",
+        attempt: () =>
+          call(
+            appRouter.pos.numberLeaseAllocate,
+            {
+              companyId: a.companyId,
+              docType: "sale",
+              idempotencyKey: crypto.randomUUID(),
+              leaseSize: 10,
+              locationId: b.locationId,
+              series: "default",
+              terminalId: "terminal-h1-location",
+            },
             admin
           ),
       },

@@ -5846,6 +5846,10 @@ export const posRouter = {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "pos.create_sale");
+        await assertCompanyVisible(tx, input.companyId);
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
         return services.allocateNumberLease(tx, ctx, {
           ...input,
           expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
