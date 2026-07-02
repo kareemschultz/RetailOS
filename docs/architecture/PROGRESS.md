@@ -86,6 +86,30 @@
   db 101→**107** (+6: accounting.rls.test.ts 3 + procurement.rls.test.ts 3) + api stayed **77**
   (foundations commit adds no router-integration tests) zero skips, `tenant-isolation-coverage`
   green (7 new tables covered), frozen costing byte-identical, `bun -F web build` green.
+- **Task 6 DONE:** ported GRN + supplier bills + landed cost + import batch tracking (source
+  commits `aaa6765`→`1dc4196`→`b815ef6`→`f4b0a5d`) — checked out the FINAL-state schema/service/
+  test files from `f4b0a5d` (contains all four commits' cumulative growth), applied all four
+  `procurementRouter` procedure hunks in commit order (goodsReceiptCreate, supplierBillCreate,
+  landedCostPoolCreate, importBatchCreate). **Reviewed the ported service code against the #8
+  and H1 defect classes before trusting it:** goods receipt and landed-cost allocation both route
+  through `appendStockMovement` + `applyValuation` (no direct `valuation_layer`/`avg_cost` writes
+  — the value-only landed-cost allocation reuses the bond-release largest-remainder split
+  pattern); `assertLandedCostAvcoOnly` rejects FIFO items BEFORE any movement/value write (the
+  frozen FIFO value-only guard in `costing.ts` stays the single source of truth — confirmed
+  untouched, byte-identical); `assertReceivingLocation` validates the H1 tuple relationship
+  (receiving location's company must match the PO's company, not just tenant-visible in
+  isolation). 8 new tenant tables (`goods_receipt(_line)`, `supplier_bill(_line)`,
+  `landed_cost_pool`/`landed_cost_allocation`, `import_batch(_line)`) — **migration regenerated
+  as `0028_curly_purple_man.sql`** (source was `0026`-`0029`, four files collapsed into one on
+  this branch); no FK-before-UNIQUE ordering issue this time (all 8 are brand-new tables with
+  their `tenant_id_uq` embedded inline in `CREATE TABLE`, unlike Task 5's ALTER-on-existing-table
+  case). Combined all four source migrations' RLS DO-blocks into one covering all 8 tables,
+  ordered so children reference already-created parents. Fresh-chain 0000→0028 verified on
+  disposable PG18. Gate: check-types 7/7, ultracite clean (2 files auto-fixed, same drizzle-JSON
+  drift), mojibake clean, db 107→**123** (+16: `procurement.rls.test.ts` grew 3→19 tests) + api
+  stayed **77** (extension commits add no new router-integration tests) zero skips,
+  `tenant-isolation-coverage` green (8 new tables covered), frozen costing byte-identical,
+  `bun -F web build` green.
 
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing
