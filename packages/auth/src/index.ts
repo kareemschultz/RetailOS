@@ -12,6 +12,9 @@ export function createAuth() {
   // root cookie domain shares the session across same-site subdomains (web ↔ api).
   const isProd = env.NODE_ENV === "production";
   const cookieDomain = env.AUTH_COOKIE_DOMAIN;
+  const trustedOrigins = env.CORS_ORIGIN.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -20,7 +23,7 @@ export function createAuth() {
       schema,
     }),
     trustedOrigins: [
-      env.CORS_ORIGIN,
+      ...trustedOrigins,
       "RetailOS://",
       "exp://",
       "http://localhost:8081",

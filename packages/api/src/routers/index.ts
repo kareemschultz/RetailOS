@@ -8,6 +8,7 @@ import {
   companyRouter,
   inventoryRouter,
   locationRouter,
+  onboardingRouter,
   posRouter,
   productRouter,
   reportsRouter,
@@ -23,6 +24,7 @@ export const appRouter = {
   })),
   // Vertical Slice #1 flow (charter §32).
   tenant: tenantRouter,
+  onboarding: onboardingRouter,
   catalog: catalogRouter,
   company: companyRouter,
   location: locationRouter,

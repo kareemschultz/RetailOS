@@ -1,6 +1,7 @@
 import { auth } from "@RetailOS/auth";
 import type { TenantTransaction } from "@RetailOS/db";
 import { db, schema, services, withTenant } from "@RetailOS/db";
+import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import {
   and,
@@ -116,6 +117,145 @@ export const tenantRouter = {
         body: { organizationId: input.organizationId },
       });
       return { activeOrganizationId: input.organizationId };
+    }),
+};
+
+const onboardingInput = z.object({
+  businessName: z.string().trim().min(2).max(120),
+  businessSlug: z
+    .string()
+    .trim()
+    .min(2)
+    .max(64)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .optional(),
+  locationName: z.string().trim().min(2).max(120),
+  taxName: z.string().trim().min(2).max(80).default("Sales tax"),
+  taxCode: z.string().trim().min(2).max(24).default("VAT"),
+  taxRateBps: z.number().int().min(0).max(10_000).default(0),
+});
+
+function toOrgSlug(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+}
+
+export const onboardingRouter = {
+  status: protectedProcedure
+    .input(z.object({}).optional())
+    .handler(async ({ context }) => {
+      const activeOrganizationId =
+        context.session?.session?.activeOrganizationId ?? null;
+      const memberships = await db
+        .select({
+          organizationId: schema.member.organizationId,
+          organizationName: schema.organization.name,
+        })
+        .from(schema.member)
+        .innerJoin(
+          schema.organization,
+          eq(schema.member.organizationId, schema.organization.id)
+        )
+        .where(eq(schema.member.userId, context.session.user.id))
+        .limit(2);
+      const selectedOrg = memberships.find(
+        (membership) => membership.organizationId === activeOrganizationId
+      );
+      return {
+        activeOrganizationId,
+        hasOrganization: memberships.length > 0,
+        requiresOnboarding: memberships.length === 0,
+        organizationId:
+          selectedOrg?.organizationId ?? memberships[0]?.organizationId ?? null,
+        organizationName:
+          selectedOrg?.organizationName ??
+          memberships[0]?.organizationName ??
+          null,
+      };
+    }),
+  complete: protectedProcedure
+    .input(onboardingInput)
+    .handler(async ({ context, input }) => {
+      const existingMemberships = await db
+        .select({ organizationId: schema.member.organizationId })
+        .from(schema.member)
+        .where(eq(schema.member.userId, context.session.user.id))
+        .limit(1);
+      if (existingMemberships[0]) {
+        return {
+          organizationId: existingMemberships[0].organizationId,
+          alreadyCompleted: true,
+        };
+      }
+
+      const organizationId = randomUUID();
+      const baseSlug = input.businessSlug ?? toOrgSlug(input.businessName);
+      const slug = `${baseSlug || "retail"}-${organizationId.slice(0, 8)}`;
+      const actorUserId = context.session.user.id;
+
+      await db.insert(schema.organization).values({
+        id: organizationId,
+        name: input.businessName,
+        slug,
+      });
+      await db.insert(schema.member).values({
+        id: randomUUID(),
+        organizationId,
+        userId: actorUserId,
+        role: "owner",
+      });
+
+      await withTenant(db, organizationId, async (tx) => {
+        await tx.insert(schema.membership).values({
+          tenantId: organizationId,
+          userId: actorUserId,
+          role: "tenant_admin",
+          createdBy: actorUserId,
+        });
+        const company = firstOrThrow(
+          (
+            await tx
+              .insert(schema.company)
+              .values({
+                tenantId: organizationId,
+                name: input.businessName,
+                createdBy: actorUserId,
+              })
+              .returning({ id: schema.company.id })
+          ).at(0)
+        );
+        await tx.insert(schema.location).values({
+          tenantId: organizationId,
+          companyId: company.id,
+          name: input.locationName,
+          type: "store",
+          createdBy: actorUserId,
+        });
+        await tx.insert(schema.taxRate).values({
+          tenantId: organizationId,
+          code: input.taxCode.toUpperCase(),
+          name: input.taxName,
+          rateBps: input.taxRateBps,
+          kind: "sales",
+          createdBy: actorUserId,
+        });
+      });
+
+      if (context.session.session?.id) {
+        await db
+          .update(schema.session)
+          .set({ activeOrganizationId: organizationId })
+          .where(eq(schema.session.id, context.session.session.id));
+      }
+      await auth.api.setActiveOrganization({
+        headers: context.headers,
+        body: { organizationId },
+      });
+
+      return { organizationId, alreadyCompleted: false };
     }),
 };
 
@@ -3580,6 +3720,11 @@ interface PricedLine {
   skuId: string;
   unitPriceMinor: number;
 }
+interface TaxedPricedLine extends PricedLine {
+  lineBaseMinor: number;
+  lineTaxMinor: number;
+  taxRateId: string | null;
+}
 type TenderMethod = (typeof schema.TENDER_METHODS)[number];
 interface TenderInput {
   amountMinor: number;
@@ -3857,6 +4002,25 @@ async function buildSaleQuote(
     );
   // SAME pricing + SKU-tuple validation the sale uses (no drift).
   const { priced, subtotal } = await priceMspLines(tx, products, input.lines);
+  const taxRate = await services.resolveActiveSalesTaxRate(tx);
+  const tax = services.calculateSalesTaxLines({
+    lines: priced.map((p) => ({
+      lineBaseMinor: services.multiplyMoney(
+        services.money(p.unitPriceMinor, subtotal.currency, subtotal.scale),
+        p.qty
+      ).minor,
+      productId: p.productId,
+      qty: p.qty,
+      skuId: p.skuId,
+    })),
+    rate: taxRate,
+  });
+  const taxedBySku = new Map(tax.lines.map((line) => [line.skuId, line]));
+  const total = services.money(
+    subtotal.minor + tax.taxMinor,
+    subtotal.currency,
+    subtotal.scale
+  );
   const productById = new Map(products.map((p) => [p.id, p]));
   const skuRows = priced.length
     ? await tx
@@ -3871,33 +4035,31 @@ async function buildSaleQuote(
     : [];
   const skuCodeById = new Map(skuRows.map((s) => [s.id, s.code]));
   const lines = priced.map((p) => {
-    const lineTotal = services.multiplyMoney(
-      services.money(p.unitPriceMinor, subtotal.currency, subtotal.scale),
-      p.qty
-    );
+    const taxed = taxedBySku.get(p.skuId);
+    const lineBaseMinor = taxed?.lineBaseMinor ?? 0;
+    const lineTaxMinor = taxed?.lineTaxMinor ?? 0;
     return {
-      // Reserved seams mirror createSale (tax/discount = 0 in the MSP slice).
       discountMinor: 0,
-      lineTotalMinor: lineTotal.minor,
+      lineTotalMinor: lineBaseMinor + lineTaxMinor,
       productId: p.productId,
       productName: productById.get(p.productId)?.name ?? null,
       qty: p.qty,
       skuCode: skuCodeById.get(p.skuId) ?? null,
       skuId: p.skuId,
-      taxMinor: 0,
-      taxRateId: null as string | null,
+      taxMinor: lineTaxMinor,
+      taxRateId: taxed?.taxRateId ?? null,
       unitPriceMinor: p.unitPriceMinor,
     };
   });
   const payments =
     input.tenders && input.tenders.length > 0
-      ? previewTenders(input.tenders, subtotal)
+      ? previewTenders(input.tenders, total)
       : {
           items: [],
           settleable: false,
           settlementError: null as string | null,
           summary: {
-            balanceDueMinor: subtotal.minor,
+            balanceDueMinor: total.minor,
             changeMinor: 0,
             settledMinor: 0,
             tenderedMinor: 0,
@@ -3910,16 +4072,18 @@ async function buildSaleQuote(
     payments,
     scale: subtotal.scale,
     schemaVersion: 1 as const,
-    taxBreakdown: [] as Array<{
-      baseMinor: number | null;
+    taxBreakdown: tax.taxBreakdown as Array<{
+      baseMinor: number;
+      name: string;
+      rateBps: number;
       taxMinor: number;
-      taxRateId: string | null;
+      taxRateId: string;
     }>,
     totals: {
       discountMinor: 0,
       subtotalMinor: subtotal.minor,
-      taxMinor: 0,
-      totalMinor: subtotal.minor,
+      taxMinor: tax.taxMinor,
+      totalMinor: total.minor,
     },
   };
 }
@@ -3936,7 +4100,7 @@ async function processSaleLine(
   ctx: RequestContext,
   opts: {
     idempotencyKey: string;
-    line: PricedLine;
+    line: TaxedPricedLine;
     locationId: string;
     sale: SaleRow;
   }
@@ -3952,6 +4116,8 @@ async function processSaleLine(
           skuId: opts.line.skuId,
           qty: opts.line.qty,
           qtyBase: opts.line.qty,
+          lineTaxMinor: opts.line.lineTaxMinor,
+          taxRateId: opts.line.taxRateId,
           unitPriceMinor: opts.line.unitPriceMinor,
         })
         .returning()
@@ -4009,14 +4175,14 @@ async function processSaleLine(
       lineCommissionFunctionalMinor: null,
       lineCommissionMinor: null,
       lineDiscountMinor: 0,
-      lineTaxMinor: 0,
+      lineTaxMinor: opts.line.lineTaxMinor,
       lotId: null,
       productId: opts.line.productId,
       qtyBase: opts.line.qty,
       qtyScale: null,
       saleLineId: saleLine.id,
       skuId: opts.line.skuId,
-      taxRateId: null,
+      taxRateId: opts.line.taxRateId,
       unitPriceMinor: opts.line.unitPriceMinor,
     },
   };
@@ -4070,7 +4236,35 @@ async function runCreateSaleMsp(
       )
     );
   const { priced, subtotal } = await priceMspLines(tx, products, input.lines);
-  const settled = settleTenders(input.tenders, subtotal);
+  const taxRate = await services.resolveActiveSalesTaxRate(tx);
+  const tax = services.calculateSalesTaxLines({
+    lines: priced.map((p) => ({
+      lineBaseMinor: services.multiplyMoney(
+        services.money(p.unitPriceMinor, subtotal.currency, subtotal.scale),
+        p.qty
+      ).minor,
+      productId: p.productId,
+      qty: p.qty,
+      skuId: p.skuId,
+    })),
+    rate: taxRate,
+  });
+  const taxedBySku = new Map(tax.lines.map((line) => [line.skuId, line]));
+  const taxedPriced = priced.map((line): TaxedPricedLine => {
+    const taxed = taxedBySku.get(line.skuId);
+    return {
+      ...line,
+      lineBaseMinor: taxed?.lineBaseMinor ?? 0,
+      lineTaxMinor: taxed?.lineTaxMinor ?? 0,
+      taxRateId: taxed?.taxRateId ?? null,
+    };
+  });
+  const total = services.money(
+    subtotal.minor + tax.taxMinor,
+    subtotal.currency,
+    subtotal.scale
+  );
+  const settled = settleTenders(input.tenders, total);
   const { saleNumber, invoiceNumber } = await allocateSaleNumber(
     tx,
     ctx.tenantId
@@ -4096,16 +4290,16 @@ async function runCreateSaleMsp(
           shiftId: resolvedShiftId,
           status: "completed",
           subtotalMinor: subtotal.minor,
-          taxMinor: 0,
+          taxMinor: tax.taxMinor,
           tenantId: ctx.tenantId,
-          totalMinor: subtotal.minor,
+          totalMinor: total.minor,
         })
         .returning()
     ).at(0)
   );
 
   const eventLines: unknown[] = [];
-  for (const line of priced) {
+  for (const line of taxedPriced) {
     const { eventLine } = await processSaleLine(tx, ctx, {
       idempotencyKey: input.idempotencyKey,
       line,
@@ -4202,7 +4396,7 @@ async function runCreateSaleMsp(
           saleId: sale.id,
           scale: subtotal.scale,
           tenantId: ctx.tenantId,
-          totalMinor: subtotal.minor,
+          totalMinor: total.minor,
         })
         .returning()
     ).at(0)
@@ -4256,12 +4450,12 @@ async function runCreateSaleMsp(
       shiftId: resolvedShiftId,
       subtotalFunctionalMinor: null,
       subtotalMinor: subtotal.minor,
-      taxBreakdown: [],
+      taxBreakdown: tax.taxBreakdown,
       taxFunctionalMinor: null,
-      taxMinor: 0,
+      taxMinor: tax.taxMinor,
       tenders: eventTenders,
       totalFunctionalMinor: null,
-      totalMinor: subtotal.minor,
+      totalMinor: total.minor,
     },
   });
 
@@ -4273,7 +4467,7 @@ async function runCreateSaleMsp(
     saleId: sale.id,
     scale: subtotal.scale,
     tenders: eventTenders,
-    totalMinor: subtotal.minor,
+    totalMinor: total.minor,
   };
 }
 

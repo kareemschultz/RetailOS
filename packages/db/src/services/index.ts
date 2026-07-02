@@ -14,5 +14,6 @@ export * from "./receipt";
 export * from "./rounding";
 export * from "./shift";
 export * from "./stock-ledger";
+export * from "./tax";
 export * from "./transfer";
 export * from "./types";

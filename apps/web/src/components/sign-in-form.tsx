@@ -28,7 +28,7 @@ export default function SignInForm() {
         { email: value.email, password: value.password, rememberMe },
         {
           onSuccess: () => {
-            navigate({ to: "/pos" });
+            navigate({ to: "/onboarding" });
             toast.success("Welcome back");
           },
           onError: (error) => {
