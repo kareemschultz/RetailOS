@@ -24,6 +24,8 @@ export const ROLE_PERMISSIONS = {
     "bond.receive",
     "bond.release",
     "bond.approve_release",
+    "procurement.manage",
+    "accounting.manage",
     "pos.create_sale",
     // Cash control (Commit 4) — open/close own drawer + cash movements.
     "pos.open_shift",

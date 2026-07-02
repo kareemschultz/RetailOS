@@ -63,6 +63,29 @@
   whitespace-only, verified `0026_snapshot.json` still parses), mojibake clean, db 99→**101**
   (+2: offline-sync.rls.test.ts) + api 75→**77** (+2: offline-queue-contract.test.ts) zero
   skips, `tenant-isolation-coverage` green, `bun -F web build` green.
+- **Task 5 DONE:** ported the procurement + accounting foundations — `supplier`/`purchase_order`/
+  `purchase_order_line` and `ledger_account`/`posting_period`/`journal`/`journal_line` (7 new
+  tenant tables, all composite `(tenant_id,id)` UNIQUE + composite FKs incl. H1-class tuple
+  guards — `purchase_order_line_sku_product_composite_fk` proves SKU belongs to the PO line's
+  product at the DB layer), `procurementRouter`/`accountingRouter` (supplierCreate,
+  purchaseOrderCreate, ledgerAccountCreate, postingPeriodCreate, journalCreateDraft,
+  journalPost), `procurement.manage`/`accounting.manage` permissions granted to tenant_admin.
+  New files copied verbatim from `b9cecc9`; shared-file hunks hand-applied against diverged line
+  numbers (routers appended at file end after `numberingRouter`, now the last export). **Migration
+  regenerated as `0027_heavy_sunset_bain.sql`** (source was `0024`) — **hit the FK-before-target-
+  UNIQUE trap again**: drizzle-kit placed the composite FKs referencing `outbox_event(tenant_id,id)`
+  and `sku(tenant_id,product_id,id)` BEFORE the `ALTER TABLE ADD CONSTRAINT UNIQUE` statements that
+  make them valid — reordered by hand (confirmed against the source's own already-repaired SQL,
+  which had the identical fix). Also appended the `retailos_validate_journal_posting()` trigger
+  (rejects posting into a closed period; rejects an unbalanced-by-currency/scale journal) plus the
+  RLS DO-block for all 7 new tables, both verbatim from source. Fresh-chain 0000→0027 verified on
+  disposable PG18 (one transient gate-db readiness-check timeout on the first attempt — the
+  container was actually up during postgres's standard init-restart cycle; confirmed via
+  `pg_isready` and continued manually, migration applied cleanly). Gate: check-types 7/7, ultracite
+  clean (2 files auto-fixed, same drizzle-kit-JSON-vs-biome-style drift as Task 4), mojibake clean,
+  db 101→**107** (+6: accounting.rls.test.ts 3 + procurement.rls.test.ts 3) + api stayed **77**
+  (foundations commit adds no router-integration tests) zero skips, `tenant-isolation-coverage`
+  green (7 new tables covered), frozen costing byte-identical, `bun -F web build` green.
 
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing

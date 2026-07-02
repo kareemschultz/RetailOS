@@ -3,6 +3,7 @@ import type { RouterClient } from "@orpc/server";
 import { protectedProcedure, publicProcedure } from "../index";
 import { commerceRouter } from "./commerce";
 import {
+  accountingRouter,
   auditRouter,
   bondRouter,
   catalogRouter,
@@ -13,6 +14,7 @@ import {
   numberingRouter,
   onboardingRouter,
   posRouter,
+  procurementRouter,
   productRouter,
   reportsRouter,
   taxRouter,
@@ -36,6 +38,8 @@ export const appRouter = {
   inventory: inventoryRouter,
   transfer: transferRouter,
   bond: bondRouter,
+  procurement: procurementRouter,
+  accounting: accountingRouter,
   pos: posRouter,
   reports: reportsRouter,
   // Tenant administration surfaces (tax, staff/RBAC, audit trail, numbering).
