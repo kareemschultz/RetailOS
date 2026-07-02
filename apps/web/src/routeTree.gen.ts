@@ -43,6 +43,7 @@ import { Route as AppBarcodesRouteImport } from './routes/_app/barcodes'
 import { Route as AppProductsIndexRouteImport } from './routes/_app/products.index'
 import { Route as AppReportsNumberLeasesRouteImport } from './routes/_app/reports.number-leases'
 import { Route as AppReportsFinancialRouteImport } from './routes/_app/reports.financial'
+import { Route as AppProductsImportRouteImport } from './routes/_app/products.import'
 import { Route as AppProductsProductIdRouteImport } from './routes/_app/products.$productId'
 
 const OnboardingRoute = OnboardingRouteImport.update({
@@ -214,6 +215,11 @@ const AppReportsFinancialRoute = AppReportsFinancialRouteImport.update({
   path: '/financial',
   getParentRoute: () => AppReportsRoute,
 } as any)
+const AppProductsImportRoute = AppProductsImportRouteImport.update({
+  id: '/products/import',
+  path: '/products/import',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppProductsProductIdRoute = AppProductsProductIdRouteImport.update({
   id: '/products/$productId',
   path: '/products/$productId',
@@ -252,6 +258,7 @@ export interface FileRoutesByFullPath {
   '/uom-conversions': typeof AppUomConversionsRoute
   '/variants': typeof AppVariantsRoute
   '/products/$productId': typeof AppProductsProductIdRoute
+  '/products/import': typeof AppProductsImportRoute
   '/reports/financial': typeof AppReportsFinancialRoute
   '/reports/number-leases': typeof AppReportsNumberLeasesRoute
   '/products/': typeof AppProductsIndexRoute
@@ -288,6 +295,7 @@ export interface FileRoutesByTo {
   '/uom-conversions': typeof AppUomConversionsRoute
   '/variants': typeof AppVariantsRoute
   '/products/$productId': typeof AppProductsProductIdRoute
+  '/products/import': typeof AppProductsImportRoute
   '/reports/financial': typeof AppReportsFinancialRoute
   '/reports/number-leases': typeof AppReportsNumberLeasesRoute
   '/products': typeof AppProductsIndexRoute
@@ -326,6 +334,7 @@ export interface FileRoutesById {
   '/_app/uom-conversions': typeof AppUomConversionsRoute
   '/_app/variants': typeof AppVariantsRoute
   '/_app/products/$productId': typeof AppProductsProductIdRoute
+  '/_app/products/import': typeof AppProductsImportRoute
   '/_app/reports/financial': typeof AppReportsFinancialRoute
   '/_app/reports/number-leases': typeof AppReportsNumberLeasesRoute
   '/_app/products/': typeof AppProductsIndexRoute
@@ -364,6 +373,7 @@ export interface FileRouteTypes {
     | '/uom-conversions'
     | '/variants'
     | '/products/$productId'
+    | '/products/import'
     | '/reports/financial'
     | '/reports/number-leases'
     | '/products/'
@@ -400,6 +410,7 @@ export interface FileRouteTypes {
     | '/uom-conversions'
     | '/variants'
     | '/products/$productId'
+    | '/products/import'
     | '/reports/financial'
     | '/reports/number-leases'
     | '/products'
@@ -437,6 +448,7 @@ export interface FileRouteTypes {
     | '/_app/uom-conversions'
     | '/_app/variants'
     | '/_app/products/$productId'
+    | '/_app/products/import'
     | '/_app/reports/financial'
     | '/_app/reports/number-leases'
     | '/_app/products/'
@@ -689,6 +701,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportsFinancialRouteImport
       parentRoute: typeof AppReportsRoute
     }
+    '/_app/products/import': {
+      id: '/_app/products/import'
+      path: '/products/import'
+      fullPath: '/products/import'
+      preLoaderRoute: typeof AppProductsImportRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/products/$productId': {
       id: '/_app/products/$productId'
       path: '/products/$productId'
@@ -742,6 +761,7 @@ interface AppRouteRouteChildren {
   AppUomConversionsRoute: typeof AppUomConversionsRoute
   AppVariantsRoute: typeof AppVariantsRoute
   AppProductsProductIdRoute: typeof AppProductsProductIdRoute
+  AppProductsImportRoute: typeof AppProductsImportRoute
   AppProductsIndexRoute: typeof AppProductsIndexRoute
 }
 
@@ -774,6 +794,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppUomConversionsRoute: AppUomConversionsRoute,
   AppVariantsRoute: AppVariantsRoute,
   AppProductsProductIdRoute: AppProductsProductIdRoute,
+  AppProductsImportRoute: AppProductsImportRoute,
   AppProductsIndexRoute: AppProductsIndexRoute,
 }
 

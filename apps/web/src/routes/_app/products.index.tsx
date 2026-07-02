@@ -37,6 +37,7 @@ import {
   Plus,
   Search,
   TriangleAlert,
+  Upload,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -430,6 +431,10 @@ function ProductsScreen() {
                 value={query}
               />
             </div>
+            <Button render={<Link to="/products/import" />} variant="outline">
+              <Upload className="size-4" />
+              Import
+            </Button>
             <Button
               onClick={() => {
                 setEditingProduct(undefined);
