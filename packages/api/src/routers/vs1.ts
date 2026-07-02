@@ -1,7 +1,7 @@
 import { auth } from "@RetailOS/auth";
 import type { TenantTransaction } from "@RetailOS/db";
 import { db, schema, services, withTenant } from "@RetailOS/db";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import {
   and,
@@ -53,10 +53,17 @@ type ProductRow = typeof schema.product.$inferSelect;
 
 interface CatalogImportPreviewRow {
   baseUomCode?: string;
+  costingMethod?: (typeof schema.COSTING_METHODS)[number];
+  currency: string;
+  expiryDate?: string;
   lotNumber?: string;
+  priceMinor: number;
+  productName: string;
   productSku: string;
   rowNumber: number;
+  scale?: number;
   skuCode?: string;
+  trackingMode?: (typeof schema.TRACKING_MODES)[number];
   unitCostMinor?: number;
 }
 

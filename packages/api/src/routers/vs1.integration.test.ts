@@ -836,6 +836,63 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(importPreview.errorCount).toBe(1);
     expect(importPreview.validCount).toBe(1);
 
+    const importRows = [
+      {
+        baseUomCode: "MIX-EA",
+        costingMethod: "avco" as const,
+        currency: "USD",
+        priceMinor: 125,
+        productName: "Committed Import Product",
+        productSku: "IMPORT-COMMIT-NEW",
+        rowNumber: 1,
+        skuCode: "IMPORT-COMMIT-NEW-EA",
+        trackingMode: "lot" as const,
+        lotNumber: "IMPORT-COMMIT-LOT-1",
+        expiryDate: "2030-01-31",
+      },
+    ];
+    const importCommit = await call(
+      appRouter.catalog.importCommit,
+      { idempotencyKey: "catalog-import-commit-1", rows: importRows },
+      admin
+    );
+    expect(importCommit.createdProductCount).toBe(1);
+    expect(importCommit.createdSkuCount).toBe(1);
+    expect(importCommit.createdLotCount).toBe(1);
+    const replayedImportCommit = await call(
+      appRouter.catalog.importCommit,
+      { idempotencyKey: "catalog-import-commit-1", rows: importRows },
+      admin
+    );
+    expect(replayedImportCommit).toEqual(importCommit);
+    await expect(
+      call(
+        appRouter.catalog.importCommit,
+        {
+          idempotencyKey: "catalog-import-commit-1",
+          rows: [{ ...importRows[0], productSku: "IMPORT-COMMIT-DIFFERENT" }],
+        },
+        admin
+      )
+    ).rejects.toThrow(/idempotency/i);
+    const committedProduct = await call(
+      appRouter.product.catalog,
+      { q: "IMPORT-COMMIT-NEW" },
+      admin
+    );
+    expect(committedProduct).toHaveLength(1);
+    expect(committedProduct[0]?.sku).toBe("IMPORT-COMMIT-NEW");
+    await expect(
+      call(
+        appRouter.catalog.importCommit,
+        {
+          idempotencyKey: "catalog-import-commit-invalid-uom",
+          rows: [{ ...importRows[0], baseUomCode: "MISSING-UOM", rowNumber: 2 }],
+        },
+        admin
+      )
+    ).rejects.toThrow(/baseUomCode not found/);
+
     const updatedProduct = await call(
       appRouter.product.update,
       { id: avcoProduct.id, name: "Mixed Grocery AVCO Updated" },
