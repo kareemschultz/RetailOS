@@ -13,6 +13,18 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Sonnet tranche-1 execution — IN PROGRESS on `feat/production-readiness-completion` (2026-07-02)
+- Executing `docs/plans/2026-07-02-sonnet-tranche-1-ports-and-cleanup.md` per
+  `docs/plans/sonnet-execution-playbook.md`. Task board (this file's task list, IDs 19–27) tracks
+  the 9 tasks; each commit updates this section with the completed task's line.
+- **Task 1 DONE:** deleted 27 orphaned AdminCN demo `apps/web/src/features/*` subdirs (analytics,
+  calendar, campaigns, chat, commerce-dashboard, contacts, data-tables, empty-states, faq, finance,
+  form-layouts, form-validation, form-wizard, kanban, logistics, mail, onboarding, orders, payments,
+  permissions, pricing, productivity, profile, roles, sales-overview, settings, users). Kept
+  `misc-pages/` (the only subdir imported, by the five `_app/error-*.tsx` routes). Verified: only
+  `misc-pages/error-views` was imported outside `features/` (grep, zero other hits); check-types
+  7/7 green; `bun -F web build` green; ultracite 305 files clean; mojibake clean.
+
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing
   guardrails: gate suite via `scripts/gate-db.sh`, hard prohibitions, defect-class checklist,
