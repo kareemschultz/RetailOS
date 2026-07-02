@@ -35,6 +35,11 @@ export const ROLE_PERMISSIONS = {
     "pos.refund",
     "pos.void_sale",
     "reports.view",
+    // Tenant administration (charter §7): tax/numbering setup, staff/access
+    // management, and audit-trail visibility are admin-only surfaces.
+    "settings.manage",
+    "users.manage",
+    "audit.view",
   ],
   manager: [
     "products.create",

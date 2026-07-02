@@ -3,15 +3,19 @@ import type { RouterClient } from "@orpc/server";
 import { protectedProcedure, publicProcedure } from "../index";
 import { commerceRouter } from "./commerce";
 import {
+  auditRouter,
   bondRouter,
   catalogRouter,
   companyRouter,
   inventoryRouter,
   locationRouter,
+  membershipRouter,
+  numberingRouter,
   onboardingRouter,
   posRouter,
   productRouter,
   reportsRouter,
+  taxRouter,
   tenantRouter,
   transferRouter,
 } from "./vs1";
@@ -34,6 +38,11 @@ export const appRouter = {
   bond: bondRouter,
   pos: posRouter,
   reports: reportsRouter,
+  // Tenant administration surfaces (tax, staff/RBAC, audit trail, numbering).
+  tax: taxRouter,
+  membership: membershipRouter,
+  audit: auditRouter,
+  numbering: numberingRouter,
   // Shopix Commerce Experience — public, hostname-resolved storefront API.
   commerce: commerceRouter,
 };

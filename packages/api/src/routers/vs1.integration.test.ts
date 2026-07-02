@@ -35,6 +35,19 @@ const MISSING_REPORTS_VIEW_RE = /Missing permission: reports\.view/;
 const IDEMPOTENCY_CONFLICT_RE = /idempotency/i;
 const IMPORT_UOM_NOT_FOUND_RE = /baseUomCode not found/;
 const IMPORT_LOCATION_REQUIRED_RE = /locationId is required/;
+const ARCHIVE_LOCATIONS_FIRST_RE = /locations first/;
+const LOCATION_HOLDS_STOCK_RE = /still holds stock/;
+const TAX_RATE_FROZEN_RE = /create a new rate/;
+const GRANT_NEEDS_ACCOUNT_RE = /sign up first/;
+const ALREADY_HAS_ACCESS_RE = /already has access/;
+const SELF_REVOKE_RE = /your own access/;
+const LAST_ADMIN_RE = /last admin/;
+const COUNT_LINE_EDIT_GUARD_RE = /only be edited while it is started/;
+const COUNT_CANCEL_GUARD_RE = /only a started count/;
+const RANGE_END_RE = /rangeEnd must be/;
+const MISSING_SETTINGS_MANAGE_RE = /Missing permission: settings\.manage/;
+const MISSING_USERS_MANAGE_RE = /Missing permission: users\.manage/;
+const MISSING_AUDIT_VIEW_RE = /Missing permission: audit\.view/;
 const MISSING_TRANSFER_PERM_RE = /Missing permission: inventory\.transfer/;
 const MISSING_BOND_PERM_RE = /Missing permission: bond\.receive/;
 
@@ -2368,6 +2381,34 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       )
     ).at(0) as { action: string } | undefined;
     expect(auditRow?.action).toBe("bond.release");
+
+    // Release read-back: list + detail expose the release with display-safe
+    // names and the per-line duty/tax that was applied.
+    const releases = await call(appRouter.bond.releaseList, {}, admin);
+    const listed = releases.find((r) => r.id === releaseResult.release.id);
+    expect(listed).toBeTruthy();
+    expect(listed?.status).toBe("released");
+    expect(listed?.destLocationName).toBeTruthy();
+    const releaseDetail = await call(
+      appRouter.bond.releaseDetail,
+      { releaseId: releaseResult.release.id },
+      admin
+    );
+    expect(releaseDetail.lines).toHaveLength(1);
+    expect(releaseDetail.lines[0]?.dutyMinor).toBe(300);
+    expect(releaseDetail.lines[0]?.taxMinor).toBe(100);
+    expect(releaseDetail.lines[0]?.productName).toBeTruthy();
+    // Tenant isolation on the new reads.
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const releasesB = await call(appRouter.bond.releaseList, {}, adminB);
+    expect(releasesB.map((r) => r.id)).not.toContain(releaseResult.release.id);
+    await expect(
+      call(
+        appRouter.bond.releaseDetail,
+        { releaseId: releaseResult.release.id },
+        adminB
+      )
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
   });
 
   // RBAC: a cashier holds neither bond.release nor bond.approve_release.
@@ -5501,5 +5542,376 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     await expect(
       call(appRouter.bond.receiptDetail, { bondReceiptId }, adminB)
     ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+  });
+
+  it("admin surfaces: company/location lifecycle with archive guards", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "Admin Co" },
+      admin
+    );
+    const store = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Admin Store", type: "store" },
+      admin
+    );
+    // list includes it; a cashier lacks even the read grant used here.
+    const companies = await call(appRouter.company.list, {}, admin);
+    expect(companies.map((c) => c.id)).toContain(company.id);
+    await expect(call(appRouter.company.list, {}, cashier)).rejects.toThrow(
+      MISSING_REPORTS_VIEW_RE
+    );
+    // update + audit round-trip.
+    const renamed = await call(
+      appRouter.company.update,
+      { id: company.id, name: "Admin Co Renamed" },
+      admin
+    );
+    expect(renamed.name).toBe("Admin Co Renamed");
+    // archive is blocked while a live location exists.
+    await expect(
+      call(appRouter.company.archive, { id: company.id }, admin)
+    ).rejects.toThrow(ARCHIVE_LOCATIONS_FIRST_RE);
+    // location update: rename + sellable toggle only.
+    const updatedStore = await call(
+      appRouter.location.update,
+      { id: store.id, name: "Admin Store 2", isSellable: false },
+      admin
+    );
+    expect(updatedStore.name).toBe("Admin Store 2");
+    expect(updatedStore.isSellable).toBe(false);
+    // location with stock cannot be archived.
+    const product = await call(
+      appRouter.product.create,
+      {
+        sku: "ADMIN-P1",
+        name: "Admin Product",
+        priceMinor: 500,
+        currency: "USD",
+      },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "ADMIN-P1-EA", productId: product.id },
+      admin
+    );
+    await call(
+      appRouter.inventory.receive,
+      {
+        costCurrency: "USD",
+        costScale: 2,
+        locationId: store.id,
+        productId: product.id,
+        qty: 3,
+        skuId: sku.id,
+        unitCostMinor: 100,
+      },
+      admin
+    );
+    await expect(
+      call(appRouter.location.archive, { id: store.id }, admin)
+    ).rejects.toThrow(LOCATION_HOLDS_STOCK_RE);
+    // Drain the stock, then archive cascades cleanly: location first, then
+    // the company.
+    await call(
+      appRouter.inventory.adjust,
+      {
+        locationId: store.id,
+        productId: product.id,
+        skuId: sku.id,
+        qtyDelta: -3,
+        reasonCode: "correction",
+      },
+      admin
+    );
+    const archivedStore = await call(
+      appRouter.location.archive,
+      { id: store.id },
+      admin
+    );
+    expect(archivedStore.deletedAt).toBeTruthy();
+    const archivedCompany = await call(
+      appRouter.company.archive,
+      { id: company.id },
+      admin
+    );
+    expect(archivedCompany.deletedAt).toBeTruthy();
+  });
+
+  it("tax admin: CRUD with rate frozen once applied to sales", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    await expect(call(appRouter.tax.list, {}, cashier)).rejects.toThrow(
+      MISSING_SETTINGS_MANAGE_RE
+    );
+    const created = await call(
+      appRouter.tax.create,
+      { code: "ADMVAT", name: "Admin VAT", rateBps: 1000, isActive: false },
+      admin
+    );
+    expect(created.rateBps).toBe(1000);
+    const rates = await call(appRouter.tax.list, {}, admin);
+    expect(rates.map((r) => r.id)).toContain(created.id);
+    // Unused rate: percentage still editable.
+    const bumped = await call(
+      appRouter.tax.update,
+      { id: created.id, rateBps: 1200 },
+      admin
+    );
+    expect(bumped.rateBps).toBe(1200);
+    // The VAT14 rate from the earlier quote test HAS been applied to a sale —
+    // its percentage is frozen; name/isActive edits stay allowed.
+    const usedRate = rates.find((r) => r.code === "VAT14");
+    expect(usedRate).toBeTruthy();
+    if (usedRate) {
+      await expect(
+        call(appRouter.tax.update, { id: usedRate.id, rateBps: 1500 }, admin)
+      ).rejects.toThrow(TAX_RATE_FROZEN_RE);
+      const renamedRate = await call(
+        appRouter.tax.update,
+        { id: usedRate.id, name: "VAT 14% (legacy)" },
+        admin
+      );
+      expect(renamedRate.name).toBe("VAT 14% (legacy)");
+      expect(renamedRate.rateBps).toBe(1400);
+    }
+  });
+
+  it("staff admin: grant/updateRole/revoke with last-admin and self guards", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    await expect(call(appRouter.membership.list, {}, cashier)).rejects.toThrow(
+      MISSING_USERS_MANAGE_RE
+    );
+    const staff = await call(appRouter.membership.list, {}, admin);
+    expect(staff.some((m) => m.email === "admin_e2e@example.com")).toBe(true);
+    // roles matrix comes from the real entitlements table.
+    const roles = await call(appRouter.membership.roles, {}, admin);
+    const adminRole = roles.find((r) => r.role === "tenant_admin");
+    expect(adminRole?.permissions).toContain("users.manage");
+    // grant requires an existing account.
+    await expect(
+      call(
+        appRouter.membership.grant,
+        { email: "nobody_e2e@example.com", role: "cashier" },
+        admin
+      )
+    ).rejects.toThrow(GRANT_NEEDS_ACCOUNT_RE);
+    // grant an existing user (admin B has an account but no ORG membership).
+    const granted = await call(
+      appRouter.membership.grant,
+      { email: "admin_e2e_b@example.com", role: "manager" },
+      admin
+    );
+    expect(granted.role).toBe("manager");
+    // duplicate grant rejected.
+    await expect(
+      call(
+        appRouter.membership.grant,
+        { email: "admin_e2e_b@example.com", role: "cashier" },
+        admin
+      )
+    ).rejects.toThrow(ALREADY_HAS_ACCESS_RE);
+    // role change round-trips.
+    const promoted = await call(
+      appRouter.membership.updateRole,
+      { membershipId: granted.id, role: "warehouse" },
+      admin
+    );
+    expect(promoted.role).toBe("warehouse");
+    // self-revocation is blocked.
+    const adminRow = staff.find((m) => m.email === "admin_e2e@example.com");
+    expect(adminRow).toBeTruthy();
+    if (adminRow) {
+      await expect(
+        call(appRouter.membership.revoke, { membershipId: adminRow.id }, admin)
+      ).rejects.toThrow(SELF_REVOKE_RE);
+      // last-admin demotion is blocked (ADMIN is the only tenant_admin).
+      await expect(
+        call(
+          appRouter.membership.updateRole,
+          { membershipId: adminRow.id, role: "cashier" },
+          admin
+        )
+      ).rejects.toThrow(LAST_ADMIN_RE);
+    }
+    // revoke the granted membership; the Better Auth member row goes too.
+    const revoked = await call(
+      appRouter.membership.revoke,
+      { membershipId: granted.id },
+      admin
+    );
+    expect(revoked.revoked).toBe(true);
+    const memberRow = (
+      await db
+        .select()
+        .from(schema.member)
+        .where(eq(schema.member.userId, ADMIN_B))
+    ).filter((m) => m.organizationId === ORG);
+    expect(memberRow).toHaveLength(0);
+  });
+
+  it("audit viewer: audit.view-gated list with filters and full detail", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    await expect(
+      call(appRouter.audit.list, { limit: 5 }, cashier)
+    ).rejects.toThrow(MISSING_AUDIT_VIEW_RE);
+    const page = await call(
+      appRouter.audit.list,
+      { limit: 5, action: "company.update" },
+      admin
+    );
+    expect(page.rows.length).toBeGreaterThan(0);
+    expect(page.rows[0]?.action).toBe("company.update");
+    expect(page.rows[0]?.actorEmail).toBe("admin_e2e@example.com");
+    const first = page.rows[0];
+    if (first) {
+      const detail = await call(
+        appRouter.audit.detail,
+        { id: first.id },
+        admin
+      );
+      expect(detail.action).toBe("company.update");
+      expect(detail.before).toBeTruthy();
+      expect(detail.after).toBeTruthy();
+      // Cross-tenant: tenant B cannot read tenant A's audit row.
+      const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+      await expect(
+        call(appRouter.audit.detail, { id: first.id }, adminB)
+      ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+    }
+  });
+
+  it("stock counts: list/detail/cancel with status guards", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "Count Co" },
+      admin
+    );
+    const store = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Count Store", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      {
+        sku: "COUNT-P1",
+        name: "Count Product",
+        priceMinor: 500,
+        currency: "USD",
+      },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "COUNT-P1-EA", productId: product.id },
+      admin
+    );
+    const started = await call(
+      appRouter.inventory.countStart,
+      { locationId: store.id },
+      admin
+    );
+    await call(
+      appRouter.inventory.countLineUpsert,
+      { stockCountId: started.id, skuId: sku.id, countedQty: 7 },
+      admin
+    );
+    const counts = await call(
+      appRouter.inventory.countList,
+      { locationId: store.id },
+      admin
+    );
+    expect(counts.map((c) => c.id)).toContain(started.id);
+    expect(counts[0]?.locationName).toBe("Count Store");
+    const detail = await call(
+      appRouter.inventory.countDetail,
+      { stockCountId: started.id },
+      admin
+    );
+    expect(detail.lines).toHaveLength(1);
+    expect(detail.lines[0]?.countedQty).toBe(7);
+    expect(detail.lines[0]?.skuCode).toBe("COUNT-P1-EA");
+    // cancel, then both line edits and posting are rejected.
+    const cancelled = await call(
+      appRouter.inventory.countCancel,
+      { stockCountId: started.id },
+      admin
+    );
+    expect(cancelled.status).toBe("void");
+    await expect(
+      call(
+        appRouter.inventory.countLineUpsert,
+        { stockCountId: started.id, skuId: sku.id, countedQty: 9 },
+        admin
+      )
+    ).rejects.toThrow(COUNT_LINE_EDIT_GUARD_RE);
+    await expect(
+      call(appRouter.inventory.countCancel, { stockCountId: started.id }, admin)
+    ).rejects.toThrow(COUNT_CANCEL_GUARD_RE);
+  });
+
+  it("numbering admin: blockList/blockCreate with cross-tenant company rejection", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+    const company = await call(
+      appRouter.company.create,
+      { name: "Numbering Co" },
+      admin
+    );
+    const block = await call(
+      appRouter.numbering.blockCreate,
+      {
+        companyId: company.id,
+        docType: "invoice",
+        series: "adm",
+        rangeStart: 1000,
+        rangeEnd: 1999,
+      },
+      admin
+    );
+    expect(block.next).toBe(1000);
+    const blocks = await call(
+      appRouter.numbering.blockList,
+      { companyId: company.id },
+      admin
+    );
+    const listed = blocks.find((b) => b.id === block.id);
+    expect(listed?.companyName).toBe("Numbering Co");
+    expect(listed?.docType).toBe("invoice");
+    // H1 class: tenant B cannot mint a block against tenant A's company.
+    await expect(
+      call(
+        appRouter.numbering.blockCreate,
+        {
+          companyId: company.id,
+          docType: "invoice",
+          series: "adm-b",
+          rangeStart: 1,
+          rangeEnd: 99,
+        },
+        adminB
+      )
+    ).rejects.toThrow(NOT_FOUND_IN_TENANT_RE);
+    // rangeEnd < rangeStart rejected.
+    await expect(
+      call(
+        appRouter.numbering.blockCreate,
+        {
+          companyId: company.id,
+          docType: "invoice",
+          series: "adm-2",
+          rangeStart: 50,
+          rangeEnd: 10,
+        },
+        admin
+      )
+    ).rejects.toThrow(RANGE_END_RE);
   });
 });

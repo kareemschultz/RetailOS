@@ -301,6 +301,111 @@ export const companyRouter = {
         return row;
       });
     }),
+  list: tenantProcedure
+    .input(z.object({ includeArchived: z.boolean().default(false) }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        return tx
+          .select({
+            id: schema.company.id,
+            name: schema.company.name,
+            createdAt: schema.company.createdAt,
+            deletedAt: schema.company.deletedAt,
+          })
+          .from(schema.company)
+          .where(
+            input.includeArchived ? undefined : isNull(schema.company.deletedAt)
+          )
+          .orderBy(schema.company.name);
+      });
+    }),
+  update: tenantProcedure
+    .input(z.object({ id: z.string().uuid(), name: z.string().min(1) }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "company.create");
+        await assertCompanyVisible(tx, input.id);
+        const before = (
+          await tx
+            .select()
+            .from(schema.company)
+            .where(eq(schema.company.id, input.id))
+            .limit(1)
+        ).at(0);
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.company)
+              .set({ name: input.name, updatedBy: ctx.actorUserId })
+              .where(eq(schema.company.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "company.update",
+          entityType: "company",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  archive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "company.create");
+        await assertCompanyVisible(tx, input.id);
+        const before = (
+          await tx
+            .select()
+            .from(schema.company)
+            .where(eq(schema.company.id, input.id))
+            .limit(1)
+        ).at(0);
+        // A company with live locations cannot be archived — that would orphan
+        // the operational tree under an invisible parent.
+        const activeLocation = (
+          await tx
+            .select({ id: schema.location.id })
+            .from(schema.location)
+            .where(
+              and(
+                eq(schema.location.companyId, input.id),
+                isNull(schema.location.deletedAt)
+              )
+            )
+            .limit(1)
+        ).at(0);
+        if (activeLocation) {
+          throw new ORPCError("CONFLICT", {
+            message: "Archive or move this company's locations first",
+          });
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.company)
+              .set({ deletedAt: new Date(), updatedBy: ctx.actorUserId })
+              .where(eq(schema.company.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "company.archive",
+          entityType: "company",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
 };
 
 export const locationRouter = {
@@ -356,6 +461,129 @@ export const locationRouter = {
           action: "location.create",
           entityType: "location",
           entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  // Deliberately narrow: rename + sellable toggle only. Type and the
+  // bonded/quarantine/transit flags are immutable post-create — flipping
+  // is_bonded on a location holding stock would corrupt the INV-3
+  // bonded/released separation, so structural changes mean a new location +
+  // transfer, never a mutation.
+  update: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        isSellable: z.boolean().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "location.create");
+        const before = (
+          await tx
+            .select()
+            .from(schema.location)
+            .where(eq(schema.location.id, input.id))
+            .limit(1)
+        ).at(0);
+        if (!before) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Location not found in this tenant",
+          });
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.location)
+              .set({
+                name: input.name,
+                isSellable: input.isSellable,
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.location.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "location.update",
+          entityType: "location",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  archive: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "location.create");
+        const before = (
+          await tx
+            .select()
+            .from(schema.location)
+            .where(eq(schema.location.id, input.id))
+            .limit(1)
+        ).at(0);
+        if (!before) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Location not found in this tenant",
+          });
+        }
+        // Archiving a node that still holds stock would hide real inventory
+        // from every operational read while the ledger still counts it.
+        const stockedCell = (
+          await tx
+            .select({ qty: sql<string>`SUM(${schema.stockLedger.qtyDelta})` })
+            .from(schema.stockLedger)
+            .where(eq(schema.stockLedger.locationId, input.id))
+            .groupBy(schema.stockLedger.productId, schema.stockLedger.skuId)
+            .having(sql`SUM(${schema.stockLedger.qtyDelta}) <> 0`)
+            .limit(1)
+        ).at(0);
+        if (stockedCell) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "Location still holds stock — transfer or adjust it out first",
+          });
+        }
+        const activeChild = (
+          await tx
+            .select({ id: schema.location.id })
+            .from(schema.location)
+            .where(
+              and(
+                eq(schema.location.parentLocationId, input.id),
+                isNull(schema.location.deletedAt)
+              )
+            )
+            .limit(1)
+        ).at(0);
+        if (activeChild) {
+          throw new ORPCError("CONFLICT", {
+            message: "Archive this location's child locations first",
+          });
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.location)
+              .set({ deletedAt: new Date(), updatedBy: ctx.actorUserId })
+              .where(eq(schema.location.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "location.archive",
+          entityType: "location",
+          entityId: row.id,
+          before,
           after: row,
         });
         return row;
@@ -3695,7 +3923,10 @@ export const inventoryRouter = {
         await assertPermission(tx, ctx, "inventory.count");
         const countRow = (
           await tx
-            .select({ id: schema.stockCount.id })
+            .select({
+              id: schema.stockCount.id,
+              status: schema.stockCount.status,
+            })
             .from(schema.stockCount)
             .where(eq(schema.stockCount.id, input.stockCountId))
             .limit(1)
@@ -3703,6 +3934,11 @@ export const inventoryRouter = {
         if (!countRow) {
           throw new ORPCError("NOT_FOUND", {
             message: "Stock count not found in this tenant",
+          });
+        }
+        if (countRow.status !== "started") {
+          throw new ORPCError("CONFLICT", {
+            message: `Stock count is ${countRow.status} — lines can only be edited while it is started`,
           });
         }
         await assertSkuVisible(tx, input.skuId);
@@ -3784,6 +4020,145 @@ export const inventoryRouter = {
           after: result,
         });
         return result;
+      });
+    }),
+  countList: tenantProcedure
+    .input(
+      z.object({
+        locationId: z.string().uuid().optional(),
+        status: z.enum(["started", "posted", "void"]).optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
+        const conditions = [
+          input.locationId
+            ? eq(schema.stockCount.locationId, input.locationId)
+            : null,
+          input.status ? eq(schema.stockCount.status, input.status) : null,
+          isNull(schema.stockCount.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.stockCount.id,
+            locationId: schema.stockCount.locationId,
+            locationName: schema.location.name,
+            scope: schema.stockCount.scope,
+            status: schema.stockCount.status,
+            startedAt: schema.stockCount.startedAt,
+            postedAt: schema.stockCount.postedAt,
+            createdAt: schema.stockCount.createdAt,
+          })
+          .from(schema.stockCount)
+          .innerJoin(
+            schema.location,
+            eq(schema.stockCount.locationId, schema.location.id)
+          )
+          .where(and(...conditions))
+          .orderBy(desc(schema.stockCount.startedAt))
+          .limit(input.limit);
+      });
+    }),
+  countDetail: tenantProcedure
+    .input(z.object({ stockCountId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        const header = (
+          await tx
+            .select({
+              id: schema.stockCount.id,
+              locationId: schema.stockCount.locationId,
+              locationName: schema.location.name,
+              scope: schema.stockCount.scope,
+              status: schema.stockCount.status,
+              startedAt: schema.stockCount.startedAt,
+              postedAt: schema.stockCount.postedAt,
+            })
+            .from(schema.stockCount)
+            .innerJoin(
+              schema.location,
+              eq(schema.stockCount.locationId, schema.location.id)
+            )
+            .where(eq(schema.stockCount.id, input.stockCountId))
+            .limit(1)
+        ).at(0);
+        if (!header) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Stock count not found in this tenant",
+          });
+        }
+        const lines = await tx
+          .select({
+            id: schema.stockCountLine.id,
+            skuId: schema.stockCountLine.skuId,
+            skuCode: schema.sku.code,
+            productName: schema.product.name,
+            lotId: schema.stockCountLine.lotId,
+            countedQty: schema.stockCountLine.countedQty,
+            systemQty: schema.stockCountLine.systemQty,
+            varianceQty: schema.stockCountLine.varianceQty,
+          })
+          .from(schema.stockCountLine)
+          .innerJoin(schema.sku, eq(schema.stockCountLine.skuId, schema.sku.id))
+          .innerJoin(
+            schema.product,
+            eq(schema.sku.productId, schema.product.id)
+          )
+          .where(eq(schema.stockCountLine.stockCountId, input.stockCountId))
+          .orderBy(schema.sku.code);
+        return { ...header, lines };
+      });
+    }),
+  countCancel: tenantProcedure
+    .input(z.object({ stockCountId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "inventory.count");
+        // Lock the state row (the transfer-ship lesson): a concurrent post and
+        // cancel must serialize on the count header, not race.
+        const rows = await tx
+          .select()
+          .from(schema.stockCount)
+          .where(eq(schema.stockCount.id, input.stockCountId))
+          .for("update");
+        const before = rows.at(0);
+        if (!before) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Stock count not found in this tenant",
+          });
+        }
+        if (before.status !== "started") {
+          throw new ORPCError("CONFLICT", {
+            message: `Stock count is ${before.status} — only a started count can be cancelled`,
+          });
+        }
+        // "void" matches postStockCount's existing guard vocabulary.
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.stockCount)
+              .set({ status: "void", updatedBy: ctx.actorUserId })
+              .where(eq(schema.stockCount.id, input.stockCountId))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "inventory.count.cancel",
+          entityType: "stock_count",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
       });
     }),
   reorderEvaluate: tenantProcedure
@@ -7751,6 +8126,690 @@ export const bondRouter = {
           )
           .where(eq(schema.bondReceiptLine.bondReceiptId, input.bondReceiptId));
         return { receipt, lines };
+      });
+    }),
+  releaseList: tenantProcedure
+    .input(
+      z.object({
+        status: z.enum(schema.BOND_RELEASE_STATUSES).optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        const sourceLocation = aliasedTable(schema.location, "source_loc");
+        const destLocation = aliasedTable(schema.location, "dest_loc");
+        const conditions = [
+          input.status ? eq(schema.bondRelease.status, input.status) : null,
+          isNull(schema.bondRelease.deletedAt),
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.bondRelease.id,
+            number: schema.bondRelease.number,
+            status: schema.bondRelease.status,
+            bondReceiptId: schema.bondRelease.bondReceiptId,
+            receiptNumber: schema.bondReceipt.number,
+            sourceLocationId: schema.bondRelease.sourceLocationId,
+            sourceLocationName: sourceLocation.name,
+            destLocationId: schema.bondRelease.destLocationId,
+            destLocationName: destLocation.name,
+            createdAt: schema.bondRelease.createdAt,
+          })
+          .from(schema.bondRelease)
+          .innerJoin(
+            schema.bondReceipt,
+            eq(schema.bondRelease.bondReceiptId, schema.bondReceipt.id)
+          )
+          .innerJoin(
+            sourceLocation,
+            eq(schema.bondRelease.sourceLocationId, sourceLocation.id)
+          )
+          .innerJoin(
+            destLocation,
+            eq(schema.bondRelease.destLocationId, destLocation.id)
+          )
+          .where(and(...conditions))
+          .orderBy(desc(schema.bondRelease.createdAt))
+          .limit(input.limit);
+      });
+    }),
+  releaseDetail: tenantProcedure
+    .input(z.object({ releaseId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        const release = (
+          await tx
+            .select()
+            .from(schema.bondRelease)
+            .where(eq(schema.bondRelease.id, input.releaseId))
+            .limit(1)
+        ).at(0);
+        if (!release) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Bond release not found in this tenant",
+          });
+        }
+        const lines = await tx
+          .select({
+            id: schema.bondReleaseLine.id,
+            bondReceiptLineId: schema.bondReleaseLine.bondReceiptLineId,
+            skuCode: schema.sku.code,
+            productName: schema.product.name,
+            qty: schema.bondReleaseLine.qty,
+            dutyMinor: schema.bondReleaseLine.dutyMinor,
+            taxMinor: schema.bondReleaseLine.taxMinor,
+            costingMethodApplied: schema.bondReleaseLine.costingMethodApplied,
+          })
+          .from(schema.bondReleaseLine)
+          .innerJoin(
+            schema.bondReceiptLine,
+            eq(
+              schema.bondReleaseLine.bondReceiptLineId,
+              schema.bondReceiptLine.id
+            )
+          )
+          .innerJoin(
+            schema.sku,
+            eq(schema.bondReceiptLine.skuId, schema.sku.id)
+          )
+          .innerJoin(
+            schema.product,
+            eq(schema.sku.productId, schema.product.id)
+          )
+          .where(eq(schema.bondReleaseLine.bondReleaseId, input.releaseId));
+        return { ...release, lines };
+      });
+    }),
+};
+
+// ── Tax administration (charter §19 tax engine seam; settings.manage) ────────
+export const taxRouter = {
+  list: tenantProcedure
+    .input(z.object({ includeInactive: z.boolean().default(true) }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "settings.manage");
+        return tx
+          .select({
+            id: schema.taxRate.id,
+            code: schema.taxRate.code,
+            name: schema.taxRate.name,
+            kind: schema.taxRate.kind,
+            rateBps: schema.taxRate.rateBps,
+            isActive: schema.taxRate.isActive,
+            effectiveFrom: schema.taxRate.effectiveFrom,
+            effectiveTo: schema.taxRate.effectiveTo,
+            createdAt: schema.taxRate.createdAt,
+          })
+          .from(schema.taxRate)
+          .where(
+            input.includeInactive
+              ? undefined
+              : eq(schema.taxRate.isActive, true)
+          )
+          .orderBy(desc(schema.taxRate.isActive), schema.taxRate.code);
+      });
+    }),
+  create: tenantProcedure
+    .input(
+      z.object({
+        code: z.string().trim().min(1).max(24),
+        name: z.string().trim().min(1).max(80),
+        rateBps: z.number().int().min(0).max(10_000),
+        isActive: z.boolean().default(true),
+        effectiveFrom: z.string().date().optional(),
+        effectiveTo: z.string().date().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "settings.manage");
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.taxRate)
+              .values({
+                tenantId: ctx.tenantId,
+                code: input.code,
+                name: input.name,
+                rateBps: input.rateBps,
+                isActive: input.isActive,
+                effectiveFrom: input.effectiveFrom
+                  ? new Date(input.effectiveFrom)
+                  : null,
+                effectiveTo: input.effectiveTo
+                  ? new Date(input.effectiveTo)
+                  : null,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "tax.create",
+          entityType: "tax_rate",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  update: tenantProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string().trim().min(1).max(80).optional(),
+        rateBps: z.number().int().min(0).max(10_000).optional(),
+        isActive: z.boolean().optional(),
+        effectiveFrom: z.string().date().nullable().optional(),
+        effectiveTo: z.string().date().nullable().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "settings.manage");
+        const before = (
+          await tx
+            .select()
+            .from(schema.taxRate)
+            .where(eq(schema.taxRate.id, input.id))
+            .limit(1)
+        ).at(0);
+        if (!before) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Tax rate not found in this tenant",
+          });
+        }
+        // Set-once-after-use (the costing-method discipline applied to tax):
+        // once any sale line has stamped this rate, its percentage is frozen —
+        // supersede with a new rate + deactivate this one instead of editing
+        // history's meaning.
+        if (input.rateBps != null && input.rateBps !== before.rateBps) {
+          const used = (
+            await tx
+              .select({ id: schema.saleLine.id })
+              .from(schema.saleLine)
+              .where(eq(schema.saleLine.taxRateId, input.id))
+              .limit(1)
+          ).at(0);
+          if (used) {
+            throw new ORPCError("CONFLICT", {
+              message:
+                "This rate has been applied to sales — create a new rate and deactivate this one instead of changing its percentage",
+            });
+          }
+        }
+        const toNullableDate = (
+          value: string | null | undefined
+        ): Date | null | undefined => {
+          if (value === undefined) {
+            return;
+          }
+          return value ? new Date(value) : null;
+        };
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.taxRate)
+              .set({
+                name: input.name,
+                rateBps: input.rateBps,
+                isActive: input.isActive,
+                effectiveFrom: toNullableDate(input.effectiveFrom),
+                effectiveTo: toNullableDate(input.effectiveTo),
+                updatedBy: ctx.actorUserId,
+              })
+              .where(eq(schema.taxRate.id, input.id))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "tax.update",
+          entityType: "tax_rate",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+};
+
+const MEMBERSHIP_ROLES = [
+  "tenant_admin",
+  "manager",
+  "warehouse",
+  "bond_officer",
+  "cashier",
+] as const;
+
+async function countTenantAdmins(tx: TenantTransaction): Promise<number> {
+  const rows = await tx
+    .select({ n: count() })
+    .from(schema.membership)
+    .where(eq(schema.membership.role, "tenant_admin"));
+  return rows.at(0)?.n ?? 0;
+}
+
+// ── Staff / access administration (charter §7; users.manage) ────────────────
+export const membershipRouter = {
+  list: tenantProcedure
+    .input(z.object({}).optional())
+    .handler(({ context }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "users.manage");
+        return tx
+          .select({
+            id: schema.membership.id,
+            userId: schema.membership.userId,
+            role: schema.membership.role,
+            name: schema.user.name,
+            email: schema.user.email,
+            createdAt: schema.membership.createdAt,
+          })
+          .from(schema.membership)
+          .innerJoin(schema.user, eq(schema.membership.userId, schema.user.id))
+          .orderBy(schema.user.name);
+      });
+    }),
+  // The role → permission matrix, so the RBAC page renders real entitlements
+  // instead of a hardcoded copy that drifts.
+  roles: tenantProcedure
+    .input(z.object({}).optional())
+    .handler(({ context }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "users.manage");
+        return MEMBERSHIP_ROLES.map((role) => ({
+          role,
+          permissions: [...services.ROLE_PERMISSIONS[role]],
+        }));
+      });
+    }),
+  // Grants access to an EXISTING user by email (staff sign up first — via
+  // Google or email — then an admin assigns their role). Real email-delivered
+  // invitations need the SMTP/white-label seam (§11) and come later.
+  grant: tenantProcedure
+    .input(
+      z.object({
+        email: z.string().trim().toLowerCase().email(),
+        role: z.enum(MEMBERSHIP_ROLES),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "users.manage");
+        const targetUser = (
+          await tx
+            .select({ id: schema.user.id, email: schema.user.email })
+            .from(schema.user)
+            .where(eq(schema.user.email, input.email))
+            .limit(1)
+        ).at(0);
+        if (!targetUser) {
+          throw new ORPCError("NOT_FOUND", {
+            message:
+              "No account exists for that email — ask them to sign up first, then grant access",
+          });
+        }
+        const existing = (
+          await tx
+            .select({ id: schema.membership.id })
+            .from(schema.membership)
+            .where(eq(schema.membership.userId, targetUser.id))
+            .limit(1)
+        ).at(0);
+        if (existing) {
+          throw new ORPCError("CONFLICT", {
+            message: "That user already has access — change their role instead",
+          });
+        }
+        // Better Auth org membership (login/org-switch) + RetailOS membership
+        // (ERP role) are created together, mirroring onboarding.complete.
+        const orgMember = (
+          await tx
+            .select({ id: schema.member.id })
+            .from(schema.member)
+            .where(
+              and(
+                eq(schema.member.organizationId, ctx.tenantId),
+                eq(schema.member.userId, targetUser.id)
+              )
+            )
+            .limit(1)
+        ).at(0);
+        if (!orgMember) {
+          await tx.insert(schema.member).values({
+            id: randomUUID(),
+            organizationId: ctx.tenantId,
+            userId: targetUser.id,
+            role: "member",
+          });
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.membership)
+              .values({
+                tenantId: ctx.tenantId,
+                userId: targetUser.id,
+                role: input.role,
+                createdBy: ctx.actorUserId,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "membership.grant",
+          entityType: "membership",
+          entityId: row.id,
+          after: { ...row, email: targetUser.email },
+        });
+        return row;
+      });
+    }),
+  updateRole: tenantProcedure
+    .input(
+      z.object({
+        membershipId: z.string().uuid(),
+        role: z.enum(MEMBERSHIP_ROLES),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "users.manage");
+        const before = (
+          await tx
+            .select()
+            .from(schema.membership)
+            .where(eq(schema.membership.id, input.membershipId))
+            .limit(1)
+        ).at(0);
+        if (!before) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Membership not found in this tenant",
+          });
+        }
+        if (
+          before.role === "tenant_admin" &&
+          input.role !== "tenant_admin" &&
+          (await countTenantAdmins(tx)) <= 1
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This is the last admin — promote someone else to admin first",
+          });
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .update(schema.membership)
+              .set({ role: input.role, updatedBy: ctx.actorUserId })
+              .where(eq(schema.membership.id, input.membershipId))
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "membership.update_role",
+          entityType: "membership",
+          entityId: row.id,
+          before,
+          after: row,
+        });
+        return row;
+      });
+    }),
+  revoke: tenantProcedure
+    .input(z.object({ membershipId: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "users.manage");
+        const before = (
+          await tx
+            .select()
+            .from(schema.membership)
+            .where(eq(schema.membership.id, input.membershipId))
+            .limit(1)
+        ).at(0);
+        if (!before) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Membership not found in this tenant",
+          });
+        }
+        if (before.userId === ctx.actorUserId) {
+          throw new ORPCError("CONFLICT", {
+            message: "You cannot revoke your own access",
+          });
+        }
+        if (
+          before.role === "tenant_admin" &&
+          (await countTenantAdmins(tx)) <= 1
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This is the last admin — promote someone else to admin first",
+          });
+        }
+        await tx
+          .delete(schema.membership)
+          .where(eq(schema.membership.id, input.membershipId));
+        // Sever the Better Auth org membership too so the org disappears from
+        // their session switcher (access revocation is complete, not partial).
+        await tx
+          .delete(schema.member)
+          .where(
+            and(
+              eq(schema.member.organizationId, ctx.tenantId),
+              eq(schema.member.userId, before.userId)
+            )
+          );
+        await services.recordAudit(tx, ctx, {
+          action: "membership.revoke",
+          entityType: "membership",
+          entityId: before.id,
+          before,
+        });
+        return { revoked: true, membershipId: before.id };
+      });
+    }),
+};
+
+// ── Audit trail viewer (charter §25; audit.view) ─────────────────────────────
+export const auditRouter = {
+  list: tenantProcedure
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).default(0),
+        action: z.string().trim().min(1).optional(),
+        entityType: z.string().trim().min(1).optional(),
+        actorUserId: z.string().trim().min(1).optional(),
+        from: z.string().date().optional(),
+        to: z.string().date().optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "audit.view");
+        const conditions = [
+          input.action ? eq(schema.auditLog.action, input.action) : null,
+          input.entityType
+            ? eq(schema.auditLog.entityType, input.entityType)
+            : null,
+          input.actorUserId
+            ? eq(schema.auditLog.actorUserId, input.actorUserId)
+            : null,
+          input.from
+            ? gte(schema.auditLog.createdAt, new Date(input.from))
+            : null,
+          input.to ? lte(schema.auditLog.createdAt, new Date(input.to)) : null,
+        ].filter((condition): condition is SQL => condition != null);
+        const rows = await tx
+          .select({
+            id: schema.auditLog.id,
+            action: schema.auditLog.action,
+            entityType: schema.auditLog.entityType,
+            entityId: schema.auditLog.entityId,
+            actorUserId: schema.auditLog.actorUserId,
+            actorName: schema.user.name,
+            actorEmail: schema.user.email,
+            createdAt: schema.auditLog.createdAt,
+          })
+          .from(schema.auditLog)
+          .leftJoin(
+            schema.user,
+            eq(schema.auditLog.actorUserId, schema.user.id)
+          )
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(desc(schema.auditLog.createdAt))
+          .limit(input.limit + 1)
+          .offset(input.offset);
+        return {
+          rows: rows.slice(0, input.limit),
+          hasMore: rows.length > input.limit,
+        };
+      });
+    }),
+  detail: tenantProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "audit.view");
+        const row = (
+          await tx
+            .select()
+            .from(schema.auditLog)
+            .where(eq(schema.auditLog.id, input.id))
+            .limit(1)
+        ).at(0);
+        if (!row) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Audit entry not found in this tenant",
+          });
+        }
+        return row;
+      });
+    }),
+};
+
+// ── Numbering administration (charter §17; settings.manage) ─────────────────
+export const numberingRouter = {
+  blockList: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid().optional(),
+        docType: z.string().trim().min(1).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "reports.view");
+        const conditions = [
+          input.companyId
+            ? eq(schema.numberBlock.companyId, input.companyId)
+            : null,
+          input.docType ? eq(schema.numberBlock.docType, input.docType) : null,
+        ].filter((condition): condition is SQL => condition != null);
+        return tx
+          .select({
+            id: schema.numberBlock.id,
+            companyId: schema.numberBlock.companyId,
+            companyName: schema.company.name,
+            locationId: schema.numberBlock.locationId,
+            locationName: schema.location.name,
+            fiscalYear: schema.numberBlock.fiscalYear,
+            docType: schema.numberBlock.docType,
+            series: schema.numberBlock.series,
+            rangeStart: schema.numberBlock.rangeStart,
+            rangeEnd: schema.numberBlock.rangeEnd,
+            next: schema.numberBlock.next,
+            createdAt: schema.numberBlock.createdAt,
+          })
+          .from(schema.numberBlock)
+          .innerJoin(
+            schema.company,
+            eq(schema.numberBlock.companyId, schema.company.id)
+          )
+          .leftJoin(
+            schema.location,
+            eq(schema.numberBlock.locationId, schema.location.id)
+          )
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(schema.numberBlock.docType, schema.numberBlock.series);
+      });
+    }),
+  // Blocks are created, never edited: range/cursor fields back issued fiscal
+  // numbers (§17 tamper-evidence), so an in-use block is immutable. Exhausted?
+  // Create the next block.
+  blockCreate: tenantProcedure
+    .input(
+      z.object({
+        companyId: z.string().uuid(),
+        locationId: z.string().uuid().optional(),
+        fiscalYear: z.number().int().min(2000).max(2100).optional(),
+        docType: z.enum(["sale", "invoice"]),
+        series: z.string().trim().min(1).max(24).default("default"),
+        rangeStart: z.number().int().min(1),
+        // Capped below int4 max so `range_end + 1` arithmetic in the overlap
+        // trigger/CHECK can never overflow (the number-lease ceiling lesson).
+        rangeEnd: z.number().int().max(2_000_000_000),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "settings.manage");
+        if (input.rangeEnd < input.rangeStart) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "rangeEnd must be >= rangeStart",
+          });
+        }
+        // FK checks bypass RLS (H1 class): validate referenced ids with
+        // RLS-scoped reads before inserting.
+        await assertCompanyVisible(tx, input.companyId);
+        if (input.locationId) {
+          await assertLocationVisible(tx, input.locationId);
+        }
+        const row = firstOrThrow(
+          (
+            await tx
+              .insert(schema.numberBlock)
+              .values({
+                tenantId: ctx.tenantId,
+                companyId: input.companyId,
+                locationId: input.locationId ?? null,
+                fiscalYear: input.fiscalYear ?? null,
+                docType: input.docType,
+                series: input.series,
+                rangeStart: input.rangeStart,
+                rangeEnd: input.rangeEnd,
+                next: input.rangeStart,
+              })
+              .returning()
+          ).at(0)
+        );
+        await services.recordAudit(tx, ctx, {
+          action: "numbering.block_create",
+          entityType: "number_block",
+          entityId: row.id,
+          after: row,
+        });
+        return row;
       });
     }),
 };
