@@ -1,5 +1,19 @@
 # RetailOS Production-Readiness Gap Audit (2026-07-01)
 
+> **STATUS UPDATE (2026-07-02, branch `feat/production-readiness-completion`):** the core build list
+> below has been implemented. Shipped: §1 QuickBooks/CSV import (backend `catalog.importCommit` with
+> opening stock through the real receive/valuation path + the `/products/import` 4-step wizard);
+> §2 CRUD wiring on skus/variants/barcodes/uom-conversions/inventory/lots/transfers/bonds/shifts +
+> location edit/archive; §3 backend gaps (company/location lifecycle, tax admin, membership/staff
+> admin, audit viewer, count reads/cancel, bond release read-backs, number-block admin — all
+> tenant-scoped, permission-gated, audited, integration-tested); §4 onboarding success→import
+> hand-off; the `/staff` RBAC page, `/audit-log`, and the `/settings` area (tax/numbering/
+> companies); nav Administration group. The number-lease HIGH fix (§9) landed as `c8b4487` and the
+> reverted work was re-landed on this branch (`5bfb9e2`). **Still open:** §6/§4-phase module ports
+> (offline sync, procurement/financials foundations, storefront commerce from the module branches),
+> §7 orphaned `features/*` deletion, and MEDIUM nav role-filtering. Gates at time of update:
+> api 70/70 + db 99/99 on disposable PG18 as `retailos_app`, repo check-types 7/7, ultracite clean.
+
 > Commissioned because a real customer is going live soon and will hand over a QuickBooks item-list
 > export to import. Produced by 8 parallel read-only audit passes (frontend CRUD/mock-data,
 > backend CRUD matrix, onboarding/wizards/import, mock-data+dead-UI sweep, roadmap-vs-reality,

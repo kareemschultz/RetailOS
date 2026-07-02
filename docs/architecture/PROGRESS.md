@@ -13,6 +13,34 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Production-readiness completion — BUILT on `feat/production-readiness-completion` (2026-07-02)
+- **Scope:** executed `docs/plans/2026-07-02-retailos-production-readiness-completion.md` +
+  `production-readiness-gap-audit.md` build list end-to-end (owner directive: full build-out; no
+  prod deploy until explicitly requested — master's revert state makes blind deploys unsafe).
+- **Backend (api 70/70 + db 99/99 on disposable PG18 as `retailos_app`, zero skips):**
+  `catalog.importCommit` (idempotent batch import; opening stock rides the SAME
+  `runInventoryReceive` path — extracted from `inventory.receive`, no #8-class bypass);
+  company.list/update/archive + location.update/archive (stock/children archive guards; type/flags
+  immutable post-create); taxRouter (rateBps FROZEN once stamped on a sale line — set-once
+  discipline); membershipRouter (list/roles/grant-by-email/updateRole/revoke + last-admin &
+  self-revoke guards; revoke severs the Better Auth member row too); auditRouter (audit.view-gated
+  list/detail); numberingRouter (blockList/blockCreate, H1-guarded, 2e9 cap);
+  inventory.countList/countDetail/countCancel (+ countLineUpsert status guard, FOR UPDATE cancel);
+  bond.releaseList/releaseDetail. New tenant_admin perms: settings.manage, users.manage, audit.view.
+  Also fixed a pre-existing test-hermeticity bug (VAT14 rate leaked into 4 downstream quote tests).
+- **Frontend (all real oRPC, dialogs+dropdowns, refetch-after-mutation, zero mock data):**
+  `/products/import` 4-step QuickBooks/CSV wizard (owned CSV parser, QB header auto-mapping,
+  string-math money, preview→commit with stable idempotency key; 17 unit tests); CRUD wired on
+  skus/variants/barcodes/uom-conversions + inventory (receive/adjust/count workflow) + lots +
+  transfers/bonds/shifts; `/staff` (RBAC page rendering the real ROLE_PERMISSIONS matrix),
+  `/audit-log`, `/settings` hub + tax/numbering/companies; locations edit/archive; nav
+  Administration group (⌘K palette auto-derives); onboarding success→import hand-off.
+- **Deferred (honest):** module-branch ports (offline sync `56fe9cf`, procurement/financials
+  `b9cecc9`, storefront commerce `1404ff9`) — manual ports per plan Phase 4, not started;
+  orphaned `features/*` deletion (audit §7); nav role-based visibility filtering (MEDIUM).
+- **Deploy note:** DO NOT redeploy master blind (post-revert regression risk vs running prod).
+  Deploy THIS branch after owner review, or merge to master first.
+
 ### RetailOS account creation + onboarding repair — IN BUILD on `master` (verified locally, 2026-07-01)
 - **Scope:** separated RetailOS onboarding/account creation from Bettencourt/Shakira work. Live QA reproduced the reported bug: clicking `Create an account` on `https://retailos.karetechsolutions.com/login` navigated the browser to `about:blank`/empty content instead of showing a usable sign-up path. Added a first-class `/onboarding` route for authenticated users, retargeted email sign-up, email sign-in, and Google OAuth callback to `/onboarding`, and added an `onboarding` oRPC router.
 - **Backend:** `onboarding.status` detects whether the current user has any Better Auth organization membership; `onboarding.complete` creates the organization/tenant, owner/member rows, RetailOS `tenant_admin` membership, first company, first store, and active sales-tax profile, then sets the active organization for the session. Added the tenant-owned `tax_rate` table with fail-closed RLS and shared integer-basis-point sales-tax calculation helpers.
