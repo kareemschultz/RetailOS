@@ -18,6 +18,7 @@ import { Route as AppUomConversionsRouteImport } from './routes/_app/uom-convers
 import { Route as AppUnitsRouteImport } from './routes/_app/units'
 import { Route as AppTransfersRouteImport } from './routes/_app/transfers'
 import { Route as AppStockLedgerRouteImport } from './routes/_app/stock-ledger'
+import { Route as AppStaffRouteImport } from './routes/_app/staff'
 import { Route as AppSkusRouteImport } from './routes/_app/skus'
 import { Route as AppShiftsRouteImport } from './routes/_app/shifts'
 import { Route as AppSalesRouteImport } from './routes/_app/sales'
@@ -40,7 +41,12 @@ import { Route as AppCategoriesRouteImport } from './routes/_app/categories'
 import { Route as AppBrandsRouteImport } from './routes/_app/brands'
 import { Route as AppBondsRouteImport } from './routes/_app/bonds'
 import { Route as AppBarcodesRouteImport } from './routes/_app/barcodes'
+import { Route as AppAuditLogRouteImport } from './routes/_app/audit-log'
+import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
 import { Route as AppProductsIndexRouteImport } from './routes/_app/products.index'
+import { Route as AppSettingsTaxRouteImport } from './routes/_app/settings.tax'
+import { Route as AppSettingsNumberingRouteImport } from './routes/_app/settings.numbering'
+import { Route as AppSettingsCompaniesRouteImport } from './routes/_app/settings.companies'
 import { Route as AppReportsNumberLeasesRouteImport } from './routes/_app/reports.number-leases'
 import { Route as AppReportsFinancialRouteImport } from './routes/_app/reports.financial'
 import { Route as AppProductsImportRouteImport } from './routes/_app/products.import'
@@ -88,6 +94,11 @@ const AppTransfersRoute = AppTransfersRouteImport.update({
 const AppStockLedgerRoute = AppStockLedgerRouteImport.update({
   id: '/stock-ledger',
   path: '/stock-ledger',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppStaffRoute = AppStaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppSkusRoute = AppSkusRouteImport.update({
@@ -200,9 +211,34 @@ const AppBarcodesRoute = AppBarcodesRouteImport.update({
   path: '/barcodes',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppAuditLogRoute = AppAuditLogRouteImport.update({
+  id: '/audit-log',
+  path: '/audit-log',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppProductsIndexRoute = AppProductsIndexRouteImport.update({
   id: '/products/',
   path: '/products/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSettingsTaxRoute = AppSettingsTaxRouteImport.update({
+  id: '/settings/tax',
+  path: '/settings/tax',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSettingsNumberingRoute = AppSettingsNumberingRouteImport.update({
+  id: '/settings/numbering',
+  path: '/settings/numbering',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSettingsCompaniesRoute = AppSettingsCompaniesRouteImport.update({
+  id: '/settings/companies',
+  path: '/settings/companies',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppReportsNumberLeasesRoute = AppReportsNumberLeasesRouteImport.update({
@@ -230,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/audit-log': typeof AppAuditLogRoute
   '/barcodes': typeof AppBarcodesRoute
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
@@ -252,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
+  '/staff': typeof AppStaffRoute
   '/stock-ledger': typeof AppStockLedgerRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
@@ -261,12 +299,17 @@ export interface FileRoutesByFullPath {
   '/products/import': typeof AppProductsImportRoute
   '/reports/financial': typeof AppReportsFinancialRoute
   '/reports/number-leases': typeof AppReportsNumberLeasesRoute
+  '/settings/companies': typeof AppSettingsCompaniesRoute
+  '/settings/numbering': typeof AppSettingsNumberingRoute
+  '/settings/tax': typeof AppSettingsTaxRoute
   '/products/': typeof AppProductsIndexRoute
+  '/settings/': typeof AppSettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/audit-log': typeof AppAuditLogRoute
   '/barcodes': typeof AppBarcodesRoute
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
@@ -289,6 +332,7 @@ export interface FileRoutesByTo {
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
+  '/staff': typeof AppStaffRoute
   '/stock-ledger': typeof AppStockLedgerRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
@@ -298,7 +342,11 @@ export interface FileRoutesByTo {
   '/products/import': typeof AppProductsImportRoute
   '/reports/financial': typeof AppReportsFinancialRoute
   '/reports/number-leases': typeof AppReportsNumberLeasesRoute
+  '/settings/companies': typeof AppSettingsCompaniesRoute
+  '/settings/numbering': typeof AppSettingsNumberingRoute
+  '/settings/tax': typeof AppSettingsTaxRoute
   '/products': typeof AppProductsIndexRoute
+  '/settings': typeof AppSettingsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -306,6 +354,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/_app/audit-log': typeof AppAuditLogRoute
   '/_app/barcodes': typeof AppBarcodesRoute
   '/_app/bonds': typeof AppBondsRoute
   '/_app/brands': typeof AppBrandsRoute
@@ -328,6 +377,7 @@ export interface FileRoutesById {
   '/_app/sales': typeof AppSalesRoute
   '/_app/shifts': typeof AppShiftsRoute
   '/_app/skus': typeof AppSkusRoute
+  '/_app/staff': typeof AppStaffRoute
   '/_app/stock-ledger': typeof AppStockLedgerRoute
   '/_app/transfers': typeof AppTransfersRoute
   '/_app/units': typeof AppUnitsRoute
@@ -337,7 +387,11 @@ export interface FileRoutesById {
   '/_app/products/import': typeof AppProductsImportRoute
   '/_app/reports/financial': typeof AppReportsFinancialRoute
   '/_app/reports/number-leases': typeof AppReportsNumberLeasesRoute
+  '/_app/settings/companies': typeof AppSettingsCompaniesRoute
+  '/_app/settings/numbering': typeof AppSettingsNumberingRoute
+  '/_app/settings/tax': typeof AppSettingsTaxRoute
   '/_app/products/': typeof AppProductsIndexRoute
+  '/_app/settings/': typeof AppSettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -345,6 +399,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/onboarding'
+    | '/audit-log'
     | '/barcodes'
     | '/bonds'
     | '/brands'
@@ -367,6 +422,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/shifts'
     | '/skus'
+    | '/staff'
     | '/stock-ledger'
     | '/transfers'
     | '/units'
@@ -376,12 +432,17 @@ export interface FileRouteTypes {
     | '/products/import'
     | '/reports/financial'
     | '/reports/number-leases'
+    | '/settings/companies'
+    | '/settings/numbering'
+    | '/settings/tax'
     | '/products/'
+    | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/onboarding'
+    | '/audit-log'
     | '/barcodes'
     | '/bonds'
     | '/brands'
@@ -404,6 +465,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/shifts'
     | '/skus'
+    | '/staff'
     | '/stock-ledger'
     | '/transfers'
     | '/units'
@@ -413,13 +475,18 @@ export interface FileRouteTypes {
     | '/products/import'
     | '/reports/financial'
     | '/reports/number-leases'
+    | '/settings/companies'
+    | '/settings/numbering'
+    | '/settings/tax'
     | '/products'
+    | '/settings'
   id:
     | '__root__'
     | '/'
     | '/_app'
     | '/login'
     | '/onboarding'
+    | '/_app/audit-log'
     | '/_app/barcodes'
     | '/_app/bonds'
     | '/_app/brands'
@@ -442,6 +509,7 @@ export interface FileRouteTypes {
     | '/_app/sales'
     | '/_app/shifts'
     | '/_app/skus'
+    | '/_app/staff'
     | '/_app/stock-ledger'
     | '/_app/transfers'
     | '/_app/units'
@@ -451,7 +519,11 @@ export interface FileRouteTypes {
     | '/_app/products/import'
     | '/_app/reports/financial'
     | '/_app/reports/number-leases'
+    | '/_app/settings/companies'
+    | '/_app/settings/numbering'
+    | '/_app/settings/tax'
     | '/_app/products/'
+    | '/_app/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -524,6 +596,13 @@ declare module '@tanstack/react-router' {
       path: '/stock-ledger'
       fullPath: '/stock-ledger'
       preLoaderRoute: typeof AppStockLedgerRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/staff': {
+      id: '/_app/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof AppStaffRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/skus': {
@@ -680,11 +759,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBarcodesRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/audit-log': {
+      id: '/_app/audit-log'
+      path: '/audit-log'
+      fullPath: '/audit-log'
+      preLoaderRoute: typeof AppAuditLogRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/settings/': {
+      id: '/_app/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof AppSettingsIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/products/': {
       id: '/_app/products/'
       path: '/products'
       fullPath: '/products/'
       preLoaderRoute: typeof AppProductsIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/settings/tax': {
+      id: '/_app/settings/tax'
+      path: '/settings/tax'
+      fullPath: '/settings/tax'
+      preLoaderRoute: typeof AppSettingsTaxRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/settings/numbering': {
+      id: '/_app/settings/numbering'
+      path: '/settings/numbering'
+      fullPath: '/settings/numbering'
+      preLoaderRoute: typeof AppSettingsNumberingRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/settings/companies': {
+      id: '/_app/settings/companies'
+      path: '/settings/companies'
+      fullPath: '/settings/companies'
+      preLoaderRoute: typeof AppSettingsCompaniesRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/reports/number-leases': {
@@ -733,6 +847,7 @@ const AppReportsRouteWithChildren = AppReportsRoute._addFileChildren(
 )
 
 interface AppRouteRouteChildren {
+  AppAuditLogRoute: typeof AppAuditLogRoute
   AppBarcodesRoute: typeof AppBarcodesRoute
   AppBondsRoute: typeof AppBondsRoute
   AppBrandsRoute: typeof AppBrandsRoute
@@ -755,6 +870,7 @@ interface AppRouteRouteChildren {
   AppSalesRoute: typeof AppSalesRoute
   AppShiftsRoute: typeof AppShiftsRoute
   AppSkusRoute: typeof AppSkusRoute
+  AppStaffRoute: typeof AppStaffRoute
   AppStockLedgerRoute: typeof AppStockLedgerRoute
   AppTransfersRoute: typeof AppTransfersRoute
   AppUnitsRoute: typeof AppUnitsRoute
@@ -762,10 +878,15 @@ interface AppRouteRouteChildren {
   AppVariantsRoute: typeof AppVariantsRoute
   AppProductsProductIdRoute: typeof AppProductsProductIdRoute
   AppProductsImportRoute: typeof AppProductsImportRoute
+  AppSettingsCompaniesRoute: typeof AppSettingsCompaniesRoute
+  AppSettingsNumberingRoute: typeof AppSettingsNumberingRoute
+  AppSettingsTaxRoute: typeof AppSettingsTaxRoute
   AppProductsIndexRoute: typeof AppProductsIndexRoute
+  AppSettingsIndexRoute: typeof AppSettingsIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppAuditLogRoute: AppAuditLogRoute,
   AppBarcodesRoute: AppBarcodesRoute,
   AppBondsRoute: AppBondsRoute,
   AppBrandsRoute: AppBrandsRoute,
@@ -788,6 +909,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppSalesRoute: AppSalesRoute,
   AppShiftsRoute: AppShiftsRoute,
   AppSkusRoute: AppSkusRoute,
+  AppStaffRoute: AppStaffRoute,
   AppStockLedgerRoute: AppStockLedgerRoute,
   AppTransfersRoute: AppTransfersRoute,
   AppUnitsRoute: AppUnitsRoute,
@@ -795,7 +917,11 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppVariantsRoute: AppVariantsRoute,
   AppProductsProductIdRoute: AppProductsProductIdRoute,
   AppProductsImportRoute: AppProductsImportRoute,
+  AppSettingsCompaniesRoute: AppSettingsCompaniesRoute,
+  AppSettingsNumberingRoute: AppSettingsNumberingRoute,
+  AppSettingsTaxRoute: AppSettingsTaxRoute,
   AppProductsIndexRoute: AppProductsIndexRoute,
+  AppSettingsIndexRoute: AppSettingsIndexRoute,
 }
 
 const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(

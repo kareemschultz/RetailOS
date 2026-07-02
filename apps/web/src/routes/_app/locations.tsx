@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@RetailOS/ui/components/select";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
+import { Switch } from "@RetailOS/ui/components/switch";
 import {
   Table,
   TableBody,
@@ -32,9 +33,11 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  Archive,
   Building2,
   type LucideIcon,
   MapPin,
+  Pencil,
   Plus,
   ShieldCheck,
   TriangleAlert,
@@ -165,6 +168,107 @@ function LocationDialog({
   );
 }
 
+function EditLocationDialog({
+  isSaving,
+  location,
+  onOpenChange,
+  onSubmit,
+  open,
+}: {
+  isSaving: boolean;
+  location: LocationRow;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (values: { isSellable: boolean; name: string }) => Promise<void>;
+  open: boolean;
+}) {
+  const [name, setName] = useState(location.name);
+  const [isSellable, setIsSellable] = useState(location.isSellable);
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit location</DialogTitle>
+          <DialogDescription>
+            The type and bonded/quarantine flags are fixed once a location
+            exists — structural changes mean a new location plus a transfer.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-4"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            await onSubmit({ isSellable, name: name.trim() });
+          }}
+        >
+          <div className="grid gap-2">
+            <Label htmlFor="edit-location-name">Name</Label>
+            <Input
+              autoFocus
+              id="edit-location-name"
+              minLength={1}
+              onChange={(event) => setName(event.target.value)}
+              required
+              value={name}
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={isSellable}
+              id="edit-location-sellable"
+              onCheckedChange={(checked) => setIsSellable(checked === true)}
+            />
+            <Label className="text-sm" htmlFor="edit-location-sellable">
+              Sellable (appears in the POS location picker)
+            </Label>
+          </div>
+          <DialogFooter>
+            <Button disabled={isSaving} type="submit">
+              {isSaving ? "Saving…" : "Save location"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ArchiveLocationDialog({
+  isSaving,
+  location,
+  onConfirm,
+  onOpenChange,
+  open,
+}: {
+  isSaving: boolean;
+  location: LocationRow;
+  onConfirm: () => Promise<void>;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+}) {
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Archive {location.name}?</DialogTitle>
+          <DialogDescription>
+            The location disappears from pickers going forward. A location that
+            still holds stock can’t be archived — transfer or adjust the stock
+            out first. Nothing is deleted; movement history stays intact.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button onClick={() => onOpenChange(false)} variant="outline">
+            Keep it
+          </Button>
+          <Button disabled={isSaving} onClick={onConfirm} variant="destructive">
+            {isSaving ? "Archiving…" : "Archive location"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function KpiCard({
   label,
   value,
@@ -230,11 +334,15 @@ function LocationsTable({
   isLoading,
   isError,
   errorMessage,
+  onArchive,
+  onEdit,
   rows,
 }: {
   isLoading: boolean;
   isError: boolean;
   errorMessage?: string;
+  onArchive: (row: LocationRow) => void;
+  onEdit: (row: LocationRow) => void;
   rows: LocationRow[];
 }) {
   if (isError) {
@@ -283,6 +391,7 @@ function LocationsTable({
           <TableHead>Type</TableHead>
           <TableHead className="min-w-[200px]">Capabilities</TableHead>
           <TableHead className="text-right">Created</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -300,6 +409,26 @@ function LocationsTable({
             <TableCell className="text-right text-muted-foreground text-sm">
               {new Date(location.createdAt).toLocaleDateString()}
             </TableCell>
+            <TableCell>
+              <div className="flex justify-end gap-2">
+                <Button
+                  onClick={() => onEdit(location)}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Pencil className="size-3.5" />
+                  Edit
+                </Button>
+                <Button
+                  onClick={() => onArchive(location)}
+                  size="sm"
+                  variant="destructive"
+                >
+                  <Archive className="size-3.5" />
+                  Archive
+                </Button>
+              </div>
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -311,8 +440,12 @@ function LocationsScreen() {
   // location.list returns a display-safe DTO; counts below are plain array
   // tallies (not money/business math), so deriving them client-side is safe.
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<LocationRow | undefined>();
+  const [archiveTarget, setArchiveTarget] = useState<LocationRow | undefined>();
   const locations = useQuery(orpc.location.list.queryOptions({ input: {} }));
   const createLocation = useMutation(orpc.location.create.mutationOptions());
+  const updateLocation = useMutation(orpc.location.update.mutationOptions());
+  const archiveLocation = useMutation(orpc.location.archive.mutationOptions());
 
   const rows = locations.data ?? [];
   const settled = !(locations.isLoading || locations.isError);
@@ -393,9 +526,68 @@ function LocationsScreen() {
           errorMessage={locations.error?.message}
           isError={locations.isError}
           isLoading={locations.isLoading}
+          onArchive={setArchiveTarget}
+          onEdit={setEditTarget}
           rows={rows}
         />
       </DataTableCard>
+      {editTarget ? (
+        <EditLocationDialog
+          isSaving={updateLocation.isPending}
+          key={editTarget.id}
+          location={editTarget}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditTarget(undefined);
+            }
+          }}
+          onSubmit={async (values) => {
+            try {
+              await updateLocation.mutateAsync({
+                id: editTarget.id,
+                ...values,
+              });
+              toast.success("Location updated");
+              setEditTarget(undefined);
+              await locations.refetch();
+            } catch (error) {
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : "Could not update location."
+              );
+            }
+          }}
+          open={Boolean(editTarget)}
+        />
+      ) : null}
+      {archiveTarget ? (
+        <ArchiveLocationDialog
+          isSaving={archiveLocation.isPending}
+          key={archiveTarget.id}
+          location={archiveTarget}
+          onConfirm={async () => {
+            try {
+              await archiveLocation.mutateAsync({ id: archiveTarget.id });
+              toast.success("Location archived");
+              setArchiveTarget(undefined);
+              await locations.refetch();
+            } catch (error) {
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : "Could not archive location."
+              );
+            }
+          }}
+          onOpenChange={(open) => {
+            if (!open) {
+              setArchiveTarget(undefined);
+            }
+          }}
+          open={Boolean(archiveTarget)}
+        />
+      ) : null}
       {dialogOpen ? (
         <LocationDialog
           companyId={companyId}
