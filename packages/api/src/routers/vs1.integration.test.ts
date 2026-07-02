@@ -32,6 +32,9 @@ const SHIFT_REQUIRED_RE = /open shift is required/i;
 const NOT_FOUND_IN_TENANT_RE = /not found in this tenant/i;
 const MISSING_INVENTORY_RECEIVE_RE = /Missing permission: inventory\.receive/;
 const MISSING_REPORTS_VIEW_RE = /Missing permission: reports\.view/;
+const IDEMPOTENCY_CONFLICT_RE = /idempotency/i;
+const IMPORT_UOM_NOT_FOUND_RE = /baseUomCode not found/;
+const IMPORT_LOCATION_REQUIRED_RE = /locationId is required/;
 const MISSING_TRANSFER_PERM_RE = /Missing permission: inventory\.transfer/;
 const MISSING_BOND_PERM_RE = /Missing permission: bond\.receive/;
 
@@ -836,21 +839,20 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(importPreview.errorCount).toBe(1);
     expect(importPreview.validCount).toBe(1);
 
-    const importRows = [
-      {
-        baseUomCode: "MIX-EA",
-        costingMethod: "avco" as const,
-        currency: "USD",
-        priceMinor: 125,
-        productName: "Committed Import Product",
-        productSku: "IMPORT-COMMIT-NEW",
-        rowNumber: 1,
-        skuCode: "IMPORT-COMMIT-NEW-EA",
-        trackingMode: "lot" as const,
-        lotNumber: "IMPORT-COMMIT-LOT-1",
-        expiryDate: "2030-01-31",
-      },
-    ];
+    const baseImportRow = {
+      baseUomCode: "MIX-EA",
+      costingMethod: "avco" as const,
+      currency: "USD",
+      priceMinor: 125,
+      productName: "Committed Import Product",
+      productSku: "IMPORT-COMMIT-NEW",
+      rowNumber: 1,
+      skuCode: "IMPORT-COMMIT-NEW-EA",
+      trackingMode: "lot" as const,
+      lotNumber: "IMPORT-COMMIT-LOT-1",
+      expiryDate: "2030-01-31",
+    };
+    const importRows = [baseImportRow];
     const importCommit = await call(
       appRouter.catalog.importCommit,
       { idempotencyKey: "catalog-import-commit-1", rows: importRows },
@@ -870,11 +872,11 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         appRouter.catalog.importCommit,
         {
           idempotencyKey: "catalog-import-commit-1",
-          rows: [{ ...importRows[0], productSku: "IMPORT-COMMIT-DIFFERENT" }],
+          rows: [{ ...baseImportRow, productSku: "IMPORT-COMMIT-DIFFERENT" }],
         },
         admin
       )
-    ).rejects.toThrow(/idempotency/i);
+    ).rejects.toThrow(IDEMPOTENCY_CONFLICT_RE);
     const committedProduct = await call(
       appRouter.product.catalog,
       { q: "IMPORT-COMMIT-NEW" },
@@ -887,11 +889,59 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         appRouter.catalog.importCommit,
         {
           idempotencyKey: "catalog-import-commit-invalid-uom",
-          rows: [{ ...importRows[0], baseUomCode: "MISSING-UOM", rowNumber: 2 }],
+          rows: [
+            { ...baseImportRow, baseUomCode: "MISSING-UOM", rowNumber: 2 },
+          ],
         },
         admin
       )
-    ).rejects.toThrow(/baseUomCode not found/);
+    ).rejects.toThrow(IMPORT_UOM_NOT_FOUND_RE);
+
+    // Opening stock rides the SAME receive write path (ledger + valuation):
+    // committing with openingQtyBase must move real, valued stock.
+    const openingRows = [
+      {
+        baseUomCode: "MIX-EA",
+        costingMethod: "avco" as const,
+        currency: "USD",
+        openingQtyBase: 12,
+        priceMinor: 500,
+        productName: "Opening Stock Import Product",
+        productSku: "IMPORT-OPENING-NEW",
+        rowNumber: 1,
+        skuCode: "IMPORT-OPENING-NEW-EA",
+        trackingMode: "none" as const,
+        unitCostMinor: 300,
+      },
+    ];
+    await expect(
+      call(
+        appRouter.catalog.importCommit,
+        { idempotencyKey: "catalog-import-open-no-loc", rows: openingRows },
+        admin
+      )
+    ).rejects.toThrow(IMPORT_LOCATION_REQUIRED_RE);
+    const openingCommit = await call(
+      appRouter.catalog.importCommit,
+      {
+        idempotencyKey: "catalog-import-commit-opening",
+        locationId: location.id,
+        rows: openingRows,
+      },
+      admin
+    );
+    expect(openingCommit.openingStockCount).toBe(1);
+    const openingRow = openingCommit.rows[0];
+    expect(openingRow?.openingMovementId).toBeTruthy();
+    expect(openingRow?.skuId).toBeTruthy();
+    const openingCells = await call(
+      appRouter.inventory.stockByLocation,
+      { locationId: location.id, skuId: openingRow?.skuId as string },
+      admin
+    );
+    expect(openingCells).toHaveLength(1);
+    expect(openingCells[0]?.qtyOnHand).toBe(12);
+    expect(openingCells[0]?.totalValueMinor).toBe(12 * 300);
 
     const updatedProduct = await call(
       appRouter.product.update,
@@ -4478,6 +4528,15 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(persisted.sale).toMatchObject({ taxMinor: 420, totalMinor: 3420 });
     expect(persisted.line?.lineTaxMinor).toBe(420);
     expect(persisted.line?.taxRateId).toBe(quote.taxBreakdown[0]?.taxRateId);
+
+    // Hermeticity: deactivate (not delete — the persisted sale line
+    // FK-references this rate) so later tests in this tenant quote tax-free.
+    await withTenant(db, ORG, async (tx) => {
+      await tx
+        .update(schema.taxRate)
+        .set({ isActive: false })
+        .where(eq(schema.taxRate.code, "VAT14"));
+    });
   });
 
   it("quote computes cash change on overpayment", async () => {

@@ -1,7 +1,7 @@
 import { auth } from "@RetailOS/auth";
 import type { TenantTransaction } from "@RetailOS/db";
 import { db, schema, services, withTenant } from "@RetailOS/db";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import {
   and,
@@ -57,6 +57,7 @@ interface CatalogImportPreviewRow {
   currency: string;
   expiryDate?: string;
   lotNumber?: string;
+  openingQtyBase?: number;
   priceMinor: number;
   productName: string;
   productSku: string;
@@ -98,6 +99,12 @@ function catalogImportPreviewRow(
     row.lotNumber && !row.skuCode ? "lotNumber requires skuCode" : null,
     row.unitCostMinor != null && !row.skuCode
       ? "unitCostMinor requires skuCode"
+      : null,
+    row.openingQtyBase != null && !row.skuCode
+      ? "openingQtyBase requires skuCode"
+      : null,
+    row.openingQtyBase != null && row.unitCostMinor == null
+      ? "openingQtyBase requires unitCostMinor"
       : null,
   ].filter((error): error is string => Boolean(error));
   state.seenProductSkus.add(row.productSku);
@@ -992,84 +999,304 @@ export const productRouter = {
     }),
 };
 
+const catalogImportRowSchema = z.object({
+  rowNumber: z.number().int().positive(),
+  productSku: z.string().min(1),
+  productName: z.string().min(1),
+  priceMinor: z.number().int().min(0),
+  currency: z.string().length(3),
+  scale: z.number().int().min(0).default(2),
+  skuCode: z.string().min(1).optional(),
+  baseUomCode: z.string().min(1).optional(),
+  costingMethod: z.enum(["avco", "fifo"]).optional(),
+  trackingMode: z.enum(["none", "lot", "serial"]).default("none"),
+  lotNumber: z.string().min(1).optional(),
+  expiryDate: z.string().date().optional(),
+  unitCostMinor: z.number().int().min(0).optional(),
+  openingQtyBase: z.number().int().positive().optional(),
+});
+
+type CatalogImportRow = z.infer<typeof catalogImportRowSchema>;
+
+// Shared preview/commit validation state. Commit MUST re-run the exact preview
+// checks inside its own transaction (a stale client-held preview is not a
+// contract), so both paths load through this one helper.
+async function loadCatalogImportValidationState(
+  tx: TenantTransaction,
+  rows: CatalogImportRow[]
+) {
+  const existingProducts = await tx
+    .select({ sku: schema.product.sku })
+    .from(schema.product)
+    .where(
+      inArray(
+        schema.product.sku,
+        rows.map((row) => row.productSku)
+      )
+    );
+  const skuCodes = rows
+    .map((row) => row.skuCode)
+    .filter((code): code is string => Boolean(code));
+  const existingSkus = skuCodes.length
+    ? await tx
+        .select({ code: schema.sku.code })
+        .from(schema.sku)
+        .where(inArray(schema.sku.code, skuCodes))
+    : [];
+  const uomCodes = rows
+    .map((row) => row.baseUomCode)
+    .filter((code): code is string => Boolean(code));
+  const uoms = uomCodes.length
+    ? await tx
+        .select({
+          code: schema.unitOfMeasure.code,
+          id: schema.unitOfMeasure.id,
+        })
+        .from(schema.unitOfMeasure)
+        .where(inArray(schema.unitOfMeasure.code, uomCodes))
+    : [];
+  return {
+    state: {
+      existingProductSkus: new Set(existingProducts.map((row) => row.sku)),
+      existingSkuCodes: new Set(existingSkus.map((row) => row.code)),
+      existingUomCodes: new Set(uoms.map((row) => row.code)),
+      seenProductSkus: new Set<string>(),
+      seenSkuCodes: new Set<string>(),
+    },
+    uomIdByCode: new Map(uoms.map((row) => [row.code, row.id])),
+  };
+}
+
+interface CatalogImportCommitInput {
+  idempotencyKey: string;
+  locationId?: string;
+  notes?: string;
+  reference?: string;
+  rows: CatalogImportRow[];
+}
+
+export interface CatalogImportRowResult {
+  lotId: string | null;
+  openingMovementId: string | null;
+  productId: string;
+  rowNumber: number;
+  skuId: string | null;
+}
+
+// One import row -> product (+ optional SKU, lot, opening stock). Opening
+// stock goes through runInventoryReceive — the same write path as
+// inventory.receive — so valuation/events/audit are never bypassed.
+async function persistCatalogImportRow(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  row: CatalogImportRow,
+  opts: {
+    openingLocationId: string | null;
+    uomIdByCode: Map<string, string>;
+  }
+): Promise<CatalogImportRowResult> {
+  const m = services.money(row.priceMinor, row.currency, row.scale);
+  const baseUomId = row.baseUomCode
+    ? (opts.uomIdByCode.get(row.baseUomCode) ?? null)
+    : null;
+  const product = firstOrThrow(
+    (
+      await tx
+        .insert(schema.product)
+        .values({
+          tenantId: ctx.tenantId,
+          sku: row.productSku,
+          name: row.productName,
+          baseUomId,
+          costingMethod: row.costingMethod ?? null,
+          trackingMode: row.trackingMode,
+          priceMinor: m.minor,
+          currency: m.currency,
+          scale: m.scale,
+          createdBy: ctx.actorUserId,
+        })
+        .returning({ id: schema.product.id })
+    ).at(0)
+  );
+  if (!row.skuCode) {
+    return {
+      lotId: null,
+      openingMovementId: null,
+      productId: product.id,
+      rowNumber: row.rowNumber,
+      skuId: null,
+    };
+  }
+  const sku = firstOrThrow(
+    (
+      await tx
+        .insert(schema.sku)
+        .values({
+          tenantId: ctx.tenantId,
+          productId: product.id,
+          code: row.skuCode,
+          baseUomId,
+          costingMethod: row.costingMethod ?? null,
+          trackingMode: row.trackingMode,
+          createdBy: ctx.actorUserId,
+        })
+        .returning({ id: schema.sku.id })
+    ).at(0)
+  );
+  let lotId: string | null = null;
+  if (row.lotNumber) {
+    const lot = firstOrThrow(
+      (
+        await tx
+          .insert(schema.lot)
+          .values({
+            tenantId: ctx.tenantId,
+            skuId: sku.id,
+            lotNumber: row.lotNumber,
+            expiryDate: row.expiryDate ?? null,
+            status: "available",
+            createdBy: ctx.actorUserId,
+          })
+          .returning({ id: schema.lot.id })
+      ).at(0)
+    );
+    lotId = lot.id;
+  }
+  let openingMovementId: string | null = null;
+  if (row.openingQtyBase != null && opts.openingLocationId) {
+    const ledger = await runInventoryReceive(tx, ctx, {
+      costCurrency: m.currency,
+      costScale: m.scale,
+      locationId: opts.openingLocationId,
+      lotId: lotId ?? undefined,
+      productId: product.id,
+      qty: row.openingQtyBase,
+      skuId: sku.id,
+      unitCostMinor: row.unitCostMinor ?? 0,
+    });
+    openingMovementId = ledger.id;
+  }
+  return {
+    lotId,
+    openingMovementId,
+    productId: product.id,
+    rowNumber: row.rowNumber,
+    skuId: sku.id,
+  };
+}
+
+// Converts a validated import into persisted products/SKUs/lots, with optional
+// opening stock routed through the SAME receive write path as inventory.receive
+// (ledger movement -> applyValuation -> events -> audit) so the valuation
+// engine is never bypassed. Atomic: one transaction for the whole batch; any
+// failure rolls everything back. Idempotent at the batch level; the response
+// must stay JSON-primitive so a replay (parsed back from the JSONB idempotency
+// store) deep-equals the original.
+async function runCatalogImportCommit(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: CatalogImportCommitInput
+) {
+  const { state, uomIdByCode } = await loadCatalogImportValidationState(
+    tx,
+    input.rows
+  );
+  const previews = input.rows.map((row) => catalogImportPreviewRow(row, state));
+  const errorRows = previews.filter((row) => row.status === "error");
+  if (errorRows.length) {
+    const detail = errorRows
+      .slice(0, 5)
+      .map((row) => `row ${row.rowNumber}: ${row.errors.join("; ")}`)
+      .join(" | ");
+    throw new ORPCError("BAD_REQUEST", {
+      message: `catalog import has ${errorRows.length} invalid row(s): ${detail}`,
+    });
+  }
+  const hasOpeningStock = input.rows.some((row) => row.openingQtyBase != null);
+  const openingLocationId = input.locationId ?? null;
+  if (hasOpeningStock) {
+    if (!openingLocationId) {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "locationId is required when rows include openingQtyBase",
+      });
+    }
+    await assertLocationVisible(tx, openingLocationId);
+  }
+  const results: CatalogImportRowResult[] = [];
+  for (const row of input.rows) {
+    results.push(
+      await persistCatalogImportRow(tx, ctx, row, {
+        openingLocationId,
+        uomIdByCode,
+      })
+    );
+  }
+  await services.recordAudit(tx, ctx, {
+    action: "catalog.import_commit",
+    entityType: "catalog_import",
+    entityId: input.idempotencyKey,
+    after: {
+      locationId: openingLocationId,
+      notes: input.notes ?? null,
+      reference: input.reference ?? null,
+      rows: results,
+    },
+  });
+  return {
+    createdProductCount: results.length,
+    createdSkuCount: results.filter((row) => row.skuId).length,
+    createdLotCount: results.filter((row) => row.lotId).length,
+    openingStockCount: results.filter((row) => row.openingMovementId).length,
+    rows: results,
+  };
+}
+
 export const catalogRouter = {
   importPreview: tenantProcedure
     .input(
       z.object({
-        rows: z
-          .array(
-            z.object({
-              rowNumber: z.number().int().positive(),
-              productSku: z.string().min(1),
-              productName: z.string().min(1),
-              priceMinor: z.number().int().min(0),
-              currency: z.string().length(3),
-              scale: z.number().int().min(0).default(2),
-              skuCode: z.string().min(1).optional(),
-              baseUomCode: z.string().min(1).optional(),
-              costingMethod: z.enum(["avco", "fifo"]).optional(),
-              trackingMode: z.enum(["none", "lot", "serial"]).default("none"),
-              lotNumber: z.string().min(1).optional(),
-              expiryDate: z.string().date().optional(),
-              unitCostMinor: z.number().int().min(0).optional(),
-            })
-          )
-          .min(1)
-          .max(1000),
+        rows: z.array(catalogImportRowSchema).min(1).max(1000),
       })
     )
     .handler(({ context, input }) => {
       const ctx = context.requestContext;
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "products.create");
-        const seenProductSkus = new Set<string>();
-        const seenSkuCodes = new Set<string>();
-        const existingProducts = await tx
-          .select({ sku: schema.product.sku })
-          .from(schema.product)
-          .where(
-            inArray(
-              schema.product.sku,
-              input.rows.map((row) => row.productSku)
-            )
-          );
-        const existingProductSkus = new Set(
-          existingProducts.map((row) => row.sku)
+        const { state } = await loadCatalogImportValidationState(
+          tx,
+          input.rows
         );
-        const skuCodes = input.rows
-          .map((row) => row.skuCode)
-          .filter((code): code is string => Boolean(code));
-        const existingSkus = skuCodes.length
-          ? await tx
-              .select({ code: schema.sku.code })
-              .from(schema.sku)
-              .where(inArray(schema.sku.code, skuCodes))
-          : [];
-        const existingSkuCodes = new Set(existingSkus.map((row) => row.code));
-        const uomCodes = input.rows
-          .map((row) => row.baseUomCode)
-          .filter((code): code is string => Boolean(code));
-        const uoms = uomCodes.length
-          ? await tx
-              .select({ code: schema.unitOfMeasure.code })
-              .from(schema.unitOfMeasure)
-              .where(inArray(schema.unitOfMeasure.code, uomCodes))
-          : [];
-        const existingUomCodes = new Set(uoms.map((row) => row.code));
         const rows = input.rows.map((row) =>
-          catalogImportPreviewRow(row, {
-            existingProductSkus,
-            existingSkuCodes,
-            existingUomCodes,
-            seenProductSkus,
-            seenSkuCodes,
-          })
+          catalogImportPreviewRow(row, state)
         );
         return {
           validCount: rows.filter((row) => row.status === "valid").length,
           errorCount: rows.filter((row) => row.status === "error").length,
           rows,
         };
+      });
+    }),
+  importCommit: tenantProcedure
+    .input(
+      z.object({
+        idempotencyKey: z.string().min(1),
+        locationId: z.string().uuid().optional(),
+        notes: z.string().min(1).max(500).optional(),
+        reference: z.string().min(1).max(120).optional(),
+        rows: z.array(catalogImportRowSchema).min(1).max(1000),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "products.create");
+        return services.runIdempotent(
+          tx,
+          ctx,
+          input.idempotencyKey,
+          input,
+          () => runCatalogImportCommit(tx, ctx, input)
+        );
       });
     }),
   categoryList: tenantProcedure
@@ -2561,6 +2788,81 @@ const inventoryReceiveInput = z.object({
 
 type InventoryReceiveInput = z.infer<typeof inventoryReceiveInput>;
 
+// Shared receive write path (inventory.receive + catalog.importCommit opening
+// stock): ledger movement -> applyValuation (#8) -> events -> audit, in the
+// caller's tenant transaction. Callers are responsible for permission checks
+// and reference visibility (inventory.receive asserts them; importCommit
+// creates the product/SKU/lot itself in the same tx, so they are visible by
+// construction).
+async function runInventoryReceive(
+  tx: TenantTransaction,
+  ctx: RequestContext,
+  input: InventoryReceiveInput
+) {
+  const ledger = await services.appendStockMovement(tx, ctx, {
+    costCurrency: input.costCurrency ?? null,
+    costScale: input.costScale ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
+    locationId: input.locationId,
+    lotId: input.lotId ?? null,
+    productId: input.productId,
+    movementType: "receipt",
+    qtyDelta: input.qty,
+    skuId: input.skuId ?? null,
+    unitCostMinor: input.unitCostMinor ?? null,
+  });
+  const valuation = input.skuId
+    ? await services.applyValuation(tx, ctx, ledger)
+    : null;
+  await services.emitEvent(tx, ctx, {
+    type: services.DomainEventType.InventoryReceived,
+    payload: {
+      locationId: input.locationId,
+      productId: input.productId,
+      skuId: input.skuId ?? null,
+      lotId: input.lotId ?? null,
+      // serial capture is deferred (TRACKING_MODES has `serial`, but no
+      // serial entity is wired yet) — reserved as null so the contract
+      // shape is locked now and consumers tolerate it additively.
+      serialIds: null,
+      qtyBase: input.qty,
+      unitCostMinor: input.unitCostMinor ?? null,
+      currency: input.costCurrency ?? null,
+      scale: input.costScale ?? null,
+      sourceMovementId: ledger.id,
+      costingMethod: valuation?.method ?? null,
+    },
+  });
+  if (valuation) {
+    await services.emitEvent(tx, ctx, {
+      type: services.DomainEventType.InventoryValuationUpdated,
+      payload: {
+        locationId: input.locationId,
+        skuId: input.skuId,
+        sourceMovementId: ledger.id,
+        costingMethod: valuation.method,
+        cogsMinor: valuation.cogsMinor,
+        currency: valuation.currency,
+        scale: valuation.scale,
+        unvaluedQty: valuation.unvaluedQty,
+        // reserved; the qty==0 ⟺ value==0 integrity fields — populated
+        // when ValuationResult is extended to expose post-movement
+        // on-hand value (Phase 5). Reserved nullable now so binding them
+        // later is additive, not a breaking change.
+        totalValueMinor: null,
+        qtyOnHandBase: null,
+      },
+    });
+  }
+  await services.recordAudit(tx, ctx, {
+    action: "inventory.receive",
+    entityType: "stock_ledger",
+    entityId: ledger.id,
+    after: ledger,
+  });
+  return ledger;
+}
+
 async function assertInventoryReceiveReferences(
   tx: TenantTransaction,
   input: InventoryReceiveInput
@@ -3231,68 +3533,7 @@ export const inventoryRouter = {
       return withTenant(db, ctx.tenantId, async (tx) => {
         await assertPermission(tx, ctx, "inventory.receive");
         await assertInventoryReceiveReferences(tx, input);
-        const ledger = await services.appendStockMovement(tx, ctx, {
-          costCurrency: input.costCurrency ?? null,
-          costScale: input.costScale ?? null,
-          idempotencyKey: input.idempotencyKey ?? null,
-          locationId: input.locationId,
-          lotId: input.lotId ?? null,
-          productId: input.productId,
-          movementType: "receipt",
-          qtyDelta: input.qty,
-          skuId: input.skuId ?? null,
-          unitCostMinor: input.unitCostMinor ?? null,
-        });
-        const valuation = input.skuId
-          ? await services.applyValuation(tx, ctx, ledger)
-          : null;
-        await services.emitEvent(tx, ctx, {
-          type: services.DomainEventType.InventoryReceived,
-          payload: {
-            locationId: input.locationId,
-            productId: input.productId,
-            skuId: input.skuId ?? null,
-            lotId: input.lotId ?? null,
-            // serial capture is deferred (TRACKING_MODES has `serial`, but no
-            // serial entity is wired yet) — reserved as null so the contract
-            // shape is locked now and consumers tolerate it additively.
-            serialIds: null,
-            qtyBase: input.qty,
-            unitCostMinor: input.unitCostMinor ?? null,
-            currency: input.costCurrency ?? null,
-            scale: input.costScale ?? null,
-            sourceMovementId: ledger.id,
-            costingMethod: valuation?.method ?? null,
-          },
-        });
-        if (valuation) {
-          await services.emitEvent(tx, ctx, {
-            type: services.DomainEventType.InventoryValuationUpdated,
-            payload: {
-              locationId: input.locationId,
-              skuId: input.skuId,
-              sourceMovementId: ledger.id,
-              costingMethod: valuation.method,
-              cogsMinor: valuation.cogsMinor,
-              currency: valuation.currency,
-              scale: valuation.scale,
-              unvaluedQty: valuation.unvaluedQty,
-              // reserved; the qty==0 ⟺ value==0 integrity fields — populated
-              // when ValuationResult is extended to expose post-movement
-              // on-hand value (Phase 5). Reserved nullable now so binding them
-              // later is additive, not a breaking change.
-              totalValueMinor: null,
-              qtyOnHandBase: null,
-            },
-          });
-        }
-        await services.recordAudit(tx, ctx, {
-          action: "inventory.receive",
-          entityType: "stock_ledger",
-          entityId: ledger.id,
-          after: ledger,
-        });
-        return ledger;
+        return runInventoryReceive(tx, ctx, input);
       });
     }),
   adjust: tenantProcedure
