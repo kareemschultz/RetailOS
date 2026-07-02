@@ -34,6 +34,17 @@
   Gate: check-types 7/7, ultracite clean (auto-fix reformatted 3 files), mojibake clean, db 99 +
   **api 71** (70→71) zero skips, `bun -F web build` green. **Not browser-verified** — nav filtering
   is proven by types/tests/build only, per playbook §3.11 (defer live-browser check to a UI pass).
+- **Task 3 DONE:** ported the Shopix public storefront catalog (`commerce.ts` `catalog`/`product`/
+  `quote` procedures on top of the pre-existing `storefront` hostname→tenant gateway) — clean
+  cherry-pick of `1404ff9`, zero conflicts. Reviewed the resolved code: every new read is
+  `withTenant`-scoped, DTOs are allow-listed (no `objectKey`/cost/margin — only `url`/`altText`
+  for images, `priceMinor` public list price for quotes), tests assert tenant isolation + a
+  `PUBLIC_DTO_LEAK_RE` no-leak regex, hermetic cleanup extended for the new catalog rows. **One
+  bug found and fixed:** the `product` (PDP) handler spread `mapCatalogItem`'s `primaryImage`
+  alongside the richer `images[]` array — redundant duplicate data (not a leak; both fields carry
+  the same allow-listed url/altText). Fixed by listing the needed fields explicitly instead of
+  spreading. Gate: check-types 7/7, ultracite clean (1 auto-fix), mojibake clean, db 99 +
+  **api 75** (71→75, +4 commerce tests) zero skips.
 
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing
