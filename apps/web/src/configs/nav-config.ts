@@ -17,8 +17,11 @@ import {
   ReceiptText,
   Ruler,
   ScanLine,
+  ScrollText,
+  Settings2,
   ShieldCheck,
   Store,
+  Users,
   Workflow,
 } from "lucide-react";
 
@@ -83,6 +86,7 @@ export const navGroups: NavGroup[] = [
         // (Long-term these also become TABS inside a Product detail.)
         childItems: [
           { label: "All products", to: "/products" },
+          { label: "Import products", to: "/products/import" },
           { label: "Variants", to: "/variants" },
           { label: "SKUs", to: "/skus" },
           { label: "Barcodes", to: "/barcodes" },
@@ -131,6 +135,23 @@ export const navGroups: NavGroup[] = [
           { label: "Financial status", to: "/reports/financial" },
         ],
       },
+      { icon: ScrollText, label: "Audit trail", to: "/audit-log" },
+    ],
+  },
+  {
+    groupLabel: "Administration",
+    items: [
+      {
+        icon: Settings2,
+        label: "Settings",
+        childItems: [
+          { label: "Overview", to: "/settings" },
+          { label: "Companies", to: "/settings/companies" },
+          { label: "Tax rates", to: "/settings/tax" },
+          { label: "Numbering", to: "/settings/numbering" },
+        ],
+      },
+      { icon: Users, label: "Staff & access", to: "/staff" },
     ],
   },
 ];
