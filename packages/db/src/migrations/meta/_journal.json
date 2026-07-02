@@ -176,6 +176,13 @@
       "when": 1782928215163,
       "tag": "0024_salty_carlie_cooper",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1783020592527,
+      "tag": "0025_tax_rate_standard_rls_policy",
+      "breakpoints": true
     }
   ]
 }

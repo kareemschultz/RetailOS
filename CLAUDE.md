@@ -10,6 +10,7 @@
 - `docs/architecture/engineering-principles.md` — the constitution: backend-owns-truth, one-owner-per-invariant, write-path-through-the-owning-service (#8), Money primitives, stamp-the-irreproducible-fact, imported-blocks-become-owned, verify-against-official-docs, gate-by-kind, the **🔒 FROZEN RetailOS Development Loop** (the 12-step implementation cadence — do not deviate), and the **products-not-phases / ship-the-smallest-valuable-thing** mental model.
 - @docs/architecture/phase-roadmap.md — phase status and what's in scope now.
 - `docs/architecture/PROGRESS.md` — live cross-agent task board + changelog (a `SessionStart` hook surfaces a lean view automatically). **Claim a lane before writing**; `git pull --rebase` before committing (multiple agents share the branch).
+- **Sonnet / non-Fable sessions:** read `docs/plans/sonnet-execution-playbook.md` FIRST — the mechanical guardrail digest (gate commands via `scripts/gate-db.sh`, hard prohibitions, recurring defect classes, phase entry gates); it points to the current task-level plan (`docs/plans/2026-07-02-sonnet-tranche-1-ports-and-cleanup.md`).
 - `docs/architecture/phase-2-implementation-plan.md` — approved Phase 2 build order and costing/RLS/seed/test design; **Commit 0 gate first, resolver later**.
 - `docs/architecture/event-map-phase2.md` and `docs/architecture/inventory-screen-map.md` — downstream event/API/screen planning docs; planning only, no UI implementation.
 - @.claude/CLAUDE.md — code standards (Ultracite/Biome) and shadcn/studio MCP workflow rules.

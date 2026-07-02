@@ -492,3 +492,11 @@
 - **Fix:** Regenerate/check the TanStack route tree through the web type gate, inspect diffs for deleted route references, and replace broken latent links with workflow-local actions.
 - **Rule:** Route pruning is a three-part change: delete the source route, regenerate/commit `routeTree.gen.ts`, and scan/repair all links/actions that targeted the deleted path.
 
+
+### 38. The journal-less-migration trap recurred on our own branch — and it also corrupts future NUMBERING
+- **Date:** 2026-07-02
+- **Context:** Preparing the Sonnet handoff plan; auditing migration state before writing port-numbering instructions.
+- **Mistake:** `0025_tax_rate_standard_rls_policy.sql` was committed without a `_journal.json` entry (the exact trap from the 2026-06-28 "Hand-written Drizzle SQL migrations still need journal/snapshot metadata" lesson). It never ran on fresh databases, so a fresh DB kept the non-standard `tenant_isolation_tax_rate` policy name — functionally fail-closed either way, so every test stayed green and nothing flagged it.
+- **Root cause:** A policy-only rename migration was hand-added; the static coverage gate reads migration SQL *files* (so it saw the rename) while the migrator reads the *journal* (so it never applied it) — the two sources of truth diverged silently. Second-order damage: drizzle-kit numbers new migrations from the journal index, so the next `db:generate` would have minted a COLLIDING second `0025_*` file.
+- **Fix:** Appended the idx-25 journal entry (policy-only migrations need no snapshot — policies/triggers are outside the snapshot model); verified fresh-chain 0000→0025 on a disposable PG18 (`tax_rate` policy now `tenant_isolation`). Added `scripts/gate-db.sh` so the fresh-chain proof is a one-command harness.
+- **Rule:** After ANY commit that adds a migration file, assert `count(entries in _journal.json) == count(*.sql files)` — a mismatch is a defect even if all tests are green, because the migrator and the numbering both key off the journal, not the filesystem.

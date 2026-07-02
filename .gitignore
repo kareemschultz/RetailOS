@@ -69,3 +69,4 @@ admincn-reference/
 
 # Agent worktrees (temporary full-repo copies; never commit)
 .claude/worktrees/
+.gate-db.cid

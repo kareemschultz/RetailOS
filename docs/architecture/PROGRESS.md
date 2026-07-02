@@ -13,6 +13,19 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Sonnet handoff prepared (2026-07-02, Fable session)
+- **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing
+  guardrails: gate suite via `scripts/gate-db.sh`, hard prohibitions, defect-class checklist,
+  Phase 5–13 entry gates) + `docs/plans/2026-07-02-sonnet-tranche-1-ports-and-cleanup.md`
+  (9 tasks: features/* cleanup, role-filtered nav via `membership.myAccess`, then the module-branch
+  ports — 1404ff9 commerce catalog, 56fe9cf offline sync, b9cecc9 + extensions procurement/accounting,
+  migrations regenerated as 0026–0029). Phases 5/6 remain NOT APPROVED (open owner decisions).
+- **Fixed this pass:** `0025_tax_rate_standard_rls_policy.sql` was missing its `_journal.json`
+  entry (the lesson-#37 trap) — registered; fresh-chain 0000→0025 verified on disposable PG18
+  (50 tables, `tax_rate` policy correctly renamed `tenant_isolation`). New `scripts/gate-db.sh`
+  is now the ONLY sanctioned test-DB lifecycle (stops only its own container; protects
+  `postgres-central`).
+
 ### Production-readiness completion — BUILT on `feat/production-readiness-completion` (2026-07-02)
 - **Scope:** executed `docs/plans/2026-07-02-retailos-production-readiness-completion.md` +
   `production-readiness-gap-audit.md` build list end-to-end (owner directive: full build-out; no
