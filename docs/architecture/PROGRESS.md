@@ -24,6 +24,16 @@
   `misc-pages/` (the only subdir imported, by the five `_app/error-*.tsx` routes). Verified: only
   `misc-pages/error-views` was imported outside `features/` (grep, zero other hits); check-types
   7/7 green; `bun -F web build` green; ultracite 305 files clean; mojibake clean.
+- **Task 2 DONE:** `membership.myAccess` (ungated own-role/permissions read) +
+  `filterNavGroups(navGroups, permissions)` wired into `app-sidebar.tsx` and `command-menu.tsx`
+  (the latter's module-level `ENTRIES_BY_GROUP` moved into a `useMemo` so it can react to fetched
+  permissions). Tagged Shifts/Transfers/Bonded goods/Reports group+leaves/Audit trail/Settings
+  group+leaves/Staff & access/Accounting with their gating permission per the plan's table.
+  TDD: wrote the failing integration test first (admin sees `users.manage`, cashier doesn't but
+  has `pos.create_sale`), confirmed FAIL (`myAccess` not found), implemented, confirmed PASS.
+  Gate: check-types 7/7, ultracite clean (auto-fix reformatted 3 files), mojibake clean, db 99 +
+  **api 71** (70→71) zero skips, `bun -F web build` green. **Not browser-verified** — nav filtering
+  is proven by types/tests/build only, per playbook §3.11 (defer live-browser check to a UI pass).
 
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing

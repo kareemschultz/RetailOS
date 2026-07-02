@@ -5754,6 +5754,24 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     expect(memberRow).toHaveLength(0);
   });
 
+  it("membership.myAccess returns the caller's own role and permission list", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+
+    const adminAccess = await call(appRouter.membership.myAccess, {}, admin);
+    expect(adminAccess.role).toBe("tenant_admin");
+    expect(adminAccess.permissions).toContain("users.manage");
+
+    const cashierAccess = await call(
+      appRouter.membership.myAccess,
+      {},
+      cashier
+    );
+    expect(cashierAccess.role).toBe("cashier");
+    expect(cashierAccess.permissions).not.toContain("users.manage");
+    expect(cashierAccess.permissions).toContain("pos.create_sale");
+  });
+
   it("audit viewer: audit.view-gated list with filters and full detail", async () => {
     const admin = { context: makeCtx(ADMIN, ORG) };
     const cashier = { context: makeCtx(CASHIER, ORG) };

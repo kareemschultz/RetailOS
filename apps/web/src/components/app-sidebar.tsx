@@ -17,11 +17,17 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@RetailOS/ui/components/sidebar";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronRightIcon, Store } from "lucide-react";
 
-import { type NavMenuItem, navGroups } from "@/configs/nav-config";
+import {
+  filterNavGroups,
+  type NavMenuItem,
+  navGroups,
+} from "@/configs/nav-config";
 import { useSettings } from "@/theme/settings-store";
+import { orpc } from "@/utils/orpc";
 
 // RetailOS application sidebar — dropped in from the AdminCN template
 // `Sidebar.tsx` (Assembly Law: their structure + collapsible nesting, badges,
@@ -101,6 +107,11 @@ export function AppSidebar() {
   // Map our settings.variant (default/inset/floating) to the sidebar primitive's
   // variant (sidebar/inset/floating) so the customizer's controls apply live.
   const variant = settings.variant === "default" ? "sidebar" : settings.variant;
+  // Role-filtered nav (UX only; backend assertPermission is the real gate).
+  // Fallback [] hides gated items until access loads — nothing sensitive
+  // flashes, items just appear once permissions arrive.
+  const access = useQuery(orpc.membership.myAccess.queryOptions({ input: {} }));
+  const groups = filterNavGroups(navGroups, access.data?.permissions ?? []);
 
   return (
     <Sidebar collapsible={settings.collapsible} variant={variant}>
@@ -115,7 +126,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent className="group-data-[collapsible=icon]:overflow-y-auto">
-        {navGroups.map((group) => (
+        {groups.map((group) => (
           <SidebarGroup key={group.groupLabel}>
             <SidebarGroupLabel className="text-sidebar-foreground/50 uppercase tracking-wider">
               {group.groupLabel}

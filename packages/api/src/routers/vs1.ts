@@ -8435,6 +8435,23 @@ export const membershipRouter = {
         }));
       });
     }),
+  // The caller's OWN role + permissions — powers client-side nav filtering.
+  // Deliberately ungated: a member may always read their own access. The
+  // backend assertPermission guards on every other procedure stay the real
+  // enforcement (§20); hiding a nav item is never a security boundary.
+  myAccess: tenantProcedure
+    .input(z.object({}).optional())
+    .handler(({ context }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        const role = await services.resolveTenantRole(tx, ctx.actorUserId);
+        const permissions =
+          role && role in services.ROLE_PERMISSIONS
+            ? [...services.ROLE_PERMISSIONS[role as services.TenantRole]]
+            : [];
+        return { permissions, role };
+      });
+    }),
   // Grants access to an EXISTING user by email (staff sign up first — via
   // Google or email — then an admin assigns their role). Real email-delivered
   // invitations need the SMTP/white-label seam (§11) and come later.

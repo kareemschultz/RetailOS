@@ -9,11 +9,13 @@ import {
   CommandList,
 } from "@RetailOS/ui/components/command";
 import { Kbd } from "@RetailOS/ui/components/kbd";
+import { useQuery } from "@tanstack/react-query";
 import { type LinkProps, useNavigate } from "@tanstack/react-router";
 import { SearchIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { navGroups } from "@/configs/nav-config";
+import { filterNavGroups, navGroups } from "@/configs/nav-config";
+import { orpc } from "@/utils/orpc";
 
 // Command palette — dropped in from the AdminCN template CommandMenu (Assembly
 // Law: the ⌘K / "/" trigger, dialog, cmdk filtering, polish), edited for our
@@ -26,26 +28,36 @@ interface CommandEntry {
   to: LinkProps["to"];
 }
 
-const COMMAND_ENTRIES: CommandEntry[] = navGroups.flatMap((group) =>
-  group.items.flatMap((item) =>
-    item.childItems
-      ? item.childItems.map((leaf) => ({
-          group: group.groupLabel,
-          label: `${item.label}: ${leaf.label}`,
-          to: leaf.to,
-        }))
-      : [{ group: group.groupLabel, label: item.label, to: item.to }]
-  )
-);
-
-const ENTRIES_BY_GROUP = navGroups.map((group) => ({
-  group: group.groupLabel,
-  entries: COMMAND_ENTRIES.filter((e) => e.group === group.groupLabel),
-}));
+function buildEntriesByGroup(groups: typeof navGroups) {
+  const entries: CommandEntry[] = groups.flatMap((group) =>
+    group.items.flatMap((item) =>
+      item.childItems
+        ? item.childItems.map((leaf) => ({
+            group: group.groupLabel,
+            label: `${item.label}: ${leaf.label}`,
+            to: leaf.to,
+          }))
+        : [{ group: group.groupLabel, label: item.label, to: item.to }]
+    )
+  );
+  return groups.map((group) => ({
+    group: group.groupLabel,
+    entries: entries.filter((e) => e.group === group.groupLabel),
+  }));
+}
 
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  // Role-filtered nav (UX only; backend assertPermission is the real gate).
+  const access = useQuery(orpc.membership.myAccess.queryOptions({ input: {} }));
+  const entriesByGroup = useMemo(
+    () =>
+      buildEntriesByGroup(
+        filterNavGroups(navGroups, access.data?.permissions ?? [])
+      ),
+    [access.data?.permissions]
+  );
 
   const run = useCallback(
     (to: LinkProps["to"]) => {
@@ -102,7 +114,7 @@ export function CommandMenu() {
           <CommandInput placeholder="Type a command or search…" />
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>
-            {ENTRIES_BY_GROUP.map((g) => (
+            {entriesByGroup.map((g) => (
               <CommandGroup heading={g.group} key={g.group}>
                 {g.entries.map((entry) => (
                   <CommandItem

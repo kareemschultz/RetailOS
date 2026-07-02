@@ -38,12 +38,14 @@ import {
 export interface NavLeaf {
   badge?: string;
   label: string;
+  permission?: string;
   to: LinkProps["to"];
 }
 
 export type NavMenuItem = {
   icon: LucideIcon;
   label: string;
+  permission?: string;
 } & (
   | { to: LinkProps["to"]; childItems?: never }
   | { to?: never; childItems: NavLeaf[] }
@@ -73,7 +75,12 @@ export const navGroups: NavGroup[] = [
     items: [
       { icon: ScanLine, label: "Point of Sale", to: "/pos" },
       { icon: ReceiptText, label: "Sales", to: "/sales" },
-      { icon: CircleDollarSign, label: "Shifts", to: "/shifts" },
+      {
+        icon: CircleDollarSign,
+        label: "Shifts",
+        permission: "pos.open_shift",
+        to: "/shifts",
+      },
     ],
   },
   {
@@ -104,8 +111,18 @@ export const navGroups: NavGroup[] = [
       { icon: Boxes, label: "Stock", to: "/inventory" },
       { icon: Layers, label: "Lots", to: "/lots" },
       { icon: History, label: "Stock ledger", to: "/stock-ledger" },
-      { icon: ArrowLeftRight, label: "Transfers", to: "/transfers" },
-      { icon: ShieldCheck, label: "Bonded goods", to: "/bonds" },
+      {
+        icon: ArrowLeftRight,
+        label: "Transfers",
+        permission: "inventory.transfer",
+        to: "/transfers",
+      },
+      {
+        icon: ShieldCheck,
+        label: "Bonded goods",
+        permission: "bond.receive",
+        to: "/bonds",
+      },
       { icon: MapPin, label: "Locations", to: "/locations" },
     ],
   },
@@ -121,7 +138,14 @@ export const navGroups: NavGroup[] = [
   },
   {
     groupLabel: "Financials",
-    items: [{ icon: Landmark, label: "Accounting", to: "/financials" }],
+    items: [
+      {
+        icon: Landmark,
+        label: "Accounting",
+        permission: "reports.view",
+        to: "/financials",
+      },
+    ],
   },
   {
     groupLabel: "Reports",
@@ -129,13 +153,31 @@ export const navGroups: NavGroup[] = [
       {
         icon: BarChart3,
         label: "Reports",
+        permission: "reports.view",
         childItems: [
-          { label: "Overview", to: "/reports" },
-          { label: "Number leases", to: "/reports/number-leases" },
-          { label: "Financial status", to: "/reports/financial" },
+          {
+            label: "Overview",
+            permission: "reports.view",
+            to: "/reports",
+          },
+          {
+            label: "Number leases",
+            permission: "reports.view",
+            to: "/reports/number-leases",
+          },
+          {
+            label: "Financial status",
+            permission: "reports.view",
+            to: "/reports/financial",
+          },
         ],
       },
-      { icon: ScrollText, label: "Audit trail", to: "/audit-log" },
+      {
+        icon: ScrollText,
+        label: "Audit trail",
+        permission: "audit.view",
+        to: "/audit-log",
+      },
     ],
   },
   {
@@ -144,14 +186,63 @@ export const navGroups: NavGroup[] = [
       {
         icon: Settings2,
         label: "Settings",
+        permission: "settings.manage",
         childItems: [
-          { label: "Overview", to: "/settings" },
-          { label: "Companies", to: "/settings/companies" },
-          { label: "Tax rates", to: "/settings/tax" },
-          { label: "Numbering", to: "/settings/numbering" },
+          {
+            label: "Overview",
+            permission: "settings.manage",
+            to: "/settings",
+          },
+          {
+            label: "Companies",
+            permission: "settings.manage",
+            to: "/settings/companies",
+          },
+          {
+            label: "Tax rates",
+            permission: "settings.manage",
+            to: "/settings/tax",
+          },
+          {
+            label: "Numbering",
+            permission: "settings.manage",
+            to: "/settings/numbering",
+          },
         ],
       },
-      { icon: Users, label: "Staff & access", to: "/staff" },
+      {
+        icon: Users,
+        label: "Staff & access",
+        permission: "users.manage",
+        to: "/staff",
+      },
     ],
   },
 ];
+
+// UX-only visibility filter. Backend assertPermission remains the enforcement;
+// hiding a nav item is never a security boundary.
+export function filterNavGroups(
+  groups: NavGroup[],
+  permissions: string[]
+): NavGroup[] {
+  const allowed = (p?: string) => !p || permissions.includes(p);
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => allowed(item.permission))
+        .map((item) =>
+          item.childItems
+            ? {
+                ...item,
+                childItems: item.childItems.filter((leaf) =>
+                  allowed(leaf.permission)
+                ),
+              }
+            : item
+        )
+        .filter((item) => !item.childItems || item.childItems.length > 0),
+    }))
+    .filter((group) => group.items.length > 0);
+}
