@@ -277,7 +277,7 @@ PATH="$HOME/.bun/bin:$PATH" bun run check-types
 
 ---
 
-## Phase 4 — Integration Branch Reuse
+## Phase 4 — Integration Branch Reuse — ✅ COMPLETE (Sonnet tranche-1, 2026-07-02)
 
 No `retailos-integration` branch exists. Available module branches:
 - `feature/procurement-financials`
@@ -285,22 +285,40 @@ No `retailos-integration` branch exists. Available module branches:
 - `feature/storefront-commerce`
 - `feature/full-module-buildout`
 
-**Safe candidate:**
+**Safe candidate — PORTED:**
 - Cherry-pick or manually port `1404ff9 feat(commerce): expose public storefront catalog`
   - `packages/api/src/routers/commerce.ts`
   - `packages/api/src/routers/commerce.integration.test.ts`
+  - Commit `50283cb`. Fixed one genuine defect found in the ported source (redundant
+    `primaryImage` duplicating `images[]` on the PDP read).
 
-**Manual ports only, no wholesale merges:**
-- Offline sync: `56fe9cf feat(pos): add offline sync ingestion foundation`
-- Procurement/accounting foundations: `b9cecc9 feat(procurement): add accounting foundations`
-- Later procurement extensions only after foundations:
-  - `aaa6765`, `1dc4196`, `b815ef6`, `f4b0a5d`, `315680d`, `6aa4a21` backend-only
+**Manual ports only, no wholesale merges — ALL PORTED:**
+- Offline sync: `56fe9cf feat(pos): add offline sync ingestion foundation` — commit `4a079c9`,
+  migration 0026.
+- Procurement/accounting foundations: `b9cecc9 feat(procurement): add accounting foundations` —
+  commit `b89ded9`, migration 0027.
+- Later procurement extensions, applied strictly after foundations, in commit order:
+  - `aaa6765`/`1dc4196`/`b815ef6`/`f4b0a5d` (GRN + supplier bills + landed cost + import batch,
+    checked out at `f4b0a5d`'s final cumulative state) — commit `6b35f1f`, migration 0028.
+  - `315680d` (reorder-suggestion → PO conversion) — commit `f32604f`, no new migration.
+  - `6aa4a21` backend-only (vendor payment / AP posting seam; the source commit's self-serve
+    onboarding gate touching `apps/web/**` was intentionally excluded — cleanly separable, zero
+    dropped hunks needed) — commit `55663fa`, migration 0029.
 
-**Do not accept wholesale:**
-- `packages/api/src/routers/vs1.ts`
-- migration metadata/snapshots
-- generated route tree
-- current tax/onboarding/POS refund files
+**Do not accept wholesale — HONORED throughout:**
+- `packages/api/src/routers/vs1.ts` — every hunk applied by hand per commit, never merged wholesale.
+- migration metadata/snapshots — every migration regenerated via `drizzle-kit generate` against
+  this branch's own numbering (0026→0029), never copied from the source branches; one
+  FK-before-target-UNIQUE reordering fix applied by hand (migration 0027).
+- generated route tree — `routeTree.gen.ts` drift reverted after every `check-types`/build run,
+  never committed as part of a port.
+- current tax/onboarding/POS refund files — untouched; zero `apps/web/**` files modified by any
+  procurement/offline-sync/commerce port.
+
+**Final gate (fresh disposable PG18, full chain 0000→0029):** check-types 7/7, ultracite clean,
+mojibake clean, **db 125/125 + api 77/77 (zero skips)**, frozen `costing.ts`/`costing.rls.test.ts`
+byte-identical after every single commit, `bun -F web build` green, shared infra
+(`postgres-central`) confirmed untouched after every gate-db cycle.
 
 ---
 

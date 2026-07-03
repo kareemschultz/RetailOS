@@ -13,10 +13,16 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
-### Sonnet tranche-1 execution — IN PROGRESS on `feat/production-readiness-completion` (2026-07-02)
-- Executing `docs/plans/2026-07-02-sonnet-tranche-1-ports-and-cleanup.md` per
-  `docs/plans/sonnet-execution-playbook.md`. Task board (this file's task list, IDs 19–27) tracks
-  the 9 tasks; each commit updates this section with the completed task's line.
+### Sonnet tranche-1 execution — ✅ COMPLETE on `feat/production-readiness-completion` (2026-07-02)
+- Executed `docs/plans/2026-07-02-sonnet-tranche-1-ports-and-cleanup.md` per
+  `docs/plans/sonnet-execution-playbook.md`. All 9 tasks DONE (task board IDs 19–27). Branch NOT
+  merged/pushed/deployed — per plan, stops after Task 9 for owner review. Final gate: check-types
+  7/7, ultracite clean, mojibake clean, fresh-chain 0000→0029 verified on disposable PG18, **db
+  125/125 + api 77/77 (zero skips)**, frozen `costing.ts`/`costing.rls.test.ts` byte-identical
+  through every task, `bun -F web build` green, shared infra (`postgres-central`) confirmed
+  untouched after every gate-db cycle. Commits: `b9a34f6` (Task 1) → `5fe6e6f` (Task 2) →
+  `50283cb` (Task 3) → `4a079c9` (Task 4, migration 0026) → `b89ded9` (Task 5, migration 0027) →
+  `6b35f1f` (Task 6, migration 0028) → `f32604f` (Task 7) → `55663fa` (Task 8, migration 0029).
 - **Task 1 DONE:** deleted 27 orphaned AdminCN demo `apps/web/src/features/*` subdirs (analytics,
   calendar, campaigns, chat, commerce-dashboard, contacts, data-tables, empty-states, faq, finance,
   form-layouts, form-validation, form-wizard, kanban, logistics, mail, onboarding, orders, payments,
