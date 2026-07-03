@@ -79,8 +79,8 @@ describe.skipIf(!url)("Phase D procurement foundation", () => {
       .onConflictDoNothing();
     for (const tenant of [TENANT, OTHER_TENANT]) {
       await withTenant(db, tenant, async (tx) => {
-        await tx.delete(landedCostAllocation);
         await tx.delete(importBatchLine);
+        await tx.delete(landedCostAllocation);
         await tx.delete(importBatch);
         await tx.delete(vendorPayment);
         await tx.delete(bondReceipt);

@@ -1,11 +1,16 @@
 {
   "extends": "@RetailOS/config/tsconfig.base.json",
   "compilerOptions": {
-    "declaration": true,
-    "declarationMap": true,
+    // No `declaration`/`composite`: this package's exports map resolves
+    // consumers (apps/web, apps/server) straight to `src/*.ts` source, not a
+    // compiled dist/ output, and nothing in the repo lists this package under
+    // TS project "references" — declaration-emit was never actually
+    // consumed. `composite`/`declaration` forced tsc to serialize a full
+    // declaration type for the exported `appRouter` (17 sub-routers, 100+
+    // procedures), which hit TS7056 ("inferred type exceeds the maximum
+    // length the compiler will serialize") the moment the router grew large
+    // enough — a real tsc limit, not a bug in this codebase's types.
     "sourceMap": true,
-    "outDir": "dist",
-    "composite": true,
     "strictNullChecks": true
   },
   "include": ["src/**/*.ts"],

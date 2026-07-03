@@ -52,6 +52,8 @@ const MISSING_TRANSFER_PERM_RE = /Missing permission: inventory\.transfer/;
 const MISSING_BOND_PERM_RE = /Missing permission: bond\.receive/;
 const MISSING_PROCUREMENT_MANAGE_RE = /Missing permission: procurement\.manage/;
 const REORDER_RULE_NOT_FOUND_RE = /Reorder rule not found/;
+const PURCHASE_ORDER_NOT_FOUND_RE = /Purchase order not found/;
+const GOODS_RECEIPT_NOT_FOUND_RE = /Goods receipt not found/;
 
 function makeCtx(userId: string, organizationId: string | null): Context {
   return {
@@ -1279,6 +1281,168 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         "approvedBy"
       );
     }
+  });
+
+  it("procurement reads: supplier/PO/GRN/bill lists+detail are permission-gated, tenant-scoped, and reflect the create→receive→bill flow", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+
+    const company = await call(
+      appRouter.company.create,
+      { name: "ProcurementReadsCo" },
+      admin
+    );
+    const location = await call(
+      appRouter.location.create,
+      { companyId: company.id, name: "Main", type: "store" },
+      admin
+    );
+    const product = await call(
+      appRouter.product.create,
+      {
+        currency: "USD",
+        name: "Procurement Read Widget",
+        priceMinor: 500,
+        sku: "PROC-READ-WIDGET",
+      },
+      admin
+    );
+    const sku = await call(
+      appRouter.catalog.skuCreate,
+      { code: "PROC-READ-1", productId: product.id },
+      admin
+    );
+    const supplier = await call(
+      appRouter.procurement.supplierCreate,
+      { code: "PROC-READ-SUP", name: "Procurement Read Supplier" },
+      admin
+    );
+    const po = await call(
+      appRouter.procurement.purchaseOrderCreate,
+      {
+        companyId: company.id,
+        currency: "USD",
+        lines: [
+          {
+            productId: product.id,
+            qtyOrdered: 10,
+            skuId: sku.id,
+            unitCostMinor: 200,
+          },
+        ],
+        number: "PO-READ-001",
+        supplierId: supplier.id,
+      },
+      admin
+    );
+    const grnResult = await call(
+      appRouter.procurement.goodsReceiptCreate,
+      {
+        lines: [
+          {
+            purchaseOrderLineId: po.lines[0]?.id as string,
+            qtyReceived: 10,
+          },
+        ],
+        locationId: location.id,
+        number: "GRN-READ-001",
+        purchaseOrderId: po.id,
+      },
+      admin
+    );
+    const grn = grnResult.receipt;
+    const billResult = await call(
+      appRouter.procurement.supplierBillCreate,
+      {
+        lines: [
+          {
+            goodsReceiptLineId: grnResult.lines[0]?.id as string,
+            qtyBilled: 10,
+          },
+        ],
+        number: "BILL-READ-001",
+        purchaseOrderId: po.id,
+      },
+      admin
+    );
+    const bill = billResult.bill;
+
+    // Lists reflect the flow.
+    const suppliers = await call(appRouter.procurement.supplierList, {}, admin);
+    expect(suppliers.some((row) => row.id === supplier.id)).toBe(true);
+    const pos = await call(
+      appRouter.procurement.purchaseOrderList,
+      { supplierId: supplier.id },
+      admin
+    );
+    expect(pos).toEqual([expect.objectContaining({ id: po.id })]);
+    const grns = await call(
+      appRouter.procurement.goodsReceiptList,
+      { purchaseOrderId: po.id },
+      admin
+    );
+    expect(grns).toEqual([expect.objectContaining({ id: grn.id })]);
+    const bills = await call(
+      appRouter.procurement.supplierBillList,
+      { purchaseOrderId: po.id },
+      admin
+    );
+    expect(bills).toEqual([expect.objectContaining({ id: bill.id })]);
+
+    // Detail composes header + lines + child documents.
+    const poDetail = await call(
+      appRouter.procurement.purchaseOrderDetail,
+      { id: po.id },
+      admin
+    );
+    expect(poDetail.header.id).toBe(po.id);
+    expect(poDetail.lines).toEqual([
+      expect.objectContaining({ skuId: sku.id, qtyOrdered: 10 }),
+    ]);
+    expect(poDetail.receipts).toEqual([
+      expect.objectContaining({ id: grn.id }),
+    ]);
+    expect(poDetail.bills).toEqual([expect.objectContaining({ id: bill.id })]);
+    const grnDetail = await call(
+      appRouter.procurement.goodsReceiptDetail,
+      { id: grn.id },
+      admin
+    );
+    expect(grnDetail.header.id).toBe(grn.id);
+    expect(grnDetail.lines).toEqual([
+      expect.objectContaining({ skuId: sku.id, qtyReceived: 10 }),
+    ]);
+
+    // Permission gate — a cashier (no procurement.manage) is rejected on
+    // every read, matching the write-side gate.
+    await expect(
+      call(appRouter.procurement.supplierList, {}, cashier)
+    ).rejects.toThrow(MISSING_PROCUREMENT_MANAGE_RE);
+    await expect(
+      call(appRouter.procurement.purchaseOrderList, {}, cashier)
+    ).rejects.toThrow(MISSING_PROCUREMENT_MANAGE_RE);
+    await expect(
+      call(appRouter.procurement.purchaseOrderDetail, { id: po.id }, cashier)
+    ).rejects.toThrow(MISSING_PROCUREMENT_MANAGE_RE);
+    await expect(
+      call(appRouter.procurement.goodsReceiptList, {}, cashier)
+    ).rejects.toThrow(MISSING_PROCUREMENT_MANAGE_RE);
+    await expect(
+      call(appRouter.procurement.goodsReceiptDetail, { id: grn.id }, cashier)
+    ).rejects.toThrow(MISSING_PROCUREMENT_MANAGE_RE);
+    await expect(
+      call(appRouter.procurement.supplierBillList, {}, cashier)
+    ).rejects.toThrow(MISSING_PROCUREMENT_MANAGE_RE);
+
+    // Cross-tenant detail reads are NOT_FOUND, not a leak (RLS-scoped query
+    // returns zero rows for another tenant's id).
+    await expect(
+      call(appRouter.procurement.purchaseOrderDetail, { id: po.id }, adminB)
+    ).rejects.toThrow(PURCHASE_ORDER_NOT_FOUND_RE);
+    await expect(
+      call(appRouter.procurement.goodsReceiptDetail, { id: grn.id }, adminB)
+    ).rejects.toThrow(GOODS_RECEIPT_NOT_FOUND_RE);
   });
 
   // H1 regression — ONE parameterized harness over every guarded FK-bearing

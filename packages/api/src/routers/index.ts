@@ -2,6 +2,7 @@ import type { RouterClient } from "@orpc/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
 import { commerceRouter } from "./commerce";
+import { procurementRouter } from "./procurement";
 import {
   accountingRouter,
   auditRouter,
@@ -14,7 +15,6 @@ import {
   numberingRouter,
   onboardingRouter,
   posRouter,
-  procurementRouter,
   productRouter,
   reportsRouter,
   taxRouter,
