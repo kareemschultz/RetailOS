@@ -12,6 +12,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { actor, softDelete, tenantId, timestamps } from "./columns";
+import { taxRate } from "./tax";
 
 export const COSTING_METHODS = ["avco", "fifo"] as const;
 // Structural tracking configuration (§1). `expiry` = lot + expiry enforcement;
@@ -94,6 +95,10 @@ export const category = pgTable(
     }),
     oversellPolicy: text("oversell_policy", { enum: OVERSELL_POLICIES }),
     expiryPolicy: text("expiry_policy", { enum: EXPIRY_POLICIES }),
+    // Tax classification seam (Shopix design §4): resolved product → category
+    // → tenant-default (the active "standard" tax_rate) via the settings
+    // resolver. Bare uuid + composite FK, same H1 discipline as other refs.
+    taxRateId: uuid("tax_rate_id"),
     ...timestamps,
     ...actor,
     ...softDelete,
@@ -102,6 +107,11 @@ export const category = pgTable(
     unique("category_tenantId_code_uq").on(table.tenantId, table.code),
     index("category_tenantId_idx").on(table.tenantId),
     index("category_parentCategoryId_idx").on(table.parentCategoryId),
+    foreignKey({
+      columns: [table.tenantId, table.taxRateId],
+      foreignColumns: [taxRate.tenantId, taxRate.id],
+      name: "category_tax_rate_composite_fk",
+    }),
   ]
 );
 
@@ -171,6 +181,10 @@ export const product = pgTable(
     }),
     oversellPolicy: text("oversell_policy", { enum: OVERSELL_POLICIES }),
     expiryPolicy: text("expiry_policy", { enum: EXPIRY_POLICIES }),
+    // Tax classification seam (Shopix design §4): resolved product → category
+    // → tenant-default (the active "standard" tax_rate) via the settings
+    // resolver. Bare uuid + composite FK, same H1 discipline as other refs.
+    taxRateId: uuid("tax_rate_id"),
     // Money minor units are int8 (bigint) — int4 caps at ~$21M, too small for an
     // enterprise/wholesale ERP. mode:"number" keeps a JS number (safe to 2^53).
     priceMinor: bigint("price_minor", { mode: "number" }).notNull(),
@@ -188,6 +202,11 @@ export const product = pgTable(
     index("product_baseUomId_idx").on(table.baseUomId),
     // Composite-FK target (Phase 3 #5).
     unique("product_tenant_id_uq").on(table.tenantId, table.id),
+    foreignKey({
+      columns: [table.tenantId, table.taxRateId],
+      foreignColumns: [taxRate.tenantId, taxRate.id],
+      name: "product_tax_rate_composite_fk",
+    }),
   ]
 );
 

@@ -163,6 +163,45 @@
   123→**125** (+2) + api stayed **77** (backend-only port adds no router-integration tests), zero
   skips, frozen costing byte-identical, `bun -F web build` green, zero `apps/web/**` files touched.
 
+### Shopix design-sequence step 3 — real tax engine wired into `commerce.quote` (2026-07-03, on `master`)
+- **Scope:** `feat/production-readiness-completion` tranche-1 fast-forward-merged to `master` and
+  pushed (CI green); confirmed `feature/storefront-commerce`'s tip is exactly the already-ported
+  catalog commit (`1404ff9`) — nothing further to port for Shopix, so build sequence step 3
+  (design doc §4, the tax engine) is genuinely new work. Found a SECOND, unrelated tax engine
+  already live (`5bfb9e2`, restored onboarding work): a single tenant-wide active-rate model
+  (`tax_rate.kind = "sales"`) used by POS (`pos.quote`/`pos.createSale` via
+  `resolveActiveSalesTaxRate`/`calculateSalesTaxLines`). Extended it in place rather than forking
+  a parallel system — widened `TAX_RATE_KINDS` to `["standard","zero","exempt"]` (data-migrated
+  existing `"sales"` rows to `"standard"` in the same migration), added `is_inclusive` (reserved,
+  v1 stays exclusive), and added a nullable `taxRateId` composite-FK column on `product`/`category`
+  for per-item classification.
+- **New service (`packages/db/src/services/tax.ts`):** `calculateQuoteTax` resolves EACH line's
+  rate product → category → tenant-default (`resolveActiveSalesTaxRate`, unchanged, still filters
+  `kind="standard"` — POS behavior is unaffected since existing `"sales"` rows became `"standard"`)
+  via the existing settings-resolver, batches the explicit-rate lookup (no N+1), and computes tax
+  via the shared `mulDivRound` primitive — a separate WRAPPER sharing the `tax_rate` table and
+  rounding primitive with POS, not a forked tax system (same "shared primitives, not policy"
+  pattern as bond/GRN). Public `taxBreakdown` deliberately omits the internal `taxRateId` uuid
+  (allow-list discipline).
+- **Wired into `commerce.ts`:** `quote` now computes real per-line tax and a real `totalMinor`
+  (was hardcoded `taxMinor: 0` everywhere); removed the `tax: {status:"blocked"}` skeleton
+  (`checkout` stays blocked — cart/checkout is the next design-sequence step). `publicProductRows`
+  now also selects `categoryTaxRateId`/`productTaxRateId` for the resolver (allow-list projection
+  unchanged — `mapCatalogItem` still explicit-field-constructs, no leak).
+- **Tests:** new DB-gated `tax.rls.test.ts` (product-level classification beats tenant default;
+  category-level classification when product has none; graceful zero-tax with no rate configured
+  at all — never a crash/fabricated rate). Extended `commerce.integration.test.ts`: seeded a 14%
+  standard VAT rate for the test tenant, asserted the quote test now returns real
+  `taxMinor`/`totalMinor`/`taxBreakdown`, added a second tenant-isolation case (no rate configured
+  → zero tax). Fixed a real type error surfaced by the schema narrowing: the onboarding wizard's
+  first-tax-rate seed (`vs1.ts`) hardcoded `kind: "sales"` — updated to `"standard"`.
+- **Gate (fresh disposable PG18, full chain 0000→0030):** check-types 7/7, ultracite clean (5
+  files auto-fixed formatting), mojibake clean, **db 125→128 (+3) + api 78 (+1, was 77 pre-merge)**
+  zero skips, frozen `costing.ts`/`costing.rls.test.ts` byte-identical, `bun -F web build` green,
+  journal/SQL parity 31/31, `postgres-central` confirmed untouched after every gate-db cycle.
+  Not yet committed/pushed — money-correctness change on a public endpoint stays on the careful
+  path even under the solo-dev fast loop.
+
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing
   guardrails: gate suite via `scripts/gate-db.sh`, hard prohibitions, defect-class checklist,

@@ -254,7 +254,7 @@ export const onboardingRouter = {
           code: input.taxCode.toUpperCase(),
           name: input.taxName,
           rateBps: input.taxRateBps,
-          kind: "sales",
+          kind: "standard",
           createdBy: actorUserId,
         });
       });

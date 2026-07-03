@@ -1,4 +1,10 @@
-import { db, schema, type TenantTransaction, withTenant } from "@RetailOS/db";
+import {
+  db,
+  schema,
+  services,
+  type TenantTransaction,
+  withTenant,
+} from "@RetailOS/db";
 import { ORPCError } from "@orpc/server";
 import { and, asc, eq, ilike, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -10,18 +16,15 @@ import { storefrontProcedure } from "../storefront";
 // session/permission. DTOs are strict allow-lists (design §1.3) — only the listed
 // fields ship; cost/margin/qty/internal ids/other-tenant data are never exposed.
 //
-// Phase C first backend slice: hostname→tenant gateway + public-safe catalog/PDP
-// + quote skeleton. The current schema has no explicit public slug, publish flag,
-// tax-rate table, cart table, reservation, payment, or online-order model yet, so
-// this slice uses `product.sku` as the public handle and marks availability/tax/
-// checkout seams explicitly blocked instead of inventing hidden policy.
+// Phase C: hostname→tenant gateway + public-safe catalog/PDP + real-tax quote
+// (design §4 — `commerce.quote` resolves product → category → tenant-default
+// via `services.calculateQuoteTax`, the same `tax_rate`/`mulDivRound`
+// primitives POS uses). The schema has no explicit public slug, publish flag,
+// cart table, reservation, or online-order model yet, so this slice uses
+// `product.sku` as the public handle and marks checkout explicitly blocked
+// instead of inventing hidden policy.
 
 const quoteBlockers = {
-  tax: {
-    status: "blocked" as const,
-    blocker:
-      "Real storefront tax rates are not modelled yet; v1 quote carries a zero-tax seam only.",
-  },
   checkout: {
     status: "blocked" as const,
     blocker:
@@ -53,11 +56,13 @@ const publicQuoteInput = z.object({
 interface ProductRow {
   categoryCode: string | null;
   categoryName: string | null;
+  categoryTaxRateId: string | null;
   currency: string;
   handle: string;
   name: string;
   priceMinor: number;
   productId: string;
+  productTaxRateId: string | null;
   scale: number;
 }
 
@@ -144,6 +149,8 @@ function publicProductRows(
       scale: schema.product.scale,
       categoryName: schema.category.name,
       categoryCode: schema.category.code,
+      categoryTaxRateId: schema.category.taxRateId,
+      productTaxRateId: schema.product.taxRateId,
     })
     .from(schema.product)
     .leftJoin(
@@ -280,23 +287,17 @@ export const commerceRouter = {
           limit: input.lines.length,
         });
         const byHandle = new Map(rows.map((row) => [row.handle, row]));
-        const lines = input.lines.map((line) => {
+        const resolvedLines = input.lines.map((line) => {
           const product = byHandle.get(line.handle);
           if (!product) {
             throw new ORPCError("NOT_FOUND", {
               message: "Product not found for this storefront",
             });
           }
-          const lineSubtotalMinor = product.priceMinor * line.quantity;
           return {
-            handle: product.handle,
-            name: product.name,
+            product,
             quantity: line.quantity,
-            unitPriceMinor: product.priceMinor,
-            lineSubtotalMinor,
-            discountMinor: 0,
-            taxMinor: 0,
-            lineTotalMinor: lineSubtotalMinor,
+            lineSubtotalMinor: product.priceMinor * line.quantity,
           };
         });
         const first = rows.at(0);
@@ -313,20 +314,49 @@ export const commerceRouter = {
             message: "A storefront quote must use one currency and scale",
           });
         }
+
+        // Real tax (design §4): resolves product -> category -> the tenant's
+        // active standard rate per line, never trusted from the client.
+        const taxResult = await services.calculateQuoteTax(
+          tx,
+          resolvedLines.map((line) => ({
+            categoryTaxRateId: line.product.categoryTaxRateId,
+            lineBaseMinor: line.lineSubtotalMinor,
+            productTaxRateId: line.product.productTaxRateId,
+          }))
+        );
+
+        const lines = resolvedLines.map((line, index) => {
+          const lineTaxMinor = taxResult.lines[index]?.lineTaxMinor ?? 0;
+          const discountMinor = 0;
+          return {
+            handle: line.product.handle,
+            name: line.product.name,
+            quantity: line.quantity,
+            unitPriceMinor: line.product.priceMinor,
+            lineSubtotalMinor: line.lineSubtotalMinor,
+            discountMinor,
+            taxMinor: lineTaxMinor,
+            lineTotalMinor:
+              line.lineSubtotalMinor - discountMinor + lineTaxMinor,
+          };
+        });
         const subtotalMinor = lines.reduce(
           (sum, line) => sum + line.lineSubtotalMinor,
           0
         );
+        const discountMinor = 0;
         return {
           schemaVersion: 1 as const,
           currency: first.currency,
           scale: first.scale,
           lines,
+          taxBreakdown: taxResult.taxBreakdown,
           totals: {
             subtotalMinor,
-            discountMinor: 0,
-            taxMinor: 0,
-            totalMinor: subtotalMinor,
+            discountMinor,
+            taxMinor: taxResult.taxMinor,
+            totalMinor: subtotalMinor - discountMinor + taxResult.taxMinor,
           },
           ...quoteBlockers,
         };

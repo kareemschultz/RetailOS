@@ -60,6 +60,7 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
         await tx.delete(schema.sku);
         await tx.delete(schema.product);
         await tx.delete(schema.category);
+        await tx.delete(schema.taxRate);
       });
     await cleanTenantCatalog(ORG_A);
     await cleanTenantCatalog(ORG_B);
@@ -89,6 +90,15 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
     ]);
 
     await withTenant(db, ORG_A, async (tx) => {
+      await tx.insert(schema.taxRate).values({
+        tenantId: ORG_A,
+        code: "STD-VAT",
+        name: "Standard VAT",
+        kind: "standard",
+        rateBps: 1400,
+        createdBy: "seed-user",
+        updatedBy: "seed-user",
+      });
       const category = (
         await tx
           .insert(schema.category)
@@ -289,7 +299,7 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
     expect(JSON.stringify(res)).not.toMatch(PUBLIC_DTO_LEAK_RE);
   });
 
-  it("returns a quote skeleton using public handles and explicit tax/cart blockers", async () => {
+  it("returns a real-tax quote (product falls back to the tenant standard rate) with an explicit cart blocker", async () => {
     const res = await call(
       appRouter.commerce.quote,
       { lines: [{ handle: "coffee-beans", quantity: 2 }] },
@@ -307,26 +317,40 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
           unitPriceMinor: 1250,
           lineSubtotalMinor: 2500,
           discountMinor: 0,
-          taxMinor: 0,
-          lineTotalMinor: 2500,
+          taxMinor: 350,
+          lineTotalMinor: 2850,
         },
+      ],
+      taxBreakdown: [
+        { baseMinor: 2500, name: "Standard VAT", rateBps: 1400, taxMinor: 350 },
       ],
       totals: {
         subtotalMinor: 2500,
         discountMinor: 0,
-        taxMinor: 0,
-        totalMinor: 2500,
-      },
-      tax: {
-        status: "blocked",
-        blocker:
-          "Real storefront tax rates are not modelled yet; v1 quote carries a zero-tax seam only.",
+        taxMinor: 350,
+        totalMinor: 2850,
       },
       checkout: {
         status: "blocked",
         blocker:
           "Cart persistence, reservation, checkout intent, payment provider, and online order writes are deferred to the next Storefront/Commerce slice.",
       },
+    });
+    expect(JSON.stringify(res)).not.toMatch(PUBLIC_DTO_LEAK_RE);
+  });
+
+  it("charges zero tax when the storefront tenant has no rate configured", async () => {
+    const res = await call(
+      appRouter.commerce.quote,
+      { lines: [{ handle: "beta-private-product", quantity: 1 }] },
+      { context: makeStorefrontCtx(DOMAIN_B) }
+    );
+    expect(res.taxBreakdown).toEqual([]);
+    expect(res.totals).toEqual({
+      subtotalMinor: 9999,
+      discountMinor: 0,
+      taxMinor: 0,
+      totalMinor: 9999,
     });
     expect(JSON.stringify(res)).not.toMatch(PUBLIC_DTO_LEAK_RE);
   });
