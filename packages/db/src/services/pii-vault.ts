@@ -1,4 +1,3 @@
-import { env } from "@RetailOS/env/server";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import * as schema from "../schema";
@@ -10,13 +9,20 @@ import type { TenantTransaction } from "../tenant";
 // the wrapped DEK — every field ciphertext becomes permanently undecryptable
 // (crypto-shredding), so `erasePiiSubject` never touches the field rows or
 // any operational record that references the subject.
+//
+// Reads `process.env` directly rather than `@RetailOS/env/server` — no other
+// packages/db service imports the validated env singleton (only the package
+// entry `index.ts` does, for DATABASE_URL), and doing so here would run
+// eager env-schema validation at module-import time, crashing any test file
+// that statically imports this module under a DB-less CI job (VS#1 Commit 7
+// lesson — see lessons-learned.md).
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
 function getMasterKey(): Buffer {
-  const base64 = env.PII_VAULT_MASTER_KEY_BASE64;
+  const base64 = process.env.PII_VAULT_MASTER_KEY_BASE64;
   if (!base64) {
     throw new Error(
       "PII_VAULT_MASTER_KEY_BASE64 is not configured — cannot perform PII vault operations"
