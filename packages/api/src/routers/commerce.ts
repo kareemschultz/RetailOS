@@ -53,6 +53,22 @@ const publicQuoteInput = z.object({
     .max(50),
 });
 
+// v1 guest token = the customer id itself (design §5/§10 — see
+// commerce-cart.ts for the reasoning). Every cart call re-submits it.
+const cartAuthInput = z.object({
+  cartId: z.uuid(),
+  customerId: z.uuid(),
+});
+
+const cartAddLineInput = cartAuthInput.extend({
+  handle: z.string().min(1),
+  quantity: z.number().int().positive(),
+});
+
+const cartRemoveLineInput = cartAuthInput.extend({
+  cartLineId: z.uuid(),
+});
+
 interface ProductRow {
   categoryCode: string | null;
   categoryName: string | null;
@@ -129,11 +145,14 @@ function mapCatalogItem(
 
 function publicProductRows(
   tx: TenantTransaction,
-  opts: { handles?: string[]; q?: string; limit: number }
+  opts: { handles?: string[]; productIds?: string[]; q?: string; limit: number }
 ): Promise<ProductRow[]> {
   const conditions = [isNull(schema.product.deletedAt)];
   if (opts.handles && opts.handles.length > 0) {
     conditions.push(inArray(schema.product.sku, opts.handles));
+  }
+  if (opts.productIds && opts.productIds.length > 0) {
+    conditions.push(inArray(schema.product.id, opts.productIds));
   }
   if (opts.q) {
     const search = ilike(schema.product.name, `%${opts.q}%`);
@@ -186,6 +205,106 @@ function publicImages(tx: TenantTransaction, productIds: string[]) {
       asc(schema.productImage.sortOrder),
       asc(schema.productImage.createdAt)
     );
+}
+
+// The cart service throws plain Error (not ORPCError) — mapped here at the
+// router boundary, same convention as the other service-layer routers.
+function mapCartError(error: unknown): never {
+  if (error instanceof Error && error.message.includes("not found")) {
+    throw new ORPCError("NOT_FOUND", { message: error.message });
+  }
+  if (error instanceof Error) {
+    throw new ORPCError("BAD_REQUEST", { message: error.message });
+  }
+  throw error;
+}
+
+// Shared cart DTO builder: fetches the cart's lines, re-prices/re-taxes them
+// from CURRENT product rows (never the stored line — design §5, the
+// authoritative total is always a fresh quote), and returns the full public
+// cart view. `cartLineId` is intentionally exposed (renamed `lineId`) — the
+// cart owner needs it to target `cartRemoveLine`; this is not internal
+// product/business data, and the cart is unreadable without the bearer
+// customerId/cartId pair.
+async function buildCartResponse(
+  tx: TenantTransaction,
+  cartId: string,
+  customerId: string
+) {
+  const cart = await services.getCart(tx, { cartId, customerId });
+  if (cart.lines.length === 0) {
+    return {
+      id: cart.id,
+      status: cart.status,
+      currency: null,
+      scale: null,
+      lines: [],
+      taxBreakdown: [],
+      totals: { subtotalMinor: 0, taxMinor: 0, totalMinor: 0 },
+    };
+  }
+  const rows = await publicProductRows(tx, {
+    productIds: cart.lines.map((line) => line.productId),
+    limit: cart.lines.length,
+  });
+  const byProductId = new Map(rows.map((row) => [row.productId, row]));
+  const first = rows.at(0);
+  if (!first) {
+    throw new ORPCError("NOT_FOUND", {
+      message: "Cart products are no longer available in this storefront",
+    });
+  }
+  const mixedCurrency = rows.some(
+    (row) => row.currency !== first.currency || row.scale !== first.scale
+  );
+  if (mixedCurrency) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "A storefront cart must use one currency and scale",
+    });
+  }
+  const quoteLines = cart.lines.map((line) => {
+    const product = byProductId.get(line.productId);
+    if (!product) {
+      throw new ORPCError("NOT_FOUND", {
+        message: "A cart item is no longer available in this storefront",
+      });
+    }
+    return {
+      categoryTaxRateId: product.categoryTaxRateId,
+      currency: product.currency,
+      name: product.name,
+      priceMinor: product.priceMinor,
+      productId: product.productId,
+      productTaxRateId: product.productTaxRateId,
+      qty: line.qty,
+      scale: product.scale,
+    };
+  });
+  const quote = await services.buildCartQuote(tx, quoteLines);
+  return {
+    id: cart.id,
+    status: cart.status,
+    currency: first.currency,
+    scale: first.scale,
+    // Explicit field list (not a spread of the quote line) — `productId` is
+    // internal and must never reach the public response; `handle` is the
+    // public identifier.
+    lines: cart.lines.map((line, index) => {
+      const quoted = quote.lines[index];
+      return {
+        lineId: line.id,
+        handle: byProductId.get(line.productId)?.handle ?? null,
+        name: quoted?.name ?? null,
+        qty: quoted?.qty ?? line.qty,
+        unitPriceMinor: quoted?.unitPriceMinor ?? null,
+        lineSubtotalMinor: quoted?.lineSubtotalMinor ?? null,
+        lineTaxMinor: quoted?.lineTaxMinor ?? null,
+        lineTotalMinor: quoted?.lineTotalMinor ?? null,
+      };
+    }),
+    taxBreakdown: quote.taxBreakdown,
+    totals: quote.totals,
+  };
 }
 
 export const commerceRouter = {
@@ -360,6 +479,75 @@ export const commerceRouter = {
           },
           ...quoteBlockers,
         };
+      })
+    ),
+
+  // --- Cart (design §5) ----------------------------------------------------
+  // Server-persisted only once a guest/customer principal exists — this is
+  // that principal (`cartStart` mints both in one call). See
+  // `commerce-cart.ts` for the v1 guest-token reasoning (the customer id
+  // itself, an opaque bearer credential). Anonymous browsing/carting never
+  // calls these; a real checkout (next Storefront/Commerce slice) is still
+  // blocked (`quoteBlockers.checkout`).
+
+  cartStart: storefrontProcedure.handler(({ context }) =>
+    withTenant(db, context.storefront.tenantId, (tx) =>
+      services.startGuestCart(tx, context.storefront.tenantId)
+    )
+  ),
+
+  cartAddLine: storefrontProcedure
+    .input(cartAddLineInput)
+    .handler(({ context, input }) =>
+      withTenant(db, context.storefront.tenantId, async (tx) => {
+        const row = (
+          await publicProductRows(tx, { handles: [input.handle], limit: 1 })
+        ).at(0);
+        if (!row) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Product not found for this storefront",
+          });
+        }
+        try {
+          await services.addCartLine(tx, context.storefront.tenantId, {
+            cartId: input.cartId,
+            customerId: input.customerId,
+            productId: row.productId,
+            qty: input.quantity,
+          });
+          return await buildCartResponse(tx, input.cartId, input.customerId);
+        } catch (error) {
+          return mapCartError(error);
+        }
+      })
+    ),
+
+  cartRemoveLine: storefrontProcedure
+    .input(cartRemoveLineInput)
+    .handler(({ context, input }) =>
+      withTenant(db, context.storefront.tenantId, async (tx) => {
+        try {
+          await services.removeCartLine(tx, {
+            cartId: input.cartId,
+            cartLineId: input.cartLineId,
+            customerId: input.customerId,
+          });
+          return await buildCartResponse(tx, input.cartId, input.customerId);
+        } catch (error) {
+          return mapCartError(error);
+        }
+      })
+    ),
+
+  cartGet: storefrontProcedure
+    .input(cartAuthInput)
+    .handler(({ context, input }) =>
+      withTenant(db, context.storefront.tenantId, async (tx) => {
+        try {
+          return await buildCartResponse(tx, input.cartId, input.customerId);
+        } catch (error) {
+          return mapCartError(error);
+        }
       })
     ),
 };

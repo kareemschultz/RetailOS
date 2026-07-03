@@ -199,8 +199,62 @@
   files auto-fixed formatting), mojibake clean, **db 125→128 (+3) + api 78 (+1, was 77 pre-merge)**
   zero skips, frozen `costing.ts`/`costing.rls.test.ts` byte-identical, `bun -F web build` green,
   journal/SQL parity 31/31, `postgres-central` confirmed untouched after every gate-db cycle.
-  Not yet committed/pushed — money-correctness change on a public endpoint stays on the careful
-  path even under the solo-dev fast loop.
+  **Committed `b1774a4`, pushed to `origin/master`, CI green (4/4 jobs). NOT yet deployed to
+  prod** — blocked on an active Infisical session in this environment (`infisical user get` shows
+  no logged-in user, no `INFISICAL_TOKEN`); needs the owner to authenticate this session or deploy
+  directly. The code side is fully ready (migration 0030 is a low-risk expand-only change).
+
+### Shopix design-sequence step 4 — PII vault + guest customer + cart (2026-07-03, on `master`)
+- **Scope:** continued the design doc's build sequence (§13). Step 4 = "Cart (§5) + customer/guest
+  principal (§10, §1.4)". Found NOTHING further to port from `feature/storefront-commerce` (its
+  tip is exactly the already-merged catalog commit), so this is genuinely new work, per the Fable
+  master plan Phase C.
+- **PII vault (charter §25, design §10) — did not exist anywhere in the codebase; built first
+  since checkout (next step) needs it and retrofitting PII out of operational columns later is a
+  painful migration.** `pii_vault_subject` (a random 32-byte DEK per subject, wrapped AES-256-GCM
+  under `PII_VAULT_MASTER_KEY_BASE64`) + `pii_vault_field` (each field independently encrypted
+  under the subject's unwrapped DEK). Right-to-erasure = nulling `wrapped_dek` — crypto-shredding,
+  no row deletes, matching the charter's carve-out from the no-hard-delete rule. New env var
+  `PII_VAULT_MASTER_KEY_BASE64` (optional at the schema level; any vault call throws a clear error
+  if unset) — **added to local `apps/server/.env` (gitignored) for dev/tests; MUST be added to
+  Infisical `/credentials/retailos` prod before any code path that captures real PII goes live**
+  (checkout, next step — not yet built, so nothing production-facing depends on it today).
+- **`customer` (minimal, do NOT pull Phase-7 CRM forward):** `isGuest` + nullable
+  `pii_subject_id` — a guest that never checks out may have zero PII captured. **`cart`/`cart_line`
+  (design §5):** server-persisted only once a guest/customer principal exists; v1 stays at
+  PRODUCT-handle granularity (same as `commerce.quote`, no SKU resolution yet — checkout is what
+  needs SKU-level cell identity, not cart); the authoritative total is always a FRESH
+  `calculateQuoteTax` call from current product rows, never a stored line price.
+- **v1 guest token = the customer id itself** (a server-minted, unguessable uuid), an opaque
+  bearer credential the client re-submits — not a dedicated signed/expiring token (design §1.4).
+  Documented as a deliberate scope decision, not silently skipped.
+- **New router endpoints (`commerce.ts`, all `storefrontProcedure`, public/anonymous):**
+  `cartStart` (mints guest customer + cart), `cartAddLine` (merges qty on repeat add, not
+  duplicate rows), `cartRemoveLine` (real delete — cart lines are ephemeral pre-checkout state,
+  not audited/financial), `cartGet`. Shared `buildCartResponse` re-quotes from current product
+  rows every call. Public DTO discipline: `id`/`customerId`/`lineId` are legitimate (the client's
+  own bearer credentials for its own cart), but `productId` is explicitly excluded from every line
+  (field-listed, not spread) — a narrower `CART_DTO_LEAK_RE` documents why the cart response is
+  allowed to differ from the strict catalog/quote leak regex.
+- **Tests:** new DB-gated `pii-vault.rls.test.ts` (round-trip encrypt/decrypt never stores
+  plaintext; upsert not duplicate; crypto-shred makes the field permanently undecryptable;
+  tenant-isolated under RLS) and `commerce-cart.rls.test.ts` (start/add/merge/remove; wrong-
+  customer rejection; authoritative quote from current prices). Extended
+  `commerce.integration.test.ts`: full cart lifecycle through the router (start → add → merge →
+  remove), cross-customer rejection, cross-tenant isolation.
+  Also fixed a real turbo cache-correctness gap found while wiring this: `PII_VAULT_MASTER_KEY_BASE64`
+  wasn't declared on the `test` task, so turbo's strict-env mode stripped it and every PII vault
+  test failed with "not configured" even with the var exported — added it to `turbo.json`'s `test`
+  task `env` (hash-affecting, not `passThroughEnv` — it changes pass/fail, not just skip/run, so a
+  stale cache could mask the failure per the 2026-06-22 lesson).
+- **Gate (fresh disposable PG18, full chain 0000→0031):** check-types 7/7, ultracite clean (4
+  top-level-regex hoists), mojibake clean, **db 128→135 (+7) + api 78→81 (+3)** zero skips, frozen
+  `costing.ts`/`costing.rls.test.ts` byte-identical, `bun -F web build` green, journal/SQL parity
+  32/32, `postgres-central` confirmed untouched after every gate-db cycle. **Stopped explicitly
+  before Step 5 (checkout)** — the design doc's own "signature-risk surface" (atomic stock
+  deduction, canonical multi-cell lock ordering, idempotent payment confirmation, order state
+  machine, GL event decomposition) — deserves its own dedicated build→adversarial-gate→
+  live-verify pass, not a rushed continuation. Not yet committed.
 
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing

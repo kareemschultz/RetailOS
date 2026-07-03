@@ -33,6 +33,13 @@ export const env = createEnv({
     // (§25) — set in Infisical, never committed.
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
+    // PII vault master key (charter §25 envelope encryption): base64-encoded
+    // 32 bytes, wraps each subject's per-record DEK. Optional at the env-schema
+    // level so environments that never touch the vault don't fail validation;
+    // any vault operation throws a clear error if this is unset. Source =
+    // self-hosted Vault/KMS/customer-managed key in prod; a random value in
+    // Infisical for now (rotate by re-wrapping — out of scope for v1).
+    PII_VAULT_MASTER_KEY_BASE64: z.string().optional(),
   },
   runtimeEnv: process.env,
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

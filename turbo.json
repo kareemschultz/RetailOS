@@ -18,7 +18,8 @@
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
         "CORS_ORIGIN",
-        "DEPLOYMENT_MODE"
+        "DEPLOYMENT_MODE",
+        "PII_VAULT_MASTER_KEY_BASE64"
       ]
     },
     "dev": {

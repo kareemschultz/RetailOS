@@ -14,6 +14,12 @@ const DOMAIN_B = "shop.beta.test";
 const NO_STOREFRONT_RE = /no storefront is configured/i;
 const PUBLIC_DTO_LEAK_RE =
   /\b(id|productId|skuId|tenantId|costing|margin|cogs|objectKey|trackingMode|removalStrategy|returnCostingPolicy|oversellPolicy|expiryPolicy|createdBy|updatedBy|deletedAt)\b/i;
+// Cart responses legitimately carry `id`/`customerId`/`lineId` — the client's
+// bearer credentials for the cart (design §5/§10). Every OTHER internal field
+// (product/sku ids, cost/policy columns) must still never appear.
+const CART_NOT_FOUND_RE = /not found/i;
+const CART_DTO_LEAK_RE =
+  /\b(productId|skuId|tenantId|costing|margin|cogs|objectKey|trackingMode|removalStrategy|returnCostingPolicy|oversellPolicy|expiryPolicy|createdBy|updatedBy|deletedAt)\b/i;
 
 // A storefront request context: anonymous (no session), carrying only the Host
 // header the gateway resolves from.
@@ -55,6 +61,11 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
     const { withTenant } = await import("@RetailOS/db");
     const cleanTenantCatalog = (tenantId: string) =>
       withTenant(db, tenantId, async (tx) => {
+        await tx.delete(schema.cartLine);
+        await tx.delete(schema.cart);
+        await tx.delete(schema.customer);
+        await tx.delete(schema.piiVaultField);
+        await tx.delete(schema.piiVaultSubject);
         await tx.delete(schema.productImage);
         await tx.delete(schema.barcode);
         await tx.delete(schema.sku);
@@ -353,6 +364,113 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
       totalMinor: 9999,
     });
     expect(JSON.stringify(res)).not.toMatch(PUBLIC_DTO_LEAK_RE);
+  });
+
+  it("cart: starts, adds/merges a line, and returns an authoritative re-taxed total", async () => {
+    const started = await call(
+      appRouter.commerce.cartStart,
+      {},
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    expect(started.status).toBe("active");
+    expect(started.lines).toEqual([]);
+
+    await call(
+      appRouter.commerce.cartAddLine,
+      {
+        cartId: started.id,
+        customerId: started.customerId,
+        handle: "coffee-beans",
+        quantity: 1,
+      },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    const afterSecondAdd = await call(
+      appRouter.commerce.cartAddLine,
+      {
+        cartId: started.id,
+        customerId: started.customerId,
+        handle: "coffee-beans",
+        quantity: 1,
+      },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+
+    // Two adds of the same product merge into one line (qty 2), and the total
+    // is a REAL re-quote (1250*2 = 2500 subtotal, 14% VAT = 350 tax), not
+    // anything echoed from the client.
+    expect(afterSecondAdd.lines).toHaveLength(1);
+    expect(afterSecondAdd.lines[0]).toEqual({
+      lineId: afterSecondAdd.lines[0]?.lineId,
+      handle: "coffee-beans",
+      name: "Coffee Beans",
+      qty: 2,
+      unitPriceMinor: 1250,
+      lineSubtotalMinor: 2500,
+      lineTaxMinor: 350,
+      lineTotalMinor: 2850,
+    });
+    expect(afterSecondAdd.totals).toEqual({
+      subtotalMinor: 2500,
+      taxMinor: 350,
+      totalMinor: 2850,
+    });
+    expect(JSON.stringify(afterSecondAdd)).not.toMatch(CART_DTO_LEAK_RE);
+
+    const lineId = afterSecondAdd.lines[0]?.lineId;
+    if (!lineId) {
+      throw new Error("expected a cart line id");
+    }
+    const afterRemove = await call(
+      appRouter.commerce.cartRemoveLine,
+      {
+        cartId: started.id,
+        customerId: started.customerId,
+        cartLineId: lineId,
+      },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    expect(afterRemove.lines).toEqual([]);
+    expect(afterRemove.totals).toEqual({
+      subtotalMinor: 0,
+      taxMinor: 0,
+      totalMinor: 0,
+    });
+  });
+
+  it("cart: rejects operations from the wrong customer bearer credential", async () => {
+    const owner = await call(
+      appRouter.commerce.cartStart,
+      {},
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    const stranger = await call(
+      appRouter.commerce.cartStart,
+      {},
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    await expect(
+      call(
+        appRouter.commerce.cartGet,
+        { cartId: owner.id, customerId: stranger.customerId },
+        { context: makeStorefrontCtx(DOMAIN_A) }
+      )
+    ).rejects.toThrow(CART_NOT_FOUND_RE);
+  });
+
+  it("cart: isolates carts by host-resolved tenant", async () => {
+    const cartOnA = await call(
+      appRouter.commerce.cartStart,
+      {},
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    await expect(
+      call(
+        appRouter.commerce.cartGet,
+        { cartId: cartOnA.id, customerId: cartOnA.customerId },
+        { context: makeStorefrontCtx(DOMAIN_B) }
+      )
+    ).rejects.toThrow(CART_NOT_FOUND_RE);
   });
 
   it("fails closed on an unknown host (NOT_FOUND, never a default tenant)", async () => {
