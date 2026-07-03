@@ -8961,6 +8961,39 @@ export const procurementRouter = {
         }
       });
     }),
+  reorderSuggestionToPurchaseOrderCreate: tenantProcedure
+    .input(
+      z.object({
+        reorderRuleId: z.string().uuid(),
+        supplierId: z.string().uuid(),
+        number: z.string().min(1).max(64),
+        currency: z.string().min(3).max(3),
+        scale: z.number().int().min(0).max(6).default(2),
+        unitCostMinor: z.number().int().nonnegative(),
+        notes: z.string().max(2000).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "procurement.manage");
+        try {
+          return await services.createPurchaseOrderFromReorderSuggestion(
+            tx,
+            ctx,
+            input
+          );
+        } catch (error) {
+          if (error instanceof services.ProcurementError) {
+            if (error.code === "NOT_FOUND") {
+              throw new ORPCError("NOT_FOUND", { message: error.message });
+            }
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          }
+          throw error;
+        }
+      });
+    }),
   goodsReceiptCreate: tenantProcedure
     .input(
       z.object({

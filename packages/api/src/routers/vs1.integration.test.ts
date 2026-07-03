@@ -50,6 +50,8 @@ const MISSING_USERS_MANAGE_RE = /Missing permission: users\.manage/;
 const MISSING_AUDIT_VIEW_RE = /Missing permission: audit\.view/;
 const MISSING_TRANSFER_PERM_RE = /Missing permission: inventory\.transfer/;
 const MISSING_BOND_PERM_RE = /Missing permission: bond\.receive/;
+const MISSING_PROCUREMENT_MANAGE_RE = /Missing permission: procurement\.manage/;
+const REORDER_RULE_NOT_FOUND_RE = /Reorder rule not found/;
 
 function makeCtx(userId: string, organizationId: string | null): Context {
   return {
@@ -91,6 +93,19 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.idempotencyKey);
         await tx.delete(schema.outboxEvent);
         await tx.delete(schema.auditLog);
+        // Procurement FIRST — import/bill/receipt/PO rows reference suppliers,
+        // companies, locations, products, SKUs, and stock-ledger movements.
+        await tx.delete(schema.importBatchLine);
+        await tx.delete(schema.importBatch);
+        await tx.delete(schema.landedCostAllocation);
+        await tx.delete(schema.landedCostPool);
+        await tx.delete(schema.supplierBillLine);
+        await tx.delete(schema.supplierBill);
+        await tx.delete(schema.goodsReceiptLine);
+        await tx.delete(schema.goodsReceipt);
+        await tx.delete(schema.purchaseOrderLine);
+        await tx.delete(schema.purchaseOrder);
+        await tx.delete(schema.supplier);
         // Bond release/receipt FIRST — they reference transfers, ledger rows,
         // locations, companies, products, SKUs and lots (FK-safe order).
         await tx.delete(schema.bondReleaseLine);
@@ -1167,12 +1182,65 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
       admin
     );
     expect(reorder?.suggestedQty).toBe(27);
+    const reorderSupplier = await call(
+      appRouter.procurement.supplierCreate,
+      { code: "REORDER", name: "Reorder Supplier" },
+      admin
+    );
+    const reorderPo = await call(
+      appRouter.procurement.reorderSuggestionToPurchaseOrderCreate,
+      {
+        currency: "USD",
+        number: "PO-REORDER-001",
+        reorderRuleId: rule.id,
+        supplierId: reorderSupplier.id,
+        unitCostMinor: 175,
+      },
+      admin
+    );
+    expect(reorderPo.status).toBe("draft");
+    expect(reorderPo.companyId).toBe(company.id);
+    expect(reorderPo.supplierId).toBe(reorderSupplier.id);
+    expect(reorderPo.lines).toEqual([
+      expect.objectContaining({
+        productId: avcoProduct.id,
+        qtyOrdered: 27,
+        skuId: avcoSku.id,
+        unitCostMinor: 175,
+      }),
+    ]);
+    await expect(
+      call(
+        appRouter.procurement.reorderSuggestionToPurchaseOrderCreate,
+        {
+          currency: "USD",
+          number: "PO-REORDER-CASHIER",
+          reorderRuleId: rule.id,
+          supplierId: reorderSupplier.id,
+          unitCostMinor: 175,
+        },
+        { context: makeCtx(CASHIER, ORG) }
+      )
+    ).rejects.toThrow(MISSING_PROCUREMENT_MANAGE_RE);
     const archivedRule = await call(
       appRouter.inventory.reorderRuleArchive,
       { id: rule.id },
       admin
     );
     expect(archivedRule.deletedAt).toBeTruthy();
+    await expect(
+      call(
+        appRouter.procurement.reorderSuggestionToPurchaseOrderCreate,
+        {
+          currency: "USD",
+          number: "PO-REORDER-ARCHIVED",
+          reorderRuleId: rule.id,
+          supplierId: reorderSupplier.id,
+          unitCostMinor: 175,
+        },
+        admin
+      )
+    ).rejects.toThrow(REORDER_RULE_NOT_FOUND_RE);
     const archivedLot = await call(
       appRouter.inventory.lotArchive,
       { id: lot.id },

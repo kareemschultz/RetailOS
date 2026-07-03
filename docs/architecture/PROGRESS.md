@@ -110,6 +110,23 @@
   stayed **77** (extension commits add no new router-integration tests) zero skips,
   `tenant-isolation-coverage` green (8 new tables covered), frozen costing byte-identical,
   `bun -F web build` green.
+- **Task 7 DONE:** ported reorder-suggestion → purchase-order conversion (source `315680d`).
+  `procurementRouter.reorderSuggestionToPurchaseOrderCreate` (permission `procurement.manage`)
+  + `services.createPurchaseOrderFromReorderSuggestion`: resolves the reorder rule's location/SKU
+  → company/product (rejecting NOT_FOUND for an archived/missing rule), re-evaluates
+  `evaluateReorder` at call time (rejects INVALID_STATE if the suggestion no longer applies —
+  never trusts a stale client-supplied quantity), then builds a single-line PO via the existing
+  `createPurchaseOrder` (H1 tuple guards inherited for free). No new migration — no new tenant
+  tables. Extended the existing mixed-AVCO+FIFO integration test with 3 new assertions (create via
+  reorder rule → PO `status: "draft"`/company/supplier/line match; cashier rejected
+  `Missing permission: procurement.manage`; archived rule rejected `Reorder rule not found`) plus
+  the hermetic-cleanup fix (11 new FK-safe `tx.delete()` calls for procurement tables, ordered
+  child-before-parent, ahead of the bond cleanup — a read/write-adjacent test now allocates
+  procurement rows so the suite must be rerunnable from a dirty DB, not just a fresh one). Gate:
+  check-types 7/7, ultracite clean, mojibake clean, fresh-chain 0000→0028 verified on disposable
+  PG18, db stayed **123** (no new db-level tests — router-only feature), api stayed **77** (new
+  assertions extend an existing test body rather than adding new `it()` blocks), zero skips,
+  frozen costing byte-identical, `bun -F web build` green.
 
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing

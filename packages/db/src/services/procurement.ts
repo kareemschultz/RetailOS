@@ -13,6 +13,7 @@ import {
   product,
   purchaseOrder,
   purchaseOrderLine,
+  reorderRule,
   sku,
   supplier,
   supplierBill,
@@ -21,6 +22,7 @@ import {
 import type { TenantTransaction } from "../tenant";
 import { recordAudit } from "./audit";
 import { applyValuation, resolveCostingMethod } from "./costing";
+import { evaluateReorder } from "./inventory";
 import { DomainEventType, emitEvent } from "./outbox";
 import { appendStockMovement } from "./stock-ledger";
 import type { ServiceContext } from "./types";
@@ -190,6 +192,79 @@ export async function createPurchaseOrder(
     after: { ...header, lines },
   });
   return { ...header, lines };
+}
+
+export interface CreatePurchaseOrderFromReorderSuggestionInput {
+  currency: string;
+  notes?: string | null;
+  number: string;
+  reorderRuleId: string;
+  scale?: number;
+  supplierId: string;
+  unitCostMinor: number;
+}
+
+export async function createPurchaseOrderFromReorderSuggestion(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  input: CreatePurchaseOrderFromReorderSuggestionInput
+) {
+  const rule = (
+    await tx
+      .select({
+        companyId: locationTable.companyId,
+        locationId: reorderRule.locationId,
+        productId: sku.productId,
+        skuId: reorderRule.skuId,
+      })
+      .from(reorderRule)
+      .innerJoin(locationTable, eq(locationTable.id, reorderRule.locationId))
+      .innerJoin(sku, eq(sku.id, reorderRule.skuId))
+      .where(
+        and(
+          eq(reorderRule.id, input.reorderRuleId),
+          eq(reorderRule.isActive, true),
+          sql`${reorderRule.deletedAt} IS NULL`,
+          sql`${locationTable.deletedAt} IS NULL`,
+          sql`${sku.deletedAt} IS NULL`
+        )
+      )
+      .limit(1)
+  ).at(0);
+  if (!rule) {
+    throw new ProcurementError("Reorder rule not found", "NOT_FOUND");
+  }
+
+  const suggestion = await evaluateReorder(tx, {
+    locationId: rule.locationId,
+    skuId: rule.skuId,
+  });
+  if (!suggestion || suggestion.suggestedQty <= 0) {
+    throw new ProcurementError(
+      "Reorder rule does not currently require purchasing",
+      "INVALID_STATE"
+    );
+  }
+
+  return createPurchaseOrder(tx, ctx, {
+    companyId: rule.companyId,
+    currency: input.currency,
+    lines: [
+      {
+        currency: input.currency,
+        description: `Reorder suggestion for ${rule.skuId}`,
+        productId: rule.productId,
+        qtyOrdered: suggestion.suggestedQty,
+        scale: input.scale,
+        skuId: rule.skuId,
+        unitCostMinor: input.unitCostMinor,
+      },
+    ],
+    notes: input.notes ?? null,
+    number: input.number,
+    scale: input.scale,
+    supplierId: input.supplierId,
+  });
 }
 
 export interface ReceivePurchaseOrderLineInput {
