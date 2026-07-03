@@ -78,6 +78,11 @@ services:
       AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # PII vault envelope-encryption master key (packages/db/src/services/pii-vault.ts).
+      # Not yet exercised by any live write path (Shopix guest checkout doesn't
+      # collect PII fields in v1), but wiring it now avoids a latent crash the
+      # moment a future write path calls createPiiSubject in prod.
+      PII_VAULT_MASTER_KEY_BASE64: ${PII_VAULT_MASTER_KEY_BASE64}
     networks: [pangolin, retailos-internal]
     restart: unless-stopped
     deploy:
