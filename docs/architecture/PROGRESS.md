@@ -13,6 +13,48 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### Shopix build-sequence step 5 — checkout / reservation seam (2026-07-03, on `master`, uncommitted)
+- **Scope:** design doc §6/§7/§9 — the project's signature-risk surface. `commerce-checkout.ts`:
+  `createCheckoutOrder` (coarse, non-binding availability check only; NO lock/deduction/COGS; marks
+  the cart "converted" so only one order per cart) + `confirmCheckout` (the atomic gate — canonical
+  lexicographic per-cell advisory-lock ordering, availability gate under the locks with a generic
+  `COMMERCE_UNAVAILABLE` error that reveals no numbers, then the frozen `appendStockMovement` +
+  `applyValuation` UNCONDITIONALLY per #8, real `sale`/`sale_line`/`tender` write, `sale.created`/
+  `payment.received` emitted with the SAME payload shape POS uses — channel-marked "online" — so
+  the unbuilt Phase-5 GL needs zero new consumer code). Idempotent via `runIdempotent` keyed on the
+  server-minted `checkoutIntentId` (never client-supplied), 30-min expiry.
+- **New schema:** `order`/`order_line` (`sale_id`/`number` stay NULL until `paid` — an order that
+  never pays never consumes a document number); `tender.method` widened with `"online"` (mock/manual
+  provider, design §9 — no real PSP call). Order/sale numbering reuses POS's exact `docnum:${tenantId}`
+  advisory lock, so sale numbers stay genuinely disjoint across channels.
+- **v1 scope decisions (documented, not silently narrowed):** exactly one sellable `location` and
+  exactly one active SKU per product required for checkout (no multi-location/multi-variant
+  selection yet); an availability-gate failure just throws and lets the order expire naturally
+  rather than trying to persist an "unavailable" transition inside the same about-to-roll-back
+  transaction; confirm uses the order-create-time price snapshot (no second re-quote) since the mock
+  provider's confirm is synchronous with create; per-line qty capped at 20 (cheap probe-range
+  defense) — a real per-IP/per-SKU rate-limit budget (Redis token bucket) is explicitly NOT built.
+- **Tests:** new DB-gated `commerce-checkout.rls.test.ts` (6 tests) proving the design doc's own
+  load-bearing claim: happy path with COGS stamp + real tender: idempotent repeat confirm (exactly
+  one stock movement); expired-intent rejection; generic-error-no-numbers-leaked rejection;
+  one-order-per-cart; and a genuine **concurrency test** — two real, separate-transaction confirms
+  racing for the last unit via `Promise.allSettled` — exactly one wins, the other gets
+  `COMMERCE_UNAVAILABLE`, and the ledger balance never goes negative. Extended
+  `commerce.integration.test.ts` with a full router-level `checkoutCreate`→`checkoutConfirm` flow +
+  an unavailable-stock rejection test; fixed 3 fixture-drift breaks in older catalog/quote tests
+  that the new checkout fixture (a second catalog-visible product) exposed.
+- **Gate (fresh disposable PG18, full chain 0000→0032):** check-types 7/7, ultracite clean,
+  mojibake clean, **db 128→141 (+13) + api 81→83 (+2)** zero skips, frozen
+  `costing.ts`/`costing.rls.test.ts` byte-identical, `bun -F web build` green, journal/SQL parity
+  33/33, `postgres-central` confirmed untouched after every gate-db cycle. Not yet committed —
+  about to commit + push (CI-green gate, then hold before prod deploy per the standing Infisical
+  auth blocker — see the Sonnet tranche-1 entry below).
+- **Deliberately STOPPED here** — Step 8 (storefront UI) is explicitly deferred (backend-only per
+  the Assembly Law); no further Shopix build steps remain unbuilt in the design doc's numbered
+  sequence beyond UI. `order.fulfilment_type=delivery`'s `delivery_address_subject_id` PII-vault
+  wiring is schema-ready but has no write path yet (v1 checkout only ever creates `pickup` orders
+  in practice — no UI/API surface passes `fulfilmentType:"delivery"` with an address).
+
 ### Sonnet tranche-1 execution — ✅ COMPLETE on `feat/production-readiness-completion` (2026-07-02)
 - Executed `docs/plans/2026-07-02-sonnet-tranche-1-ports-and-cleanup.md` per
   `docs/plans/sonnet-execution-playbook.md`. All 9 tasks DONE (task board IDs 19–27). Branch NOT

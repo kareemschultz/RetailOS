@@ -5,6 +5,7 @@ export * from "./audit";
 export * from "./bond";
 export * from "./bond_release";
 export * from "./commerce-cart";
+export * from "./commerce-checkout";
 export * from "./costing";
 export * from "./entitlements";
 export * from "./idempotency";

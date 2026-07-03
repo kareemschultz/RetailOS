@@ -20,6 +20,9 @@ const PUBLIC_DTO_LEAK_RE =
 const CART_NOT_FOUND_RE = /not found/i;
 const CART_DTO_LEAK_RE =
   /\b(productId|skuId|tenantId|costing|margin|cogs|objectKey|trackingMode|removalStrategy|returnCostingPolicy|oversellPolicy|expiryPolicy|createdBy|updatedBy|deletedAt)\b/i;
+const ORDER_NUMBER_RE = /^ORDER-/;
+const SALE_NUMBER_RE = /^SALE-/;
+const COMMERCE_UNAVAILABLE_RE = /COMMERCE_UNAVAILABLE/;
 
 // A storefront request context: anonymous (no session), carrying only the Host
 // header the gateway resolves from.
@@ -61,17 +64,27 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
     const { withTenant } = await import("@RetailOS/db");
     const cleanTenantCatalog = (tenantId: string) =>
       withTenant(db, tenantId, async (tx) => {
+        await tx.delete(schema.orderLine);
+        await tx.delete(schema.order);
         await tx.delete(schema.cartLine);
         await tx.delete(schema.cart);
         await tx.delete(schema.customer);
         await tx.delete(schema.piiVaultField);
         await tx.delete(schema.piiVaultSubject);
+        await tx.delete(schema.saleLine);
+        await tx.delete(schema.tender);
+        await tx.delete(schema.sale);
+        await tx.delete(schema.valuationLayer);
+        await tx.delete(schema.avgCost);
+        await tx.delete(schema.stockLedger);
         await tx.delete(schema.productImage);
         await tx.delete(schema.barcode);
         await tx.delete(schema.sku);
         await tx.delete(schema.product);
         await tx.delete(schema.category);
         await tx.delete(schema.taxRate);
+        await tx.delete(schema.location);
+        await tx.delete(schema.company);
       });
     await cleanTenantCatalog(ORG_A);
     await cleanTenantCatalog(ORG_B);
@@ -168,6 +181,85 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
         createdBy: "seed-user",
         updatedBy: "seed-user",
       });
+
+      // Checkout fixture: a sellable location + a SEPARATE, simply-costed
+      // product with real valued stock (coffee-beans is FIFO/mixed-method,
+      // not worth entangling with checkout's cost assertions).
+      const co = (
+        await tx
+          .insert(schema.company)
+          .values({ tenantId: ORG_A, name: "Acme Fulfilment Co" })
+          .returning()
+      ).at(0);
+      if (!co) {
+        throw new Error("Failed to seed checkout company");
+      }
+      const loc = (
+        await tx
+          .insert(schema.location)
+          .values({
+            tenantId: ORG_A,
+            companyId: co.id,
+            name: "Acme Storefront Fulfilment",
+            type: "store",
+            isSellable: true,
+          })
+          .returning()
+      ).at(0);
+      if (!loc) {
+        throw new Error("Failed to seed checkout location");
+      }
+      const widget = (
+        await tx
+          .insert(schema.product)
+          .values({
+            tenantId: ORG_A,
+            sku: "checkout-widget",
+            name: "Checkout Widget",
+            priceMinor: 2000,
+            currency: "USD",
+            scale: 2,
+            costingMethod: "avco",
+            createdBy: "seed-user",
+            updatedBy: "seed-user",
+          })
+          .returning()
+      ).at(0);
+      if (!widget) {
+        throw new Error("Failed to seed checkout widget product");
+      }
+      const widgetSku = (
+        await tx
+          .insert(schema.sku)
+          .values({
+            tenantId: ORG_A,
+            productId: widget.id,
+            code: "WIDGET-01",
+            costingMethod: "avco",
+            createdBy: "seed-user",
+            updatedBy: "seed-user",
+          })
+          .returning()
+      ).at(0);
+      if (!widgetSku) {
+        throw new Error("Failed to seed checkout widget sku");
+      }
+      const { services } = await import("@RetailOS/db");
+      const movement = await services.appendStockMovement(
+        tx,
+        { tenantId: ORG_A },
+        {
+          locationId: loc.id,
+          movementType: "receipt",
+          productId: widget.id,
+          skuId: widgetSku.id,
+          qtyDelta: 10,
+          unitCostMinor: 800,
+          costCurrency: "USD",
+          costScale: 2,
+        }
+      );
+      await services.applyValuation(tx, { tenantId: ORG_A }, movement);
     });
 
     await withTenant(db, ORG_B, async (tx) => {
@@ -247,9 +339,12 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
   });
 
   it("returns a public catalog allow-list with no ids, cost, policy, or object-key leakage", async () => {
+    // Scoped to just coffee-beans (the checkout fixture also seeds a
+    // catalog-visible "checkout-widget" product — there is no is_published
+    // curation yet, so every product is catalog-visible).
     const res = await call(
       appRouter.commerce.catalog,
-      { limit: 10 },
+      { limit: 10, q: "Coffee" },
       { context: makeStorefrontCtx(DOMAIN_A) }
     );
     expect(res.items).toHaveLength(1);
@@ -270,7 +365,7 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
   it("isolates public catalog rows by host-resolved tenant", async () => {
     const a = await call(
       appRouter.commerce.catalog,
-      { limit: 10 },
+      { limit: 10, q: "Coffee" },
       { context: makeStorefrontCtx(DOMAIN_A) }
     );
     const b = await call(
@@ -310,7 +405,7 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
     expect(JSON.stringify(res)).not.toMatch(PUBLIC_DTO_LEAK_RE);
   });
 
-  it("returns a real-tax quote (product falls back to the tenant standard rate) with an explicit cart blocker", async () => {
+  it("returns a real-tax quote (product falls back to the tenant standard rate)", async () => {
     const res = await call(
       appRouter.commerce.quote,
       { lines: [{ handle: "coffee-beans", quantity: 2 }] },
@@ -340,11 +435,6 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
         discountMinor: 0,
         taxMinor: 350,
         totalMinor: 2850,
-      },
-      checkout: {
-        status: "blocked",
-        blocker:
-          "Cart persistence, reservation, checkout intent, payment provider, and online order writes are deferred to the next Storefront/Commerce slice.",
       },
     });
     expect(JSON.stringify(res)).not.toMatch(PUBLIC_DTO_LEAK_RE);
@@ -471,6 +561,107 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
         { context: makeStorefrontCtx(DOMAIN_B) }
       )
     ).rejects.toThrow(CART_NOT_FOUND_RE);
+  });
+
+  it("checkout: full cart -> checkoutCreate -> checkoutConfirm writes a real sale, deducts stock, no leak", async () => {
+    const startedCart = await call(
+      appRouter.commerce.cartStart,
+      {},
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    await call(
+      appRouter.commerce.cartAddLine,
+      {
+        cartId: startedCart.id,
+        customerId: startedCart.customerId,
+        handle: "checkout-widget",
+        quantity: 2,
+      },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+
+    const created = await call(
+      appRouter.commerce.checkoutCreate,
+      { cartId: startedCart.id, customerId: startedCart.customerId },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    expect(created.status).toBe("payment_pending");
+    expect(created.currency).toBe("USD");
+    expect(created.totals).toEqual({
+      subtotalMinor: 4000,
+      taxMinor: 560, // 4000 * 14%
+      totalMinor: 4560,
+    });
+    expect(JSON.stringify(created)).not.toMatch(CART_DTO_LEAK_RE);
+
+    const confirmed = await call(
+      appRouter.commerce.checkoutConfirm,
+      { checkoutIntentId: created.checkoutIntentId },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    expect(confirmed.status).toBe("paid");
+    expect(confirmed.totalMinor).toBe(4560);
+    expect(confirmed.orderNumber).toMatch(ORDER_NUMBER_RE);
+    expect(confirmed.saleNumber).toMatch(SALE_NUMBER_RE);
+    expect(JSON.stringify(confirmed)).not.toMatch(CART_DTO_LEAK_RE);
+    // checkoutConfirm's response is intentionally NARROWER than the cart
+    // leak regex allows (no bearer ids at all) — assert the strict allow-list.
+    expect(Object.keys(confirmed).sort()).toEqual(
+      [
+        "currency",
+        "orderNumber",
+        "saleNumber",
+        "scale",
+        "status",
+        "totalMinor",
+      ].sort()
+    );
+
+    // A second confirm with the same intent is idempotent, not a double-sale.
+    const confirmedAgain = await call(
+      appRouter.commerce.checkoutConfirm,
+      { checkoutIntentId: created.checkoutIntentId },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    expect(confirmedAgain).toEqual(confirmed);
+  });
+
+  it("checkout: rejects with a generic COMMERCE_UNAVAILABLE when the order exceeds on-hand stock", async () => {
+    const startedCart = await call(
+      appRouter.commerce.cartStart,
+      {},
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    // 10 were seeded, the prior test already confirmed 2 -> 8 remain. 15 is
+    // within CHECKOUT_MAX_QTY_PER_LINE (20, a create-time cap) but exceeds
+    // on-hand, so this genuinely reaches the confirm-time availability gate.
+    await call(
+      appRouter.commerce.cartAddLine,
+      {
+        cartId: startedCart.id,
+        customerId: startedCart.customerId,
+        handle: "checkout-widget",
+        quantity: 15,
+      },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    const created = await call(
+      appRouter.commerce.checkoutCreate,
+      { cartId: startedCart.id, customerId: startedCart.customerId },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    let caught: unknown;
+    try {
+      await call(
+        appRouter.commerce.checkoutConfirm,
+        { checkoutIntentId: created.checkoutIntentId },
+        { context: makeStorefrontCtx(DOMAIN_A) }
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toMatch(COMMERCE_UNAVAILABLE_RE);
   });
 
   it("fails closed on an unknown host (NOT_FOUND, never a default tenant)", async () => {

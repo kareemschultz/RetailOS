@@ -170,6 +170,11 @@ export const TENDER_METHODS = [
   "cheque",
   "store_credit",
   "gift_card",
+  // Shopix mock/manual payment provider (design §9) — distinct from "card" so
+  // reporting/audit can tell an online-checkout mock settlement apart from an
+  // in-store card swipe. Widened here (expand-only CHECK); a real PSP later
+  // slots into the same value.
+  "online",
 ] as const;
 
 export const tender = pgTable(
@@ -201,7 +206,7 @@ export const tender = pgTable(
     }),
     check(
       "tender_method_chk",
-      sql`${table.method} IN ('cash','card','bank_transfer','mobile_money','cheque','store_credit','gift_card')`
+      sql`${table.method} IN ('cash','card','bank_transfer','mobile_money','cheque','store_credit','gift_card','online')`
     ),
     check("tender_amount_chk", sql`${table.amountMinor} >= 0`),
     // Tender math can never be impossible (Codex HIGH): change/settled are never

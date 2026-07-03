@@ -16,21 +16,11 @@ import { storefrontProcedure } from "../storefront";
 // session/permission. DTOs are strict allow-lists (design §1.3) — only the listed
 // fields ship; cost/margin/qty/internal ids/other-tenant data are never exposed.
 //
-// Phase C: hostname→tenant gateway + public-safe catalog/PDP + real-tax quote
-// (design §4 — `commerce.quote` resolves product → category → tenant-default
-// via `services.calculateQuoteTax`, the same `tax_rate`/`mulDivRound`
-// primitives POS uses). The schema has no explicit public slug, publish flag,
-// cart table, reservation, or online-order model yet, so this slice uses
-// `product.sku` as the public handle and marks checkout explicitly blocked
-// instead of inventing hidden policy.
-
-const quoteBlockers = {
-  checkout: {
-    status: "blocked" as const,
-    blocker:
-      "Cart persistence, reservation, checkout intent, payment provider, and online order writes are deferred to the next Storefront/Commerce slice.",
-  },
-};
+// Phase C build sequence: hostname->tenant gateway (step 1) + public catalog/
+// PDP (step 2) + real-tax quote (step 3, design §4) + PII vault/guest
+// customer/cart (step 4, design §5/§10) + checkout/reservation (step 5,
+// design §6/§7/§9 — commerce-checkout.ts). Storefront UI (step 8) is
+// deferred; this is backend-only.
 
 const publicCatalogInput = z.object({
   q: z.string().min(1).optional(),
@@ -67,6 +57,16 @@ const cartAddLineInput = cartAuthInput.extend({
 
 const cartRemoveLineInput = cartAuthInput.extend({
   cartLineId: z.uuid(),
+});
+
+const checkoutCreateInput = z.object({
+  cartId: z.uuid(),
+  customerId: z.uuid(),
+  fulfilmentType: z.enum(["pickup", "delivery"]).optional(),
+});
+
+const checkoutConfirmInput = z.object({
+  checkoutIntentId: z.string().min(1),
 });
 
 interface ProductRow {
@@ -210,6 +210,22 @@ function publicImages(tx: TenantTransaction, productIds: string[]) {
 // The cart service throws plain Error (not ORPCError) — mapped here at the
 // router boundary, same convention as the other service-layer routers.
 function mapCartError(error: unknown): never {
+  if (error instanceof Error && error.message.includes("not found")) {
+    throw new ORPCError("NOT_FOUND", { message: error.message });
+  }
+  if (error instanceof Error) {
+    throw new ORPCError("BAD_REQUEST", { message: error.message });
+  }
+  throw error;
+}
+
+// COMMERCE_UNAVAILABLE gets its own branch so the exact generic message
+// (design §1.5 — never reveals a threshold/on-hand number) passes through
+// unchanged, distinct from the other plain-Error -> ORPCError mappings.
+function mapCheckoutError(error: unknown): never {
+  if (error instanceof Error && error.message === "COMMERCE_UNAVAILABLE") {
+    throw new ORPCError("CONFLICT", { message: "COMMERCE_UNAVAILABLE" });
+  }
   if (error instanceof Error && error.message.includes("not found")) {
     throw new ORPCError("NOT_FOUND", { message: error.message });
   }
@@ -477,7 +493,6 @@ export const commerceRouter = {
             taxMinor: taxResult.taxMinor,
             totalMinor: subtotalMinor - discountMinor + taxResult.taxMinor,
           },
-          ...quoteBlockers,
         };
       })
     ),
@@ -487,8 +502,7 @@ export const commerceRouter = {
   // that principal (`cartStart` mints both in one call). See
   // `commerce-cart.ts` for the v1 guest-token reasoning (the customer id
   // itself, an opaque bearer credential). Anonymous browsing/carting never
-  // calls these; a real checkout (next Storefront/Commerce slice) is still
-  // blocked (`quoteBlockers.checkout`).
+  // calls these.
 
   cartStart: storefrontProcedure.handler(({ context }) =>
     withTenant(db, context.storefront.tenantId, (tx) =>
@@ -547,6 +561,84 @@ export const commerceRouter = {
           return await buildCartResponse(tx, input.cartId, input.customerId);
         } catch (error) {
           return mapCartError(error);
+        }
+      })
+    ),
+
+  // --- Checkout (design §6/§7/§9) -------------------------------------------
+  // The project's signature-risk surface — see commerce-checkout.ts for the
+  // full invariant (stock/COGS/sale commit ONLY inside `checkoutConfirm`,
+  // atomically with the availability gate, under canonically-ordered
+  // per-cell advisory locks). `checkoutCreate` is coarse and non-binding;
+  // `checkoutConfirm` is the mock/manual payment provider (design §9) — no
+  // payment details are accepted, it either succeeds (stock was available)
+  // or rejects generically.
+
+  checkoutCreate: storefrontProcedure
+    .input(checkoutCreateInput)
+    .handler(({ context, input }) =>
+      withTenant(db, context.storefront.tenantId, async (tx) => {
+        try {
+          const created = await services.createCheckoutOrder(
+            tx,
+            { tenantId: context.storefront.tenantId },
+            {
+              cartId: input.cartId,
+              customerId: input.customerId,
+              fulfilmentType: input.fulfilmentType,
+            }
+          );
+          const subtotalMinor = created.lines.reduce(
+            (sum, line) => sum + line.lineSubtotalMinor,
+            0
+          );
+          const taxMinor = created.lines.reduce(
+            (sum, line) => sum + line.lineTaxMinor,
+            0
+          );
+          return {
+            checkoutIntentId: created.checkoutIntentId,
+            currency: created.order.currency,
+            expiresAt: created.expiresAt.toISOString(),
+            orderId: created.order.id,
+            scale: created.order.scale,
+            status: created.order.status,
+            taxBreakdown: created.taxBreakdown,
+            totals: {
+              subtotalMinor,
+              taxMinor,
+              totalMinor: created.order.totalMinor,
+            },
+          };
+        } catch (error) {
+          return mapCheckoutError(error);
+        }
+      })
+    ),
+
+  checkoutConfirm: storefrontProcedure
+    .input(checkoutConfirmInput)
+    .handler(({ context, input }) =>
+      withTenant(db, context.storefront.tenantId, async (tx) => {
+        try {
+          const confirmed = await services.confirmCheckout(
+            tx,
+            { tenantId: context.storefront.tenantId },
+            { checkoutIntentId: input.checkoutIntentId }
+          );
+          // Explicit field list, not a spread of the service result — human-
+          // readable numbers are the customer-facing reference; internal
+          // orderId/saleId uuids are never exposed (allow-list discipline).
+          return {
+            currency: confirmed.currency,
+            orderNumber: confirmed.orderNumber,
+            saleNumber: confirmed.saleNumber,
+            scale: confirmed.scale,
+            status: confirmed.status,
+            totalMinor: confirmed.totalMinor,
+          };
+        } catch (error) {
+          return mapCheckoutError(error);
         }
       })
     ),
