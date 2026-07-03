@@ -107,6 +107,9 @@ jobs:
           BETTER_AUTH_SECRET: ci-secret-ci-secret-ci-secret-ci-32xx
           BETTER_AUTH_URL: http://localhost:3000
           CORS_ORIGIN: http://localhost:3001
+          # Dev/CI-only PII vault master key (32 bytes, base64) — never the
+          # real prod key, which lives in Infisical.
+          PII_VAULT_MASTER_KEY_BASE64: Y2ktb25seS1kdW1teS1raWl2LWtleS0zMi1ieXRlcyE=
         run: bun run test
 
   e2e:
