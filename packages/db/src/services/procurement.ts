@@ -18,8 +18,10 @@ import {
   supplier,
   supplierBill,
   supplierBillLine,
+  vendorPayment,
 } from "../schema";
 import type { TenantTransaction } from "../tenant";
+import { createDraftJournal, postJournal } from "./accounting";
 import { recordAudit } from "./audit";
 import { applyValuation, resolveCostingMethod } from "./costing";
 import { evaluateReorder } from "./inventory";
@@ -593,6 +595,239 @@ export async function createSupplierBill(
   });
 
   return { bill, lines };
+}
+
+export interface PostSupplierBillToAccountsPayableInput {
+  accountsPayableAccountId: string;
+  inventoryAccountId: string;
+  postingPeriodId: string;
+  supplierBillId: string;
+}
+
+export async function postSupplierBillToAccountsPayable(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  input: PostSupplierBillToAccountsPayableInput
+) {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`supplier-bill-ap:${ctx.tenantId}:${input.supplierBillId}`}, 0))`
+  );
+  const bill = (
+    await tx
+      .select()
+      .from(supplierBill)
+      .where(eq(supplierBill.id, input.supplierBillId))
+      .limit(1)
+  ).at(0);
+  if (!bill) {
+    throw new ProcurementError("Supplier bill not found", "NOT_FOUND");
+  }
+  if (bill.status !== "posted") {
+    throw new ProcurementError(
+      "Only posted supplier bills can be posted to accounts payable",
+      "INVALID_STATE"
+    );
+  }
+  if (bill.apJournalId) {
+    throw new ProcurementError(
+      "Supplier bill is already posted to accounts payable",
+      "INVALID_STATE"
+    );
+  }
+  if (bill.totalMinor <= 0) {
+    throw new ProcurementError(
+      "Supplier bill total must be positive for AP posting",
+      "INVALID_STATE"
+    );
+  }
+  const draft = await createDraftJournal(tx, ctx, {
+    postingPeriodId: input.postingPeriodId,
+    source: "procurement",
+    sourceDocumentId: bill.id,
+    memo: `Supplier bill ${bill.number} AP posting`,
+    lines: [
+      {
+        accountId: input.inventoryAccountId,
+        debitMinor: bill.totalMinor,
+        currency: bill.currency,
+        scale: bill.scale,
+        memo: `Supplier bill ${bill.number}`,
+      },
+      {
+        accountId: input.accountsPayableAccountId,
+        creditMinor: bill.totalMinor,
+        currency: bill.currency,
+        scale: bill.scale,
+        memo: `Supplier bill ${bill.number}`,
+      },
+    ],
+  });
+  const posted = await postJournal(tx, ctx, draft.id);
+  const updatedBill = (
+    await tx
+      .update(supplierBill)
+      .set({ apJournalId: posted.id, updatedBy: ctx.actorUserId ?? null })
+      .where(
+        and(
+          eq(supplierBill.id, bill.id),
+          eq(supplierBill.tenantId, ctx.tenantId)
+        )
+      )
+      .returning()
+  ).at(0);
+  if (!updatedBill) {
+    throw new Error("postSupplierBillToAccountsPayable: update failed");
+  }
+  await recordAudit(tx, ctx, {
+    action: "procurement.supplier_bill.ap_post",
+    entityType: "supplier_bill",
+    entityId: bill.id,
+    before: bill,
+    after: updatedBill,
+  });
+  await emitEvent(tx, ctx, {
+    payload: {
+      aggregateId: bill.id,
+      aggregateType: "supplier_bill",
+      currency: bill.currency,
+      journalId: posted.id,
+      scale: bill.scale,
+      supplierBillId: bill.id,
+      totalMinor: bill.totalMinor,
+    },
+    type: "procurement.supplier_bill.ap_posted",
+  });
+  return posted;
+}
+
+export interface CreateVendorPaymentInput {
+  accountsPayableAccountId: string;
+  amountMinor: number;
+  cashAccountId: string;
+  notes?: string | null;
+  number: string;
+  paidAt?: Date;
+  postingPeriodId: string;
+  supplierBillId: string;
+}
+
+async function paidAmountForBill(
+  tx: TenantTransaction,
+  supplierBillId: string
+): Promise<number> {
+  const rows = (await tx.execute(sql`
+    select coalesce(sum(amount_minor), 0)::bigint as paid
+    from vendor_payment
+    where supplier_bill_id = ${supplierBillId} and status = 'posted'
+  `)) as unknown as { rows: Array<{ paid: number | string | null }> };
+  return Number(rows.rows.at(0)?.paid ?? 0);
+}
+
+export async function createVendorPayment(
+  tx: TenantTransaction,
+  ctx: ServiceContext,
+  input: CreateVendorPaymentInput
+) {
+  if (input.amountMinor <= 0) {
+    throw new ProcurementError(
+      "Vendor payment amount must be positive",
+      "INVALID_STATE"
+    );
+  }
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`vendor-payment:${ctx.tenantId}:${input.supplierBillId}`}, 0))`
+  );
+  const bill = (
+    await tx
+      .select()
+      .from(supplierBill)
+      .where(eq(supplierBill.id, input.supplierBillId))
+      .limit(1)
+  ).at(0);
+  if (!bill) {
+    throw new ProcurementError("Supplier bill not found", "NOT_FOUND");
+  }
+  if (bill.status !== "posted" || !bill.apJournalId) {
+    throw new ProcurementError(
+      "Supplier bill must be posted to accounts payable before payment",
+      "INVALID_STATE"
+    );
+  }
+  const alreadyPaid = await paidAmountForBill(tx, bill.id);
+  if (alreadyPaid + input.amountMinor > bill.totalMinor) {
+    throw new ProcurementError(
+      "Vendor payment exceeds supplier bill balance",
+      "INVALID_STATE"
+    );
+  }
+  const draft = await createDraftJournal(tx, ctx, {
+    postingPeriodId: input.postingPeriodId,
+    source: "procurement",
+    sourceDocumentId: bill.id,
+    memo: `Vendor payment ${input.number} for supplier bill ${bill.number}`,
+    lines: [
+      {
+        accountId: input.accountsPayableAccountId,
+        debitMinor: input.amountMinor,
+        currency: bill.currency,
+        scale: bill.scale,
+        memo: `Vendor payment ${input.number}`,
+      },
+      {
+        accountId: input.cashAccountId,
+        creditMinor: input.amountMinor,
+        currency: bill.currency,
+        scale: bill.scale,
+        memo: `Vendor payment ${input.number}`,
+      },
+    ],
+  });
+  const posted = await postJournal(tx, ctx, draft.id);
+  const payment = (
+    await tx
+      .insert(vendorPayment)
+      .values({
+        tenantId: ctx.tenantId,
+        companyId: bill.companyId,
+        supplierId: bill.supplierId,
+        supplierBillId: bill.id,
+        postingPeriodId: input.postingPeriodId,
+        journalId: posted.id,
+        cashAccountId: input.cashAccountId,
+        accountsPayableAccountId: input.accountsPayableAccountId,
+        number: input.number,
+        paidAt: input.paidAt ?? new Date(),
+        amountMinor: input.amountMinor,
+        currency: bill.currency,
+        scale: bill.scale,
+        notes: input.notes ?? null,
+        createdBy: ctx.actorUserId ?? null,
+      })
+      .returning()
+  ).at(0);
+  if (!payment) {
+    throw new Error("createVendorPayment: insert failed");
+  }
+  await recordAudit(tx, ctx, {
+    action: "procurement.vendor_payment.create",
+    entityType: "vendor_payment",
+    entityId: payment.id,
+    after: { ...payment, journal: posted },
+  });
+  await emitEvent(tx, ctx, {
+    payload: {
+      aggregateId: payment.id,
+      aggregateType: "vendor_payment",
+      amountMinor: payment.amountMinor,
+      currency: payment.currency,
+      journalId: posted.id,
+      scale: payment.scale,
+      supplierBillId: bill.id,
+      vendorPaymentId: payment.id,
+    },
+    type: "procurement.vendor_payment.created",
+  });
+  return { payment, journal: posted };
 }
 
 export type LandedCostKind =

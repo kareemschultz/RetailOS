@@ -127,6 +127,35 @@
   PG18, db stayed **123** (no new db-level tests — router-only feature), api stayed **77** (new
   assertions extend an existing test body rather than adding new `it()` blocks), zero skips,
   frozen costing byte-identical, `bun -F web build` green.
+- **Task 8 DONE:** ported the vendor-payment / AP seam (source `6aa4a21`), **backend-only** — the
+  source commit mixed this with a self-serve onboarding gate touching `apps/web/**`
+  (`login.tsx`, `onboarding.tsx`, `sign-up-form.tsx`, `google-sign-in.tsx`, `_app/route.tsx`);
+  confirmed via `git show 6aa4a21 --stat` that the backend files (`schema/procurement.ts`,
+  `services/procurement.ts`, `services/procurement.rls.test.ts`, `routers/vs1.ts`, the migration)
+  were cleanly separable with zero symbol coupling to the onboarding work, so only those were
+  applied — no dropped hunks were needed. New `vendor_payment` table (composite FKs to
+  `company`/`supplier`/`supplier_bill`/`posting_period`/`journal`/`ledger_account` x2) +
+  `supplier_bill.ap_journal_id` (composite FK to `journal`). Two new service functions:
+  `postSupplierBillToAccountsPayable` (advisory-locked on `supplier-bill-ap:{tenant}:{billId}`,
+  rejects a non-posted or already-AP-posted bill, posts a balanced Dr-inventory/Cr-AP journal via
+  the existing `createDraftJournal`+`postJournal` accounting seam, stamps `apJournalId` on the
+  bill) and `createVendorPayment` (advisory-locked on `vendor-payment:{tenant}:{billId}`, requires
+  the bill already AP-posted, sums prior `posted` payments and rejects an overpayment beyond
+  `totalMinor`, posts a balanced Dr-AP/Cr-cash journal). Both reuse the accounting module's
+  balanced-journal invariant rather than hand-rolling debit/credit math — no new ledger-posting
+  logic, only new callers of the Phase-5-foundation seam. `procurementRouter.vendorPaymentCreate`
+  + `.supplierBillPostToAccountsPayable` (both gated `procurement.manage`). Migration regenerated
+  as `0029_equal_komodo.sql` — `vendor_payment`'s own `(tenant_id,id)` UNIQUE is inline in its
+  `CREATE TABLE` and every FK target (`company`/`supplier`/`supplier_bill`/`posting_period`/
+  `journal`/`ledger_account`) already carries its composite UNIQUE from an earlier migration, so
+  no FK-before-target-UNIQUE reordering was needed this time. RLS appended for `vendor_payment`.
+  Journal/SQL-file parity re-verified (30 entries, 30 files) per the 2026-07-02 journal-less-
+  migration lesson. Two new DB-gated RLS tests ported (AP-post → vendor-payment happy path with
+  balanced journal-line assertions + audit-action assertions; rejects payment-before-AP-posting
+  and rejects overpayment). Gate: check-types 7/7, ultracite clean (2 files auto-fixed, same
+  drizzle-JSON drift), mojibake clean, fresh-chain 0000→0029 verified on disposable PG18, db
+  123→**125** (+2) + api stayed **77** (backend-only port adds no router-integration tests), zero
+  skips, frozen costing byte-identical, `bun -F web build` green, zero `apps/web/**` files touched.
 
 ### Sonnet handoff prepared (2026-07-02, Fable session)
 - **NEXT EXECUTION IS SONNET's:** follow `docs/plans/sonnet-execution-playbook.md` (standing

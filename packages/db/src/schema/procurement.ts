@@ -10,6 +10,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { journal, ledgerAccount, postingPeriod } from "./accounting";
 import { bondReceipt } from "./bond";
 import { actor, softDelete, tenantId, timestamps } from "./columns";
 import { company, location } from "./company";
@@ -26,6 +27,7 @@ export const PURCHASE_ORDER_STATUSES = [
 ] as const;
 export const GOODS_RECEIPT_STATUSES = ["posted", "cancelled"] as const;
 export const SUPPLIER_BILL_STATUSES = ["draft", "posted", "cancelled"] as const;
+export const VENDOR_PAYMENT_STATUSES = ["posted", "voided"] as const;
 export const LANDED_COST_POOL_STATUSES = ["posted"] as const;
 export const IMPORT_BATCH_STATUSES = [
   "open",
@@ -242,6 +244,7 @@ export const supplierBill = pgTable(
     currency: text("currency").notNull(),
     scale: bigint("scale", { mode: "number" }).default(2).notNull(),
     totalMinor: bigint("total_minor", { mode: "number" }).notNull(),
+    apJournalId: uuid("ap_journal_id"),
     notes: text("notes"),
     ...timestamps,
     ...actor,
@@ -268,12 +271,95 @@ export const supplierBill = pgTable(
       foreignColumns: [purchaseOrder.tenantId, purchaseOrder.id],
       name: "supplier_bill_po_composite_fk",
     }),
+    foreignKey({
+      columns: [table.tenantId, table.apJournalId],
+      foreignColumns: [journal.tenantId, journal.id],
+      name: "supplier_bill_ap_journal_composite_fk",
+    }),
     check(
       "supplier_bill_status_chk",
       sql`${table.status} IN ('draft','posted','cancelled')`
     ),
     check("supplier_bill_total_nonnegative_chk", sql`${table.totalMinor} >= 0`),
     check("supplier_bill_scale_nonnegative_chk", sql`${table.scale} >= 0`),
+  ]
+);
+
+export const vendorPayment = pgTable(
+  "vendor_payment",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId,
+    companyId: uuid("company_id").notNull(),
+    supplierId: uuid("supplier_id").notNull(),
+    supplierBillId: uuid("supplier_bill_id").notNull(),
+    postingPeriodId: uuid("posting_period_id").notNull(),
+    journalId: uuid("journal_id").notNull(),
+    cashAccountId: uuid("cash_account_id").notNull(),
+    accountsPayableAccountId: uuid("accounts_payable_account_id").notNull(),
+    number: text("number").notNull(),
+    status: text("status", { enum: VENDOR_PAYMENT_STATUSES })
+      .default("posted")
+      .notNull(),
+    paidAt: timestamp("paid_at").defaultNow().notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    scale: bigint("scale", { mode: "number" }).default(2).notNull(),
+    notes: text("notes"),
+    ...timestamps,
+    ...actor,
+  },
+  (table) => [
+    index("vendor_payment_tenantId_idx").on(table.tenantId),
+    index("vendor_payment_supplier_idx").on(table.supplierId),
+    index("vendor_payment_supplier_bill_idx").on(table.supplierBillId),
+    unique("vendor_payment_tenant_number_uq").on(table.tenantId, table.number),
+    unique("vendor_payment_tenant_id_uq").on(table.tenantId, table.id),
+    unique("vendor_payment_tenant_journal_uq").on(
+      table.tenantId,
+      table.journalId
+    ),
+    foreignKey({
+      columns: [table.tenantId, table.companyId],
+      foreignColumns: [company.tenantId, company.id],
+      name: "vendor_payment_company_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.supplierId],
+      foreignColumns: [supplier.tenantId, supplier.id],
+      name: "vendor_payment_supplier_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.supplierBillId],
+      foreignColumns: [supplierBill.tenantId, supplierBill.id],
+      name: "vendor_payment_supplier_bill_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.postingPeriodId],
+      foreignColumns: [postingPeriod.tenantId, postingPeriod.id],
+      name: "vendor_payment_posting_period_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.journalId],
+      foreignColumns: [journal.tenantId, journal.id],
+      name: "vendor_payment_journal_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.cashAccountId],
+      foreignColumns: [ledgerAccount.tenantId, ledgerAccount.id],
+      name: "vendor_payment_cash_account_composite_fk",
+    }),
+    foreignKey({
+      columns: [table.tenantId, table.accountsPayableAccountId],
+      foreignColumns: [ledgerAccount.tenantId, ledgerAccount.id],
+      name: "vendor_payment_ap_account_composite_fk",
+    }),
+    check(
+      "vendor_payment_status_chk",
+      sql`${table.status} IN ('posted','voided')`
+    ),
+    check("vendor_payment_amount_positive_chk", sql`${table.amountMinor} > 0`),
+    check("vendor_payment_scale_nonnegative_chk", sql`${table.scale} >= 0`),
   ]
 );
 

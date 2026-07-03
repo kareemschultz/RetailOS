@@ -13,10 +13,14 @@ import {
   goodsReceiptLine,
   importBatch,
   importBatchLine,
+  journal,
+  journalLine,
   landedCostAllocation,
   landedCostPool,
+  ledgerAccount,
   location,
   organization,
+  postingPeriod,
   product,
   purchaseOrder,
   purchaseOrderLine,
@@ -27,14 +31,18 @@ import {
   supplierBillLine,
   unitOfMeasure,
   valuationLayer,
+  vendorPayment,
 } from "../schema";
 import { withTenant } from "../tenant";
+import { createLedgerAccount, createPostingPeriod } from "./accounting";
 import {
   createImportBatch,
   createLandedCostPools,
   createPurchaseOrder,
   createSupplier,
   createSupplierBill,
+  createVendorPayment,
+  postSupplierBillToAccountsPayable,
   receivePurchaseOrder,
 } from "./procurement";
 
@@ -74,10 +82,15 @@ describe.skipIf(!url)("Phase D procurement foundation", () => {
         await tx.delete(landedCostAllocation);
         await tx.delete(importBatchLine);
         await tx.delete(importBatch);
+        await tx.delete(vendorPayment);
         await tx.delete(bondReceipt);
         await tx.delete(landedCostPool);
         await tx.delete(supplierBillLine);
         await tx.delete(supplierBill);
+        await tx.delete(journalLine);
+        await tx.delete(journal);
+        await tx.delete(ledgerAccount);
+        await tx.delete(postingPeriod);
         await tx.delete(goodsReceiptLine);
         await tx.delete(valuationLayer);
         await tx.delete(avgCost);
@@ -527,6 +540,315 @@ describe.skipIf(!url)("Phase D procurement foundation", () => {
                 qtyBilled: 1,
               },
             ],
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
+    });
+  });
+
+  it("posts supplier bills to AP and clears them with vendor payments", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const inventory = await createLedgerAccount(
+        tx,
+        { tenantId: TENANT },
+        {
+          code: "PROC-1300",
+          name: "Inventory Asset",
+          type: "asset",
+          normalBalance: "debit",
+        }
+      );
+      const accountsPayable = await createLedgerAccount(
+        tx,
+        { tenantId: TENANT },
+        {
+          code: "PROC-2100",
+          name: "Accounts Payable",
+          type: "liability",
+          normalBalance: "credit",
+        }
+      );
+      const bank = await createLedgerAccount(
+        tx,
+        { tenantId: TENANT },
+        {
+          code: "PROC-1000",
+          name: "Operating Bank",
+          type: "asset",
+          normalBalance: "debit",
+        }
+      );
+      const period = await createPostingPeriod(
+        tx,
+        { tenantId: TENANT },
+        {
+          name: "PROC-2026-07",
+          startsOn: new Date("2026-07-01T00:00:00.000Z"),
+          endsOn: new Date("2026-07-31T00:00:00.000Z"),
+        }
+      );
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        {
+          code: "SUP-AP",
+          name: "AP Supplier",
+        }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-AP",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 2, unitCostMinor: 375 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-AP",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 2,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-AP",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 2,
+            },
+          ],
+        }
+      );
+
+      const apPosting = await postSupplierBillToAccountsPayable(
+        tx,
+        { tenantId: TENANT, actorUserId: "ap-agent" },
+        {
+          supplierBillId: bill.bill.id,
+          postingPeriodId: period.id,
+          inventoryAccountId: inventory.id,
+          accountsPayableAccountId: accountsPayable.id,
+        }
+      );
+
+      expect(apPosting.status).toBe("posted");
+      expect(apPosting.sourceDocumentId).toBe(bill.bill.id);
+      const apLines = await tx
+        .select()
+        .from(journalLine)
+        .where(eq(journalLine.journalId, apPosting.id));
+      expect(apLines).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            accountId: inventory.id,
+            debitMinor: 750,
+            creditMinor: 0,
+          }),
+          expect.objectContaining({
+            accountId: accountsPayable.id,
+            debitMinor: 0,
+            creditMinor: 750,
+          }),
+        ])
+      );
+      await expect(
+        postSupplierBillToAccountsPayable(
+          tx,
+          { tenantId: TENANT },
+          {
+            supplierBillId: bill.bill.id,
+            postingPeriodId: period.id,
+            inventoryAccountId: inventory.id,
+            accountsPayableAccountId: accountsPayable.id,
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
+
+      const payment = await createVendorPayment(
+        tx,
+        { tenantId: TENANT, actorUserId: "cash-agent" },
+        {
+          supplierBillId: bill.bill.id,
+          number: "VP-001",
+          amountMinor: 750,
+          postingPeriodId: period.id,
+          cashAccountId: bank.id,
+          accountsPayableAccountId: accountsPayable.id,
+        }
+      );
+
+      expect(payment.payment.amountMinor).toBe(750);
+      expect(payment.journal.status).toBe("posted");
+      const paymentLines = await tx
+        .select()
+        .from(journalLine)
+        .where(eq(journalLine.journalId, payment.journal.id));
+      expect(paymentLines).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            accountId: accountsPayable.id,
+            debitMinor: 750,
+            creditMinor: 0,
+          }),
+          expect.objectContaining({
+            accountId: bank.id,
+            debitMinor: 0,
+            creditMinor: 750,
+          }),
+        ])
+      );
+      const audits = await tx.select().from(auditLog);
+      expect(audits.map((row) => row.action)).toEqual(
+        expect.arrayContaining([
+          "procurement.supplier_bill.ap_post",
+          "procurement.vendor_payment.create",
+        ])
+      );
+    });
+  });
+
+  it("rejects vendor payments before AP posting and overpayment", async () => {
+    await withTenant(db, TENANT, async (tx) => {
+      const inventory = await createLedgerAccount(
+        tx,
+        { tenantId: TENANT },
+        {
+          code: "PROC-1300-NEG",
+          name: "Inventory Asset Negative",
+          type: "asset",
+          normalBalance: "debit",
+        }
+      );
+      const accountsPayable = await createLedgerAccount(
+        tx,
+        { tenantId: TENANT },
+        {
+          code: "PROC-2100-NEG",
+          name: "Accounts Payable Negative",
+          type: "liability",
+          normalBalance: "credit",
+        }
+      );
+      const bank = await createLedgerAccount(
+        tx,
+        { tenantId: TENANT },
+        {
+          code: "PROC-1000-NEG",
+          name: "Operating Bank Negative",
+          type: "asset",
+          normalBalance: "debit",
+        }
+      );
+      const period = await createPostingPeriod(
+        tx,
+        { tenantId: TENANT },
+        {
+          name: "PROC-2026-08",
+          startsOn: new Date("2026-08-01T00:00:00.000Z"),
+          endsOn: new Date("2026-08-31T00:00:00.000Z"),
+        }
+      );
+      const vendor = await createSupplier(
+        tx,
+        { tenantId: TENANT },
+        {
+          code: "SUP-AP-NEG",
+          name: "AP Negative Supplier",
+        }
+      );
+      const po = await createPurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          companyId,
+          supplierId: vendor.id,
+          number: "PO-AP-NEG",
+          currency: "GYD",
+          lines: [{ productId, skuId, qtyOrdered: 1, unitCostMinor: 100 }],
+        }
+      );
+      const receipt = await receivePurchaseOrder(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          locationId,
+          number: "GRN-AP-NEG",
+          lines: [
+            {
+              purchaseOrderLineId: required(po.lines[0], "po line").id,
+              qtyReceived: 1,
+            },
+          ],
+        }
+      );
+      const bill = await createSupplierBill(
+        tx,
+        { tenantId: TENANT },
+        {
+          purchaseOrderId: po.id,
+          number: "BILL-AP-NEG",
+          lines: [
+            {
+              goodsReceiptLineId: required(receipt.lines[0], "receipt line").id,
+              qtyBilled: 1,
+            },
+          ],
+        }
+      );
+
+      await expect(
+        createVendorPayment(
+          tx,
+          { tenantId: TENANT },
+          {
+            supplierBillId: bill.bill.id,
+            number: "VP-NOT-POSTED",
+            amountMinor: 100,
+            postingPeriodId: period.id,
+            cashAccountId: bank.id,
+            accountsPayableAccountId: accountsPayable.id,
+          }
+        )
+      ).rejects.toMatchObject({ code: "INVALID_STATE" });
+
+      await postSupplierBillToAccountsPayable(
+        tx,
+        { tenantId: TENANT },
+        {
+          supplierBillId: bill.bill.id,
+          postingPeriodId: period.id,
+          inventoryAccountId: inventory.id,
+          accountsPayableAccountId: accountsPayable.id,
+        }
+      );
+      await expect(
+        createVendorPayment(
+          tx,
+          { tenantId: TENANT },
+          {
+            supplierBillId: bill.bill.id,
+            number: "VP-OVERPAY",
+            amountMinor: 101,
+            postingPeriodId: period.id,
+            cashAccountId: bank.id,
+            accountsPayableAccountId: accountsPayable.id,
           }
         )
       ).rejects.toMatchObject({ code: "INVALID_STATE" });

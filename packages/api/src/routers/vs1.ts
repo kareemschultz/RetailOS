@@ -9064,6 +9064,66 @@ export const procurementRouter = {
         }
       });
     }),
+  supplierBillPostToAccountsPayable: tenantProcedure
+    .input(
+      z.object({
+        supplierBillId: z.string().uuid(),
+        postingPeriodId: z.string().uuid(),
+        inventoryAccountId: z.string().uuid(),
+        accountsPayableAccountId: z.string().uuid(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "procurement.manage");
+        try {
+          return await services.postSupplierBillToAccountsPayable(
+            tx,
+            ctx,
+            input
+          );
+        } catch (error) {
+          if (error instanceof services.ProcurementError) {
+            if (error.code === "NOT_FOUND") {
+              throw new ORPCError("NOT_FOUND", { message: error.message });
+            }
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          }
+          throw error;
+        }
+      });
+    }),
+  vendorPaymentCreate: tenantProcedure
+    .input(
+      z.object({
+        supplierBillId: z.string().uuid(),
+        number: z.string().min(1).max(64),
+        postingPeriodId: z.string().uuid(),
+        cashAccountId: z.string().uuid(),
+        accountsPayableAccountId: z.string().uuid(),
+        amountMinor: z.number().int().positive(),
+        paidAt: z.coerce.date().optional(),
+        notes: z.string().max(1000).optional(),
+      })
+    )
+    .handler(({ context, input }) => {
+      const ctx = context.requestContext;
+      return withTenant(db, ctx.tenantId, async (tx) => {
+        await assertPermission(tx, ctx, "procurement.manage");
+        try {
+          return await services.createVendorPayment(tx, ctx, input);
+        } catch (error) {
+          if (error instanceof services.ProcurementError) {
+            if (error.code === "NOT_FOUND") {
+              throw new ORPCError("NOT_FOUND", { message: error.message });
+            }
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          }
+          throw error;
+        }
+      });
+    }),
   landedCostPoolCreate: tenantProcedure
     .input(
       z.object({
