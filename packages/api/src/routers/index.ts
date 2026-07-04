@@ -1,10 +1,11 @@
 import type { RouterClient } from "@orpc/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
+import { accountingRouter } from "./accounting";
 import { commerceRouter } from "./commerce";
+import { commerceAdminRouter } from "./commerce-admin";
 import { procurementRouter } from "./procurement";
 import {
-  accountingRouter,
   auditRouter,
   bondRouter,
   catalogRouter,
@@ -49,6 +50,9 @@ export const appRouter = {
   numbering: numberingRouter,
   // Shopix Commerce Experience — public, hostname-resolved storefront API.
   commerce: commerceRouter,
+  // Staff/back-office view of Shopix orders (separate procedure base — see
+  // commerce-admin.ts).
+  commerceAdmin: commerceAdminRouter,
 };
 export type AppRouter = typeof appRouter;
 export type AppRouterClient = RouterClient<typeof appRouter>;

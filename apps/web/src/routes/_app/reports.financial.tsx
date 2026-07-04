@@ -20,17 +20,27 @@ function FinancialReportUnavailableScreen() {
               Report not available yet
             </h1>
             <p className="text-muted-foreground text-sm leading-6">
-              The accounting/GL dashboard is intentionally hidden until that
-              phase is fully backed by production workflows. For this demo, use
-              the verified Number leases report.
+              Trial balance, P&amp;L, balance sheet, and VAT/GRA reports need
+              automatic event-driven posting, which isn't built yet. The chart
+              of accounts, posting periods, and manual journals ARE live under
+              Financials if you want to record entries by hand.
             </p>
           </div>
-          <Button
-            nativeButton={false}
-            render={<Link to="/reports/number-leases" />}
-          >
-            Open Number leases
-          </Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button
+              nativeButton={false}
+              render={<Link to="/financials" />}
+              variant="outline"
+            >
+              Open Financials
+            </Button>
+            <Button
+              nativeButton={false}
+              render={<Link to="/reports/number-leases" />}
+            >
+              Open Number leases
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

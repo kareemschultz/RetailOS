@@ -13,6 +13,41 @@
 
 ## 🌙 RUN STATUS (top-of-file; cross-agent state)
 
+### GUI placeholder sweep — accounting reads + commerce admin orders (2026-07-03, on `master`)
+- **Trigger:** owner flagged that the deployed app still showed several modules as "Planned"/placeholder
+  in the live GUI despite backend work having landed — same defect class as the earlier procurement
+  placeholder (backend built, no UI/read-endpoint). Audited every route for `ModuleStatusPage` +
+  "Planned"/"Coming soon" copy; found 3: `/commerce`, `/reports`, `/financials`. `/reports` was already
+  honest (financial statements really do need Phase-5 event posting, which isn't built). `/commerce` and
+  `/financials` were stale — both had real backend with zero read endpoints.
+- **Backend — `accountingRouter` extracted from `vs1.ts` into its own `packages/api/src/routers/accounting.ts`**
+  (same file-size-hygiene precedent as `procurement.ts`). Added `ledgerAccountList`, `postingPeriodList`,
+  `journalList`, `journalDetail` reads (all gated `accounting.manage`) + wired `postingPeriodClose` to a
+  router mutation (the service function `closePostingPeriod` existed with no caller at all — a "correct
+  component, no consumer" gap, same recognized class as the Phase-2 `costing_method_applied` stamp).
+- **Backend — new `commerceAdminRouter`** (`commerce-admin.ts`, separate router key from the public
+  `commerce` storefront router per the Shopix threat model's staff/public procedure-base separation):
+  `orderList`/`orderDetail`, gated `pos.create_sale` (the same gate `pos.saleSearch`/`saleDetail` use,
+  since a confirmed Shopix order writes a real `sale` row on the shared ledger). Lets staff see Shopix
+  orders with commerce-shaped fields (status, fulfilment type, order lines) the sale-shaped read can't.
+- **Tests:** new permission-gated + tenant-isolated regression in `vs1.integration.test.ts` (accounting
+  reads: create→post→list→detail, cashier rejected, cross-tenant NOT_FOUND) and
+  `commerce.integration.test.ts` (own product/location/stock fixture reusing the suite's one sellable
+  location, full cart→checkout→confirm→admin-list/detail flow, warehouse-role rejected, cross-tenant
+  NOT_FOUND). Added `membership`/`journalLine`/`journal`/`postingPeriod`/`ledgerAccount` to the two
+  files' hermetic cleanup (previously untouched — a rerun-safety gap).
+- **Frontend:** rebuilt `/financials` (Chart of Accounts / Posting Periods / Journals tabs, all live CRUD
+  against the new endpoints — trial balance/P&L/VAT reports correctly still say "Planned", they need
+  Phase-5 auto-posting) and `/commerce` (Orders tab showing real Shopix orders + an honest status card:
+  storefront BACKEND is live, the public storefront web UI itself is not built). Updated
+  `/reports/financial`'s copy to point at the new `/financials` manual-entry surface.
+- **Gate (fresh disposable PG18):** check-types 7/7 (web + api), ultracite clean, mojibake clean,
+  **db 141/141 + api 86/86** (+2 new tests) zero skips, `bun -F web build` green (confirmed `commerce-*`
+  and `financials-*` chunks present in `.output`). One pre-existing unrelated DB test flake
+  (`procurement.rls.test.ts` largest-remainder allocation order) reproduced only against a long-reused
+  gate-db container (unordered query + row-order drift after many test runs) — confirmed clean on a
+  fresh container, not caused by this change, not touched (out of scope).
+
 ### Shopix build-sequence step 5 — checkout / reservation seam (2026-07-03, on `master`, DEPLOYED to prod)
 - **Scope:** design doc §6/§7/§9 — the project's signature-risk surface. `commerce-checkout.ts`:
   `createCheckoutOrder` (coarse, non-binding availability check only; NO lock/deduction/COGS; marks

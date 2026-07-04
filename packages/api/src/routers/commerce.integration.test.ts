@@ -11,6 +11,9 @@ const ORG_A = "org_commerce_test_a";
 const ORG_B = "org_commerce_test_b";
 const DOMAIN_A = "shop.acme.test";
 const DOMAIN_B = "shop.beta.test";
+const STAFF_ADMIN = "u_staff_admin_commerce_test";
+const STAFF_WAREHOUSE = "u_staff_warehouse_commerce_test";
+const STAFF_ADMIN_B = "u_staff_admin_b_commerce_test";
 const NO_STOREFRONT_RE = /no storefront is configured/i;
 const PUBLIC_DTO_LEAK_RE =
   /\b(id|productId|skuId|tenantId|costing|margin|cogs|objectKey|trackingMode|removalStrategy|returnCostingPolicy|oversellPolicy|expiryPolicy|createdBy|updatedBy|deletedAt)\b/i;
@@ -23,6 +26,8 @@ const CART_DTO_LEAK_RE =
 const ORDER_NUMBER_RE = /^ORDER-/;
 const SALE_NUMBER_RE = /^SALE-/;
 const COMMERCE_UNAVAILABLE_RE = /COMMERCE_UNAVAILABLE/;
+const MISSING_POS_CREATE_SALE_RE = /Missing permission: pos\.create_sale/;
+const ORDER_NOT_FOUND_RE = /Order not found/;
 
 // A storefront request context: anonymous (no session), carrying only the Host
 // header the gateway resolves from.
@@ -41,6 +46,25 @@ function makeStorefrontCtx(host: string | null): Context {
       deploymentMode: "saas",
     },
     headers,
+  } as unknown as Context;
+}
+
+// A staff (Better Auth org member) request context — the admin/back-office
+// path, distinct from the anonymous storefront path above.
+function makeStaffCtx(userId: string, organizationId: string | null): Context {
+  return {
+    auth: null,
+    session: {
+      user: { id: userId },
+      session: { id: `sess_${userId}`, activeOrganizationId: organizationId },
+    },
+    meta: {
+      requestId: "req",
+      correlationId: "corr",
+      source: "test",
+      deploymentMode: "saas",
+    },
+    headers: new Headers(),
   } as unknown as Context;
 }
 
@@ -64,6 +88,7 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
     const { withTenant } = await import("@RetailOS/db");
     const cleanTenantCatalog = (tenantId: string) =>
       withTenant(db, tenantId, async (tx) => {
+        await tx.delete(schema.membership);
         await tx.delete(schema.orderLine);
         await tx.delete(schema.order);
         await tx.delete(schema.cartLine);
@@ -272,6 +297,42 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
         scale: 2,
       });
     });
+
+    // Staff principals for the commerceAdmin (back-office order view) tests
+    // below — a distinct user set from the storefront's anonymous customers.
+    await db
+      .insert(schema.user)
+      .values([
+        {
+          id: STAFF_ADMIN,
+          name: "Staff Admin",
+          email: "staff_admin_commerce@example.com",
+        },
+        {
+          id: STAFF_WAREHOUSE,
+          name: "Staff Warehouse",
+          email: "staff_warehouse_commerce@example.com",
+        },
+        {
+          id: STAFF_ADMIN_B,
+          name: "Staff Admin B",
+          email: "staff_admin_b_commerce@example.com",
+        },
+      ])
+      .onConflictDoNothing();
+    await withTenant(db, ORG_A, (tx) =>
+      tx.insert(schema.membership).values([
+        { tenantId: ORG_A, userId: STAFF_ADMIN, role: "tenant_admin" },
+        { tenantId: ORG_A, userId: STAFF_WAREHOUSE, role: "warehouse" },
+      ])
+    );
+    await withTenant(db, ORG_B, (tx) =>
+      tx
+        .insert(schema.membership)
+        .values([
+          { tenantId: ORG_B, userId: STAFF_ADMIN_B, role: "tenant_admin" },
+        ])
+    );
   });
 
   it("resolves a known storefront host to its tenant's public name", async () => {
@@ -662,6 +723,152 @@ describe.skipIf(!url)("Shopix storefront gateway (hostname → tenant)", () => {
     }
     expect(caught).toBeInstanceOf(Error);
     expect((caught as Error).message).toMatch(COMMERCE_UNAVAILABLE_RE);
+  });
+
+  it("commerceAdmin: staff can list/detail a Shopix order written by checkout; permission-gated and tenant-isolated", async () => {
+    // Self-contained product/sku/stock fixture (own company; reuses the
+    // suite's ONE existing sellable location — the storefront v1 simplifica-
+    // tion requires exactly one, so this test must not create a second) so it
+    // does not depend on execution order relative to the checkout tests above
+    // — it proves the SAME `order`/`sale` write path independently.
+    const { services, withTenant: wt } = await import("@RetailOS/db");
+    const { eq: eqOp } = await import("drizzle-orm");
+    const admin = { context: makeStaffCtx(STAFF_ADMIN, ORG_A) };
+    const warehouse = { context: makeStaffCtx(STAFF_WAREHOUSE, ORG_A) };
+    const adminB = { context: makeStaffCtx(STAFF_ADMIN_B, ORG_B) };
+
+    let widgetSkuId = "";
+    let widgetProductId = "";
+    await wt(db, ORG_A, async (tx) => {
+      const loc = (
+        await tx
+          .select()
+          .from(schema.location)
+          .where(eqOp(schema.location.isSellable, true))
+          .limit(1)
+      ).at(0);
+      if (!loc) {
+        throw new Error("Expected the suite's sellable location to exist");
+      }
+      const widget = (
+        await tx
+          .insert(schema.product)
+          .values({
+            tenantId: ORG_A,
+            sku: "admin-order-widget",
+            name: "Admin Order Widget",
+            priceMinor: 1000,
+            currency: "USD",
+            scale: 2,
+            costingMethod: "avco",
+            createdBy: "seed-user",
+            updatedBy: "seed-user",
+          })
+          .returning()
+      ).at(0);
+      if (!widget) {
+        throw new Error("Failed to seed admin-order-test widget product");
+      }
+      widgetProductId = widget.id;
+      const widgetSku = (
+        await tx
+          .insert(schema.sku)
+          .values({
+            tenantId: ORG_A,
+            productId: widget.id,
+            code: "ADMIN-ORDER-WIDGET-01",
+            costingMethod: "avco",
+            createdBy: "seed-user",
+            updatedBy: "seed-user",
+          })
+          .returning()
+      ).at(0);
+      if (!widgetSku) {
+        throw new Error("Failed to seed admin-order-test widget sku");
+      }
+      widgetSkuId = widgetSku.id;
+      const movement = await services.appendStockMovement(
+        tx,
+        { tenantId: ORG_A },
+        {
+          locationId: loc.id,
+          movementType: "receipt",
+          productId: widget.id,
+          skuId: widgetSku.id,
+          qtyDelta: 5,
+          unitCostMinor: 400,
+          costCurrency: "USD",
+          costScale: 2,
+        }
+      );
+      await services.applyValuation(tx, { tenantId: ORG_A }, movement);
+    });
+
+    const startedCart = await call(
+      appRouter.commerce.cartStart,
+      {},
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    await call(
+      appRouter.commerce.cartAddLine,
+      {
+        cartId: startedCart.id,
+        customerId: startedCart.customerId,
+        handle: "admin-order-widget",
+        quantity: 2,
+      },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    const created = await call(
+      appRouter.commerce.checkoutCreate,
+      { cartId: startedCart.id, customerId: startedCart.customerId },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+    await call(
+      appRouter.commerce.checkoutConfirm,
+      { checkoutIntentId: created.checkoutIntentId },
+      { context: makeStorefrontCtx(DOMAIN_A) }
+    );
+
+    // List reflects the confirmed order (subtotal 2000 + 14% VAT 280 = 2280,
+    // same standard-rate fallback the earlier quote/checkout tests exercise).
+    const orders = await call(appRouter.commerceAdmin.orderList, {}, admin);
+    const found = orders.find((row) => row.totalMinor === 2280);
+    expect(found).toBeDefined();
+    expect(found?.status).toBe("paid");
+    expect(found?.fulfilmentType).toBe("pickup");
+    expect(found?.saleId).toEqual(expect.any(String));
+    const orderId = found?.id as string;
+
+    // Detail composes header + lines with product/sku identity.
+    const detail = await call(
+      appRouter.commerceAdmin.orderDetail,
+      { orderId },
+      admin
+    );
+    expect(detail.status).toBe("paid");
+    expect(detail.lines).toEqual([
+      expect.objectContaining({
+        productId: widgetProductId,
+        skuId: widgetSkuId,
+        skuCode: "ADMIN-ORDER-WIDGET-01",
+        qty: 2,
+      }),
+    ]);
+
+    // Permission gate — warehouse staff (no pos.create_sale) is rejected on
+    // both reads, matching the gate saleSearch/saleDetail already use.
+    await expect(
+      call(appRouter.commerceAdmin.orderList, {}, warehouse)
+    ).rejects.toThrow(MISSING_POS_CREATE_SALE_RE);
+    await expect(
+      call(appRouter.commerceAdmin.orderDetail, { orderId }, warehouse)
+    ).rejects.toThrow(MISSING_POS_CREATE_SALE_RE);
+
+    // Cross-tenant detail read is NOT_FOUND, not a leak.
+    await expect(
+      call(appRouter.commerceAdmin.orderDetail, { orderId }, adminB)
+    ).rejects.toThrow(ORDER_NOT_FOUND_RE);
   });
 
   it("fails closed on an unknown host (NOT_FOUND, never a default tenant)", async () => {

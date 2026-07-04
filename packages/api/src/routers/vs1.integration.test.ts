@@ -54,6 +54,8 @@ const MISSING_PROCUREMENT_MANAGE_RE = /Missing permission: procurement\.manage/;
 const REORDER_RULE_NOT_FOUND_RE = /Reorder rule not found/;
 const PURCHASE_ORDER_NOT_FOUND_RE = /Purchase order not found/;
 const GOODS_RECEIPT_NOT_FOUND_RE = /Goods receipt not found/;
+const MISSING_ACCOUNTING_MANAGE_RE = /Missing permission: accounting\.manage/;
+const JOURNAL_NOT_FOUND_RE = /Journal not found/;
 
 function makeCtx(userId: string, organizationId: string | null): Context {
   return {
@@ -95,6 +97,12 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
         await tx.delete(schema.idempotencyKey);
         await tx.delete(schema.outboxEvent);
         await tx.delete(schema.auditLog);
+        // Accounting foundation (Phase 5 port) — journal lines before journal
+        // headers before posting periods/ledger accounts.
+        await tx.delete(schema.journalLine);
+        await tx.delete(schema.journal);
+        await tx.delete(schema.postingPeriod);
+        await tx.delete(schema.ledgerAccount);
         // Procurement FIRST — import/bill/receipt/PO rows reference suppliers,
         // companies, locations, products, SKUs, and stock-ledger movements.
         await tx.delete(schema.importBatchLine);
@@ -1443,6 +1451,139 @@ describe.skipIf(!url)("VS#1 §32 flow end-to-end (routers)", () => {
     await expect(
       call(appRouter.procurement.goodsReceiptDetail, { id: grn.id }, adminB)
     ).rejects.toThrow(GOODS_RECEIPT_NOT_FOUND_RE);
+  });
+
+  it("accounting reads: ledger accounts/posting periods/journals are permission-gated, tenant-scoped, and reflect create->post", async () => {
+    const admin = { context: makeCtx(ADMIN, ORG) };
+    const cashier = { context: makeCtx(CASHIER, ORG) };
+    const adminB = { context: makeCtx(ADMIN_B, ORG_B) };
+
+    const cash = await call(
+      appRouter.accounting.ledgerAccountCreate,
+      {
+        code: "READ-1000",
+        name: "Cash (reads)",
+        type: "asset",
+        normalBalance: "debit",
+      },
+      admin
+    );
+    const revenue = await call(
+      appRouter.accounting.ledgerAccountCreate,
+      {
+        code: "READ-4000",
+        name: "Sales Revenue (reads)",
+        type: "revenue",
+        normalBalance: "credit",
+      },
+      admin
+    );
+    const period = await call(
+      appRouter.accounting.postingPeriodCreate,
+      {
+        name: "Accounting Reads Period",
+        startsOn: new Date("2026-09-01T00:00:00.000Z"),
+        endsOn: new Date("2026-09-30T00:00:00.000Z"),
+      },
+      admin
+    );
+    const draft = await call(
+      appRouter.accounting.journalCreateDraft,
+      {
+        postingPeriodId: period.id,
+        memo: "reads regression",
+        lines: [
+          { accountId: cash.id, debitMinor: 500, currency: "USD", scale: 2 },
+          {
+            accountId: revenue.id,
+            creditMinor: 500,
+            currency: "USD",
+            scale: 2,
+          },
+        ],
+      },
+      admin
+    );
+    const posted = await call(
+      appRouter.accounting.journalPost,
+      { journalId: draft.id },
+      admin
+    );
+    expect(posted.status).toBe("posted");
+
+    // Lists reflect the flow.
+    const accounts = await call(
+      appRouter.accounting.ledgerAccountList,
+      {},
+      admin
+    );
+    expect(accounts.map((row) => row.id)).toContain(cash.id);
+    expect(accounts.map((row) => row.id)).toContain(revenue.id);
+    const periods = await call(
+      appRouter.accounting.postingPeriodList,
+      {},
+      admin
+    );
+    expect(periods.some((row) => row.id === period.id)).toBe(true);
+    const journals = await call(
+      appRouter.accounting.journalList,
+      { postingPeriodId: period.id },
+      admin
+    );
+    expect(journals).toEqual([
+      expect.objectContaining({ id: draft.id, status: "posted" }),
+    ]);
+
+    // Detail composes header + lines with account identity.
+    const detail = await call(
+      appRouter.accounting.journalDetail,
+      { journalId: draft.id },
+      admin
+    );
+    expect(detail.status).toBe("posted");
+    expect(detail.lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ accountId: cash.id, debitMinor: 500 }),
+        expect.objectContaining({ accountId: revenue.id, creditMinor: 500 }),
+      ])
+    );
+
+    // postingPeriodClose is now wired to a router mutation (was service-only).
+    const closePeriod = await call(
+      appRouter.accounting.postingPeriodCreate,
+      {
+        name: "Accounting Reads Period To Close",
+        startsOn: new Date("2026-10-01T00:00:00.000Z"),
+        endsOn: new Date("2026-10-31T00:00:00.000Z"),
+      },
+      admin
+    );
+    const closed = await call(
+      appRouter.accounting.postingPeriodClose,
+      { postingPeriodId: closePeriod.id },
+      admin
+    );
+    expect(closed.status).toBe("closed");
+
+    // Permission gate — a cashier (no accounting.manage) is rejected on every
+    // read, matching the write-side gate.
+    await expect(
+      call(appRouter.accounting.ledgerAccountList, {}, cashier)
+    ).rejects.toThrow(MISSING_ACCOUNTING_MANAGE_RE);
+    await expect(
+      call(appRouter.accounting.postingPeriodList, {}, cashier)
+    ).rejects.toThrow(MISSING_ACCOUNTING_MANAGE_RE);
+    await expect(
+      call(appRouter.accounting.journalList, {}, cashier)
+    ).rejects.toThrow(MISSING_ACCOUNTING_MANAGE_RE);
+    await expect(
+      call(appRouter.accounting.journalDetail, { journalId: draft.id }, cashier)
+    ).rejects.toThrow(MISSING_ACCOUNTING_MANAGE_RE);
+
+    // Cross-tenant detail read is NOT_FOUND, not a leak.
+    await expect(
+      call(appRouter.accounting.journalDetail, { journalId: draft.id }, adminB)
+    ).rejects.toThrow(JOURNAL_NOT_FOUND_RE);
   });
 
   // H1 regression — ONE parameterized harness over every guarded FK-bearing
