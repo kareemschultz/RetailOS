@@ -307,24 +307,22 @@ function SuppliersPanel() {
 // ── Purchase orders: create ──────────────────────────────────────────────
 
 interface DraftPoLine {
+  currency: string;
   key: string;
   label: string;
   productId: string;
   qty: number;
+  scale: number;
   skuId: string;
   unitCostMinor: number;
 }
 
 function DraftPoLinesTable({
-  currency,
   lines,
   onRemove,
-  scale,
 }: {
-  currency: string;
   lines: DraftPoLine[];
   onRemove: (key: string) => void;
-  scale: number;
 }) {
   if (lines.length === 0) {
     return (
@@ -354,7 +352,7 @@ function DraftPoLinesTable({
                 {line.qty}
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
-                {formatMoney(line.unitCostMinor, currency, scale)}
+                {formatMoney(line.unitCostMinor, line.currency, line.scale)}
               </TableCell>
               <TableCell className="text-right">
                 <Button
@@ -406,8 +404,11 @@ function CreatePurchaseOrderDialog({
     orpc.procurement.purchaseOrderCreate.mutationOptions()
   );
 
-  const currency = "USD";
-  const scale = 2;
+  // A purchase order carries ONE currency. It is derived from the catalog
+  // (each SKU's product currency), never hardcoded — mixing currencies on one
+  // order is rejected with a clear message instead of being silently coerced.
+  const currency = lines[0]?.currency ?? null;
+  const scale = lines[0]?.scale ?? 2;
 
   function addLine() {
     const sku = (skus.data ?? []).find((row) => row.id === pendingSkuId);
@@ -425,15 +426,23 @@ function CreatePurchaseOrderDialog({
       toast.error("Unit cost must be zero or a positive amount.");
       return;
     }
+    if (currency && sku.currency !== currency) {
+      toast.error(
+        `This order is in ${currency}; ${sku.productName} is priced in ${sku.currency}. Create a separate order for ${sku.currency} items.`
+      );
+      return;
+    }
     setLines((prev) => [
       ...prev,
       {
+        currency: sku.currency,
         key: crypto.randomUUID(),
         label: `${sku.productName} · ${sku.code}`,
         productId: sku.productId,
         qty,
+        scale: sku.scale,
         skuId: sku.id,
-        unitCostMinor: Math.round(costAmount * 10 ** scale),
+        unitCostMinor: Math.round(costAmount * 10 ** sku.scale),
       },
     ]);
     setPendingSkuId("");
@@ -446,7 +455,7 @@ function CreatePurchaseOrderDialog({
       toast.error("Number, company, and supplier are required.");
       return;
     }
-    if (lines.length === 0) {
+    if (lines.length === 0 || !currency) {
       toast.error("Add at least one line.");
       return;
     }
@@ -589,12 +598,10 @@ function CreatePurchaseOrderDialog({
               </Button>
             </div>
             <DraftPoLinesTable
-              currency={currency}
               lines={lines}
               onRemove={(key) =>
                 setLines((prev) => prev.filter((line) => line.key !== key))
               }
-              scale={scale}
             />
           </div>
         </div>
@@ -934,7 +941,15 @@ function CreateBillDialog({
                   value={receiptId}
                 >
                   <SelectTrigger className="w-full" id={receiptFieldId}>
-                    <SelectValue placeholder="Pick a receipt" />
+                    {/* The value is a receipt id preselected before the option
+                        list ever mounts — render the receipt NUMBER, or the
+                        trigger shows a raw UUID. */}
+                    <SelectValue>
+                      {(value: string | null) =>
+                        detail.receipts.find((receipt) => receipt.id === value)
+                          ?.number ?? "Pick a receipt"
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {detail.receipts.map((receipt) => (

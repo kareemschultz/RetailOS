@@ -165,11 +165,6 @@ export const navGroups: NavGroup[] = [
             permission: "reports.view",
             to: "/reports/number-leases",
           },
-          {
-            label: "Financial status",
-            permission: "reports.view",
-            to: "/reports/financial",
-          },
         ],
       },
       {

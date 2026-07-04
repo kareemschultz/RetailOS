@@ -262,7 +262,7 @@ function OperationsTabs({ data }: { data: OperationsSummary | undefined }) {
       <TabsContent className="space-y-6 text-base" value="overview">
         <DataTableCard
           count={rows.length}
-          footer="Counts are read from tenant-scoped production workflow tables."
+          footer="Live counts — open a workflow to act on its items."
           title="Operating workstreams"
         >
           <WorkstreamTable rows={rows} />
@@ -466,12 +466,12 @@ function OperationsScreen() {
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="font-medium text-muted-foreground text-sm">
-            Enterprise command centre
+            Command centre
           </p>
           <h1 className="font-semibold text-2xl tracking-tight">Operations</h1>
           <p className="max-w-3xl text-muted-foreground">
-            A production cockpit for store operations, warehouse movement, POS
-            control, and bonded-goods compliance — all backed by RetailOS APIs.
+            What needs attention right now — open tills, stock in motion,
+            overdue transfers, and bonded goods awaiting clearance.
           </p>
         </div>
         <Button nativeButton={false} render={<Link to="/dashboard" />}>

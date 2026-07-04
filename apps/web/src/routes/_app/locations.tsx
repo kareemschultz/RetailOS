@@ -442,7 +442,11 @@ function LocationsScreen() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<LocationRow | undefined>();
   const [archiveTarget, setArchiveTarget] = useState<LocationRow | undefined>();
-  const locations = useQuery(orpc.location.list.queryOptions({ input: {} }));
+  const locations = useQuery(
+    // The management screen is the ONE place internal in-transit nodes are
+    // visible (with their badge) — every picker elsewhere excludes them.
+    orpc.location.list.queryOptions({ input: { includeTransit: true } })
+  );
   const createLocation = useMutation(orpc.location.create.mutationOptions());
   const updateLocation = useMutation(orpc.location.update.mutationOptions());
   const archiveLocation = useMutation(orpc.location.archive.mutationOptions());

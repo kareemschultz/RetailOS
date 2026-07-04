@@ -22,7 +22,6 @@ import { Route as AppStaffRouteImport } from './routes/_app/staff'
 import { Route as AppSkusRouteImport } from './routes/_app/skus'
 import { Route as AppShiftsRouteImport } from './routes/_app/shifts'
 import { Route as AppSalesRouteImport } from './routes/_app/sales'
-import { Route as AppReportsRouteImport } from './routes/_app/reports'
 import { Route as AppProcurementRouteImport } from './routes/_app/procurement'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
 import { Route as AppOperationsRouteImport } from './routes/_app/operations'
@@ -43,6 +42,7 @@ import { Route as AppBondsRouteImport } from './routes/_app/bonds'
 import { Route as AppBarcodesRouteImport } from './routes/_app/barcodes'
 import { Route as AppAuditLogRouteImport } from './routes/_app/audit-log'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
+import { Route as AppReportsIndexRouteImport } from './routes/_app/reports.index'
 import { Route as AppProductsIndexRouteImport } from './routes/_app/products.index'
 import { Route as AppSettingsTaxRouteImport } from './routes/_app/settings.tax'
 import { Route as AppSettingsNumberingRouteImport } from './routes/_app/settings.numbering'
@@ -114,11 +114,6 @@ const AppShiftsRoute = AppShiftsRouteImport.update({
 const AppSalesRoute = AppSalesRouteImport.update({
   id: '/sales',
   path: '/sales',
-  getParentRoute: () => AppRouteRoute,
-} as any)
-const AppReportsRoute = AppReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppProcurementRoute = AppProcurementRouteImport.update({
@@ -221,6 +216,11 @@ const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   path: '/settings/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppReportsIndexRoute = AppReportsIndexRouteImport.update({
+  id: '/reports/',
+  path: '/reports/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppProductsIndexRoute = AppProductsIndexRouteImport.update({
   id: '/products/',
   path: '/products/',
@@ -242,14 +242,14 @@ const AppSettingsCompaniesRoute = AppSettingsCompaniesRouteImport.update({
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppReportsNumberLeasesRoute = AppReportsNumberLeasesRouteImport.update({
-  id: '/number-leases',
-  path: '/number-leases',
-  getParentRoute: () => AppReportsRoute,
+  id: '/reports/number-leases',
+  path: '/reports/number-leases',
+  getParentRoute: () => AppRouteRoute,
 } as any)
 const AppReportsFinancialRoute = AppReportsFinancialRouteImport.update({
-  id: '/financial',
-  path: '/financial',
-  getParentRoute: () => AppReportsRoute,
+  id: '/reports/financial',
+  path: '/reports/financial',
+  getParentRoute: () => AppRouteRoute,
 } as any)
 const AppProductsImportRoute = AppProductsImportRouteImport.update({
   id: '/products/import',
@@ -285,7 +285,6 @@ export interface FileRoutesByFullPath {
   '/operations': typeof AppOperationsRoute
   '/pos': typeof AppPosRoute
   '/procurement': typeof AppProcurementRoute
-  '/reports': typeof AppReportsRouteWithChildren
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
@@ -303,6 +302,7 @@ export interface FileRoutesByFullPath {
   '/settings/numbering': typeof AppSettingsNumberingRoute
   '/settings/tax': typeof AppSettingsTaxRoute
   '/products/': typeof AppProductsIndexRoute
+  '/reports/': typeof AppReportsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -328,7 +328,6 @@ export interface FileRoutesByTo {
   '/operations': typeof AppOperationsRoute
   '/pos': typeof AppPosRoute
   '/procurement': typeof AppProcurementRoute
-  '/reports': typeof AppReportsRouteWithChildren
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
@@ -346,6 +345,7 @@ export interface FileRoutesByTo {
   '/settings/numbering': typeof AppSettingsNumberingRoute
   '/settings/tax': typeof AppSettingsTaxRoute
   '/products': typeof AppProductsIndexRoute
+  '/reports': typeof AppReportsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -373,7 +373,6 @@ export interface FileRoutesById {
   '/_app/operations': typeof AppOperationsRoute
   '/_app/pos': typeof AppPosRoute
   '/_app/procurement': typeof AppProcurementRoute
-  '/_app/reports': typeof AppReportsRouteWithChildren
   '/_app/sales': typeof AppSalesRoute
   '/_app/shifts': typeof AppShiftsRoute
   '/_app/skus': typeof AppSkusRoute
@@ -391,6 +390,7 @@ export interface FileRoutesById {
   '/_app/settings/numbering': typeof AppSettingsNumberingRoute
   '/_app/settings/tax': typeof AppSettingsTaxRoute
   '/_app/products/': typeof AppProductsIndexRoute
+  '/_app/reports/': typeof AppReportsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -418,7 +418,6 @@ export interface FileRouteTypes {
     | '/operations'
     | '/pos'
     | '/procurement'
-    | '/reports'
     | '/sales'
     | '/shifts'
     | '/skus'
@@ -436,6 +435,7 @@ export interface FileRouteTypes {
     | '/settings/numbering'
     | '/settings/tax'
     | '/products/'
+    | '/reports/'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -461,7 +461,6 @@ export interface FileRouteTypes {
     | '/operations'
     | '/pos'
     | '/procurement'
-    | '/reports'
     | '/sales'
     | '/shifts'
     | '/skus'
@@ -479,6 +478,7 @@ export interface FileRouteTypes {
     | '/settings/numbering'
     | '/settings/tax'
     | '/products'
+    | '/reports'
     | '/settings'
   id:
     | '__root__'
@@ -505,7 +505,6 @@ export interface FileRouteTypes {
     | '/_app/operations'
     | '/_app/pos'
     | '/_app/procurement'
-    | '/_app/reports'
     | '/_app/sales'
     | '/_app/shifts'
     | '/_app/skus'
@@ -523,6 +522,7 @@ export interface FileRouteTypes {
     | '/_app/settings/numbering'
     | '/_app/settings/tax'
     | '/_app/products/'
+    | '/_app/reports/'
     | '/_app/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -624,13 +624,6 @@ declare module '@tanstack/react-router' {
       path: '/sales'
       fullPath: '/sales'
       preLoaderRoute: typeof AppSalesRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
-    '/_app/reports': {
-      id: '/_app/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/procurement': {
@@ -773,6 +766,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/reports/': {
+      id: '/_app/reports/'
+      path: '/reports'
+      fullPath: '/reports/'
+      preLoaderRoute: typeof AppReportsIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/products/': {
       id: '/_app/products/'
       path: '/products'
@@ -803,17 +803,17 @@ declare module '@tanstack/react-router' {
     }
     '/_app/reports/number-leases': {
       id: '/_app/reports/number-leases'
-      path: '/number-leases'
+      path: '/reports/number-leases'
       fullPath: '/reports/number-leases'
       preLoaderRoute: typeof AppReportsNumberLeasesRouteImport
-      parentRoute: typeof AppReportsRoute
+      parentRoute: typeof AppRouteRoute
     }
     '/_app/reports/financial': {
       id: '/_app/reports/financial'
-      path: '/financial'
+      path: '/reports/financial'
       fullPath: '/reports/financial'
       preLoaderRoute: typeof AppReportsFinancialRouteImport
-      parentRoute: typeof AppReportsRoute
+      parentRoute: typeof AppRouteRoute
     }
     '/_app/products/import': {
       id: '/_app/products/import'
@@ -831,20 +831,6 @@ declare module '@tanstack/react-router' {
     }
   }
 }
-
-interface AppReportsRouteChildren {
-  AppReportsFinancialRoute: typeof AppReportsFinancialRoute
-  AppReportsNumberLeasesRoute: typeof AppReportsNumberLeasesRoute
-}
-
-const AppReportsRouteChildren: AppReportsRouteChildren = {
-  AppReportsFinancialRoute: AppReportsFinancialRoute,
-  AppReportsNumberLeasesRoute: AppReportsNumberLeasesRoute,
-}
-
-const AppReportsRouteWithChildren = AppReportsRoute._addFileChildren(
-  AppReportsRouteChildren,
-)
 
 interface AppRouteRouteChildren {
   AppAuditLogRoute: typeof AppAuditLogRoute
@@ -866,7 +852,6 @@ interface AppRouteRouteChildren {
   AppOperationsRoute: typeof AppOperationsRoute
   AppPosRoute: typeof AppPosRoute
   AppProcurementRoute: typeof AppProcurementRoute
-  AppReportsRoute: typeof AppReportsRouteWithChildren
   AppSalesRoute: typeof AppSalesRoute
   AppShiftsRoute: typeof AppShiftsRoute
   AppSkusRoute: typeof AppSkusRoute
@@ -878,10 +863,13 @@ interface AppRouteRouteChildren {
   AppVariantsRoute: typeof AppVariantsRoute
   AppProductsProductIdRoute: typeof AppProductsProductIdRoute
   AppProductsImportRoute: typeof AppProductsImportRoute
+  AppReportsFinancialRoute: typeof AppReportsFinancialRoute
+  AppReportsNumberLeasesRoute: typeof AppReportsNumberLeasesRoute
   AppSettingsCompaniesRoute: typeof AppSettingsCompaniesRoute
   AppSettingsNumberingRoute: typeof AppSettingsNumberingRoute
   AppSettingsTaxRoute: typeof AppSettingsTaxRoute
   AppProductsIndexRoute: typeof AppProductsIndexRoute
+  AppReportsIndexRoute: typeof AppReportsIndexRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
 }
 
@@ -905,7 +893,6 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppOperationsRoute: AppOperationsRoute,
   AppPosRoute: AppPosRoute,
   AppProcurementRoute: AppProcurementRoute,
-  AppReportsRoute: AppReportsRouteWithChildren,
   AppSalesRoute: AppSalesRoute,
   AppShiftsRoute: AppShiftsRoute,
   AppSkusRoute: AppSkusRoute,
@@ -917,10 +904,13 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppVariantsRoute: AppVariantsRoute,
   AppProductsProductIdRoute: AppProductsProductIdRoute,
   AppProductsImportRoute: AppProductsImportRoute,
+  AppReportsFinancialRoute: AppReportsFinancialRoute,
+  AppReportsNumberLeasesRoute: AppReportsNumberLeasesRoute,
   AppSettingsCompaniesRoute: AppSettingsCompaniesRoute,
   AppSettingsNumberingRoute: AppSettingsNumberingRoute,
   AppSettingsTaxRoute: AppSettingsTaxRoute,
   AppProductsIndexRoute: AppProductsIndexRoute,
+  AppReportsIndexRoute: AppReportsIndexRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
 }
 

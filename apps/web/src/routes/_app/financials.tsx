@@ -79,6 +79,16 @@ function formatDate(value: Date | string | null): string {
   return value ? new Date(value).toLocaleDateString() : "—";
 }
 
+// Posting-period bounds are DATE-ONLY columns (no time, no zone). They arrive
+// as UTC-midnight instants, so a local-time render in any zone west of UTC
+// (Guyana is UTC-4) would show the PREVIOUS day — "July 1" becoming "Jun 30".
+// Rendering in UTC keeps the calendar date the user actually entered.
+function formatDateOnly(value: Date | string | null): string {
+  return value
+    ? new Date(value).toLocaleDateString(undefined, { timeZone: "UTC" })
+    : "—";
+}
+
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -200,7 +210,12 @@ function CreateLedgerAccountDialog({
                 value={type}
               >
                 <SelectTrigger className="w-full" id={typeFieldId}>
-                  <SelectValue />
+                  {/* Render the human label, not the raw stored value — the
+                      trigger otherwise shows lowercase "asset" until the
+                      option list has mounted. */}
+                  <SelectValue>
+                    {(value: string | null) => capitalize(value ?? "asset")}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {ACCOUNT_TYPES.map((accountType) => (
@@ -218,7 +233,9 @@ function CreateLedgerAccountDialog({
                 value={normalBalance}
               >
                 <SelectTrigger className="w-full" id={balanceFieldId}>
-                  <SelectValue />
+                  <SelectValue>
+                    {(value: string | null) => capitalize(value ?? "debit")}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="debit">Debit</SelectItem>
@@ -423,10 +440,10 @@ function PostingPeriodsTable({
           <TableRow key={row.id}>
             <TableCell className="font-medium">{row.name}</TableCell>
             <TableCell className="text-muted-foreground">
-              {formatDate(row.startsOn)}
+              {formatDateOnly(row.startsOn)}
             </TableCell>
             <TableCell className="text-muted-foreground">
-              {formatDate(row.endsOn)}
+              {formatDateOnly(row.endsOn)}
             </TableCell>
             <TableCell>
               <Badge variant={row.status === "open" ? "outline" : "secondary"}>
@@ -691,7 +708,9 @@ function CreateJournalDialog({
                   value={line.side}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue />
+                    <SelectValue>
+                      {(value: string | null) => capitalize(value ?? "debit")}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="debit">Debit</SelectItem>

@@ -602,6 +602,11 @@ export const locationRouter = {
       z.object({
         companyId: z.string().uuid().optional(),
         includeArchived: z.boolean().default(false),
+        // Per-transfer in-transit nodes are internal ledger bookkeeping — they
+        // must never appear in user-facing location pickers (receiving a GRN
+        // "into In-Transit TRF-1" would corrupt the operational meaning of the
+        // stock). Only the locations management screen opts in to see them.
+        includeTransit: z.boolean().default(false),
       })
     )
     .handler(({ context, input }) => {
@@ -616,6 +621,7 @@ export const locationRouter = {
             ? eq(schema.location.companyId, input.companyId)
             : null,
           input.includeArchived ? null : isNull(schema.location.deletedAt),
+          input.includeTransit ? null : eq(schema.location.isTransit, false),
         ].filter((condition): condition is SQL => condition != null);
         return tx
           .select({
@@ -2126,6 +2132,11 @@ export const catalogRouter = {
             trackingMode: schema.sku.trackingMode,
             isActive: schema.sku.isActive,
             createdAt: schema.sku.createdAt,
+            // The product's money identity — lets purchasing/receiving UIs
+            // derive document currency from real catalog data instead of
+            // hardcoding one.
+            currency: schema.product.currency,
+            scale: schema.product.scale,
           })
           .from(schema.sku)
           .innerJoin(

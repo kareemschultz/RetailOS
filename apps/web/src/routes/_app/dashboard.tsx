@@ -1,3 +1,5 @@
+import type { AppRouterClient } from "@RetailOS/api/routers/index";
+import { Badge } from "@RetailOS/ui/components/badge";
 import {
   Card,
   CardContent,
@@ -7,12 +9,13 @@ import {
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
 import { StatCard } from "@RetailOS/ui/components/stat-card";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
   ImageIcon,
   Package,
   Receipt,
+  ReceiptText,
   TriangleAlert,
   Wallet,
 } from "lucide-react";
@@ -26,6 +29,10 @@ export const Route = createFileRoute("/_app/dashboard")({
 
 const SKELETON_KEYS = ["a", "b", "c", "d"] as const;
 const PRODUCT_PREVIEW_LIMIT = 5;
+const RECENT_SALES_LIMIT = 8;
+
+type PosClient = AppRouterClient["pos"];
+type RecentSaleRow = Awaited<ReturnType<PosClient["saleSearch"]>>[number];
 
 interface CatalogPreviewRow {
   currency: string;
@@ -110,6 +117,74 @@ function CatalogPreview({
   );
 }
 
+function RecentSales({
+  isError,
+  isLoading,
+  sales,
+}: {
+  isError: boolean;
+  isLoading: boolean;
+  sales: RecentSaleRow[];
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-3">
+        {SKELETON_KEYS.slice(0, 3).map((key) => (
+          <Skeleton className="h-12 rounded-lg" key={key} />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    // A back-office role without POS access simply doesn't get this panel's
+    // data — degrade quietly rather than surfacing a permission error.
+    return (
+      <p className="py-8 text-center text-muted-foreground text-sm">
+        Sales history needs point-of-sale access.
+      </p>
+    );
+  }
+
+  if (sales.length === 0) {
+    return (
+      <div className="flex min-h-36 flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-6 text-center">
+        <ReceiptText className="size-5 text-muted-foreground" />
+        <p className="font-medium text-sm">No sales in the last 30 days</p>
+        <p className="text-muted-foreground text-xs">
+          Sales rung up at the register or placed online will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col divide-y">
+      {sales.map((sale) => (
+        <div className="flex items-center gap-3 py-2.5" key={sale.id}>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium font-mono text-xs">
+              {sale.number}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              {new Date(sale.createdAt).toLocaleString()}
+            </p>
+          </div>
+          {sale.status === "void" ? (
+            <Badge variant="secondary">Voided</Badge>
+          ) : null}
+          {sale.saleType === "return" ? (
+            <Badge variant="outline">Return</Badge>
+          ) : null}
+          <p className="font-medium font-mono text-sm tabular-nums">
+            {formatMoney(sale.totalMinor, sale.currency, sale.scale)}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DashboardScreen() {
   // All KPI aggregation is server-side (reports.dashboardSummary). The client
   // only renders the returned figures — no money arithmetic in the browser.
@@ -117,6 +192,11 @@ function DashboardScreen() {
     orpc.reports.dashboardSummary.queryOptions({ input: {} })
   );
   const catalog = useQuery(orpc.product.catalog.queryOptions({ input: {} }));
+  const recentSales = useQuery(
+    orpc.pos.saleSearch.queryOptions({
+      input: { limit: RECENT_SALES_LIMIT },
+    })
+  );
 
   const data = summary.data;
   const productPreview = (catalog.data ?? []).slice(0, PRODUCT_PREVIEW_LIMIT);
@@ -200,22 +280,32 @@ function DashboardScreen() {
 
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
         <Card className="shadow-sm">
-          <CardContent className="p-6">
-            <h2 className="font-semibold text-lg tracking-tight">
-              Welcome to RetailOS
-            </h2>
-            <p className="mt-1 text-muted-foreground text-sm">
-              Ring up a sale from{" "}
-              <span className="font-medium">Point of Sale</span>, or browse your
-              catalog under <span className="font-medium">Products</span>. More
-              dashboards (cashier, inventory, accounting) arrive as those
-              modules ship.
-            </p>
+          <CardHeader className="flex flex-row items-center justify-between border-b">
+            <CardTitle>Recent sales</CardTitle>
+            <Link
+              className="font-medium text-primary text-sm hover:underline"
+              to="/sales"
+            >
+              View all
+            </Link>
+          </CardHeader>
+          <CardContent>
+            <RecentSales
+              isError={recentSales.isError}
+              isLoading={recentSales.isLoading}
+              sales={recentSales.data ?? []}
+            />
           </CardContent>
         </Card>
         <Card className="shadow-sm">
-          <CardHeader className="border-b">
+          <CardHeader className="flex flex-row items-center justify-between border-b">
             <CardTitle>Catalog spotlight</CardTitle>
+            <Link
+              className="font-medium text-primary text-sm hover:underline"
+              to="/products"
+            >
+              View all
+            </Link>
           </CardHeader>
           <CardContent>
             <CatalogPreview
