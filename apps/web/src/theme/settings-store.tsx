@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 
+import { applyAccentVars, useBranding } from "./branding-store";
 import { FONT_CONFIG, type FontKey } from "./fonts";
 import { type ThemePresetKey, themePresets } from "./theme-presets";
 
@@ -118,6 +119,7 @@ function readStored(): Settings {
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { setTheme, resolvedTheme } = useTheme();
+  const { branding } = useBranding();
   const [settings, setSettings] = useState<Settings>(initialSettings);
 
   // Hydrate from localStorage after mount (avoids SSR mismatch).
@@ -151,13 +153,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setTheme(settings.mode);
   }, [settings.mode, setTheme]);
 
-  // Theme preset → set/clear the OKLCH CSS variables on :root.
+  // Theme preset → set/clear the OKLCH CSS variables on :root, THEN re-paint the
+  // tenant brand accent last so white-label branding always wins the emphasis
+  // tokens (--primary etc.) over whatever the preset defined. Runs on preset,
+  // mode, AND accent change so every path re-applies in the correct order.
   useEffect(() => {
     const root = document.documentElement;
     if (settings.themePreset === "default") {
       for (const key of PRESET_CSS_VARS) {
         root.style.removeProperty(`--${key}`);
       }
+      applyAccentVars(branding.accent);
       return;
     }
     const preset = themePresets[settings.themePreset];
@@ -170,7 +176,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         root.style.setProperty(`--${key}`, value as string);
       }
     }
-  }, [settings.themePreset, resolvedTheme]);
+    applyAccentVars(branding.accent);
+  }, [settings.themePreset, resolvedTheme, branding.accent]);
 
   // Radius.
   useEffect(() => {
