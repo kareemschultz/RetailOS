@@ -3,9 +3,12 @@ import {
   ArrowLeftRight,
   BadgeCheck,
   BarChart3,
+  Bell,
   Boxes,
-  CircleDollarSign,
+  ClipboardCheck,
   ClipboardList,
+  CircleDollarSign,
+  FileText,
   FolderTree,
   History,
   Landmark,
@@ -14,26 +17,34 @@ import {
   type LucideIcon,
   MapPin,
   Package,
+  Percent,
   ReceiptText,
-  Ruler,
   ScanLine,
   ScrollText,
   Settings2,
   ShieldCheck,
   Store,
+  Tags,
+  Truck,
   Users,
-  Workflow,
+  Wallet,
 } from "lucide-react";
 
-// RetailOS navigation config — the data the AdminCN-sourced Sidebar renders.
-// Source of truth: docs/architecture/navigation-ia.md (research-backed +
-// owner blueprint). Hybrid model: workspace -> group -> nested (max depth 2)
-// -> tabs. Sidebar items = different workflows; tabs (inside a page) = views
-// of one workflow. `to` is a TanStack Router path (typed against the route
-// tree). For client-facing builds, sidebar + command palette expose only surfaces
-// backed by RetailOS APIs. AdminCN showcase routes can remain in source as owned
-// design assets, but they must not be promoted as production modules until they
-// are normalized, wired to oRPC, and verified against the backend contract.
+import type { WorkspaceId } from "./workspaces";
+
+// RetailOS navigation config — the single source the sidebar AND command
+// palette render from. Source of truth: docs/architecture/navigation-ia.md.
+//
+// Model (load-bearing rule): a sidebar ITEM = a distinct workflow; TABS (inside
+// a page) = different views of one workflow. Depth is capped at 2 (one expand
+// level); anything deeper lives in tabs or search. Each group declares which
+// WORKSPACES it appears in, so the workspace switcher re-scopes the same
+// sidebar to the user's role rather than presenting parallel IAs.
+//
+// `to` is a typed TanStack Router path. Some destinations are new surfaces in
+// the rebuild that are backed by the typed mock layer until their backend lands
+// (see src/data/feature-status.ts) — they are real navigable routes, marked in
+// the UI as preview data, never dead links.
 
 export interface NavLeaf {
   badge?: string;
@@ -54,15 +65,19 @@ export type NavMenuItem = {
 export interface NavGroup {
   groupLabel: string;
   items: NavMenuItem[];
+  // Workspaces this group appears in. "admin" (All Modules) always sees every
+  // group, so it need not be listed explicitly.
+  workspaces: WorkspaceId[];
 }
 
 export const navGroups: NavGroup[] = [
   {
-    groupLabel: "Dashboards",
+    groupLabel: "Home",
+    workspaces: ["retail", "inventory", "finance", "commerce"],
     items: [
       {
         icon: LayoutDashboard,
-        label: "Command",
+        label: "Dashboards",
         childItems: [
           { label: "Executive overview", to: "/dashboard" },
           { label: "Operations cockpit", to: "/operations" },
@@ -72,12 +87,22 @@ export const navGroups: NavGroup[] = [
   },
   {
     groupLabel: "Sales",
+    workspaces: ["retail", "commerce"],
     items: [
       { icon: ScanLine, label: "Point of Sale", to: "/pos" },
-      { icon: ReceiptText, label: "Sales", to: "/sales" },
+      { icon: ReceiptText, label: "Orders & Receipts", to: "/sales" },
+      { icon: Users, label: "Customers", to: "/customers" },
+      {
+        icon: Percent,
+        label: "Pricing & Promotions",
+        childItems: [
+          { label: "Price lists", to: "/pricing" },
+          { label: "Promotions", to: "/promotions" },
+        ],
+      },
       {
         icon: CircleDollarSign,
-        label: "Shifts",
+        label: "Shifts & Cash",
         permission: "pos.open_shift",
         to: "/shifts",
       },
@@ -85,59 +110,54 @@ export const navGroups: NavGroup[] = [
   },
   {
     groupLabel: "Catalog",
+    workspaces: ["retail", "inventory", "commerce"],
     items: [
-      {
-        icon: Package,
-        label: "Products",
-        // Nested feature level (depth 2): the product-attribute pages.
-        // (Long-term these also become TABS inside a Product detail.)
-        childItems: [
-          { label: "All products", to: "/products" },
-          { label: "Import products", to: "/products/import" },
-          { label: "Variants", to: "/variants" },
-          { label: "SKUs", to: "/skus" },
-          { label: "Barcodes", to: "/barcodes" },
-        ],
-      },
+      { icon: Package, label: "Products", to: "/products" },
       { icon: FolderTree, label: "Categories", to: "/categories" },
       { icon: BadgeCheck, label: "Brands", to: "/brands" },
-      { icon: Ruler, label: "Units", to: "/units" },
-      { icon: Workflow, label: "Conversions", to: "/uom-conversions" },
+      { icon: Tags, label: "Units & Conversions", to: "/units" },
     ],
   },
   {
     groupLabel: "Inventory & Warehouse",
+    workspaces: ["retail", "inventory"],
     items: [
-      { icon: Boxes, label: "Stock", to: "/inventory" },
-      { icon: Layers, label: "Lots", to: "/lots" },
+      { icon: Boxes, label: "Stock on hand", to: "/inventory" },
       { icon: History, label: "Stock ledger", to: "/stock-ledger" },
+      {
+        icon: ClipboardCheck,
+        label: "Adjustments & Counts",
+        permission: "inventory.adjust",
+        to: "/adjustments",
+      },
       {
         icon: ArrowLeftRight,
         label: "Transfers",
         permission: "inventory.transfer",
         to: "/transfers",
       },
+      { icon: Layers, label: "Lots & Expiry", to: "/lots" },
       {
-        icon: ShieldCheck,
-        label: "Bonded goods",
-        permission: "bond.receive",
-        to: "/bonds",
+        icon: MapPin,
+        label: "Locations",
+        childItems: [
+          { label: "Locations & Warehouses", to: "/locations" },
+          { label: "Bonded goods", permission: "bond.receive", to: "/bonds" },
+        ],
       },
-      { icon: MapPin, label: "Locations", to: "/locations" },
     ],
   },
   {
-    groupLabel: "Procurement",
+    groupLabel: "Purchasing",
+    workspaces: ["inventory", "finance"],
     items: [
+      { icon: Truck, label: "Suppliers", to: "/suppliers" },
       { icon: ClipboardList, label: "Purchase orders", to: "/procurement" },
     ],
   },
   {
-    groupLabel: "Commerce",
-    items: [{ icon: Store, label: "Storefront", to: "/commerce" }],
-  },
-  {
-    groupLabel: "Financials",
+    groupLabel: "Finance",
+    workspaces: ["finance"],
     items: [
       {
         icon: Landmark,
@@ -145,75 +165,77 @@ export const navGroups: NavGroup[] = [
         permission: "reports.view",
         to: "/financials",
       },
+      { icon: Wallet, label: "Receivables (AR)", to: "/receivables" },
+      { icon: FileText, label: "Payables (AP)", to: "/payables" },
     ],
   },
   {
+    groupLabel: "Online Store",
+    workspaces: ["commerce"],
+    items: [{ icon: Store, label: "Storefront", to: "/commerce" }],
+  },
+  {
     groupLabel: "Reports",
+    workspaces: ["retail", "inventory", "finance", "commerce"],
     items: [
       {
         icon: BarChart3,
         label: "Reports",
         permission: "reports.view",
-        childItems: [
-          {
-            label: "Overview",
-            permission: "reports.view",
-            to: "/reports",
-          },
-          {
-            label: "Number leases",
-            permission: "reports.view",
-            to: "/reports/number-leases",
-          },
-        ],
-      },
-      {
-        icon: ScrollText,
-        label: "Audit trail",
-        permission: "audit.view",
-        to: "/audit-log",
-      },
-    ],
-  },
-  {
-    groupLabel: "Administration",
-    items: [
-      {
-        icon: Settings2,
-        label: "Settings",
-        permission: "settings.manage",
-        childItems: [
-          {
-            label: "Overview",
-            permission: "settings.manage",
-            to: "/settings",
-          },
-          {
-            label: "Companies",
-            permission: "settings.manage",
-            to: "/settings/companies",
-          },
-          {
-            label: "Tax rates",
-            permission: "settings.manage",
-            to: "/settings/tax",
-          },
-          {
-            label: "Numbering",
-            permission: "settings.manage",
-            to: "/settings/numbering",
-          },
-        ],
-      },
-      {
-        icon: Users,
-        label: "Staff & access",
-        permission: "users.manage",
-        to: "/staff",
+        to: "/reports",
       },
     ],
   },
 ];
+
+// Settings + utility items are pinned at the BOTTOM of the sidebar, visually
+// separated from operational nav, and shown in every workspace.
+export const navFooterGroup: NavGroup = {
+  groupLabel: "Administration",
+  workspaces: ["retail", "inventory", "finance", "commerce"],
+  items: [
+    {
+      icon: Bell,
+      label: "Notifications",
+      to: "/notifications",
+    },
+    {
+      icon: Users,
+      label: "Staff & Access",
+      permission: "users.manage",
+      to: "/staff",
+    },
+    {
+      icon: ScrollText,
+      label: "Audit trail",
+      permission: "audit.view",
+      to: "/audit-log",
+    },
+    {
+      icon: Settings2,
+      label: "Settings",
+      permission: "settings.manage",
+      childItems: [
+        { label: "Overview", to: "/settings" },
+        { label: "Companies & Locations", to: "/settings/companies" },
+        { label: "White-label & Branding", to: "/settings/branding" },
+        { label: "Tax rates", to: "/settings/tax" },
+        { label: "Numbering", to: "/settings/numbering" },
+      ],
+    },
+  ],
+};
+
+// Scope the operational groups to the active workspace. "admin" sees all.
+export function groupsForWorkspace(
+  groups: NavGroup[],
+  workspace: WorkspaceId
+): NavGroup[] {
+  if (workspace === "admin") {
+    return groups;
+  }
+  return groups.filter((g) => g.workspaces.includes(workspace));
+}
 
 // UX-only visibility filter. Backend assertPermission remains the enforcement;
 // hiding a nav item is never a security boundary.
