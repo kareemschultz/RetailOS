@@ -64,7 +64,8 @@ export type QuoteLine = {
 };
 
 export type TaxBreakdownRow = {
-  label: string;
+  baseMinor: number;
+  name: string;
   rateBps: number;
   taxMinor: number;
 };

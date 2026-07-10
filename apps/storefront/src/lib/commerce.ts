@@ -157,7 +157,7 @@ async function submitCheckout(
   const created = await client.commerce.checkoutCreate({
     cartId: getCartSession().cartId,
     customerId: getCartSession().customerId,
-    fulfillment: "delivery",
+    fulfilmentType: "delivery",
   });
   return (await client.commerce.checkoutConfirm({
     checkoutIntentId: created.checkoutIntentId,

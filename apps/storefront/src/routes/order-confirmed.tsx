@@ -2,7 +2,7 @@ import { Button } from "@RetailOS/ui/components/button";
 import { Separator } from "@RetailOS/ui/components/separator";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckCircle2, Mail, Package } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useOrder } from "../lib/cart-store";
 import { formatMoney } from "../lib/format";
 
@@ -11,11 +11,16 @@ export const Route = createFileRoute("/order-confirmed")({
 });
 
 function OrderConfirmedPage() {
-  const order = useOrder((s) => s.order);
+  // Snapshot the one-shot order into local state on first render so it survives
+  // StrictMode's mount/unmount/remount and the store being cleared below. A
+  // manual reload legitimately shows the empty state (session-only, not persisted).
+  const [order] = useState(() => useOrder.getState().order);
   const clearOrder = useOrder((s) => s.clearOrder);
 
-  // Clear the one-shot order from session state when leaving this page.
-  useEffect(() => () => clearOrder(), [clearOrder]);
+  // Consume the order from the store once it's been snapshotted locally.
+  useEffect(() => {
+    clearOrder();
+  }, [clearOrder]);
 
   if (!order) {
     return (

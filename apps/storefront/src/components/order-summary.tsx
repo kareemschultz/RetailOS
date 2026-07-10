@@ -52,9 +52,9 @@ export function OrderSummary({
           {quote.taxBreakdown.map((tax) => (
             <div
               className="flex items-center justify-between"
-              key={tax.label}
+              key={tax.name}
             >
-              <dt className="text-muted-foreground">{tax.label}</dt>
+              <dt className="text-muted-foreground">{tax.name}</dt>
               <dd className="font-mono tabular-nums">{line(tax.taxMinor)}</dd>
             </div>
           ))}

@@ -280,7 +280,14 @@ export function buildMockQuote(
     lines: resolved,
     taxBreakdown:
       taxMinor > 0
-        ? [{ label: "VAT (14%)", rateBps: STANDARD_VAT_BPS, taxMinor }]
+        ? [
+            {
+              baseMinor: subtotalMinor,
+              name: "VAT (14%)",
+              rateBps: STANDARD_VAT_BPS,
+              taxMinor,
+            },
+          ]
         : [],
     totals: {
       subtotalMinor,
