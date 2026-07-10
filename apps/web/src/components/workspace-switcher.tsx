@@ -15,6 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Check, ChevronsUpDown } from "lucide-react";
 
+import { useTheme } from "next-themes";
+
 import { useWorkspace } from "@/configs/workspace-store";
 import {
   getWorkspace,
@@ -32,10 +34,16 @@ import { orpc } from "@/utils/orpc";
 export function WorkspaceSwitcher() {
   const { workspace, setWorkspace } = useWorkspace();
   const { branding } = useBranding();
+  const { resolvedTheme } = useTheme();
   const navigate = useNavigate();
   const { state } = useSidebar();
   const active = getWorkspace(workspace);
   const ActiveIcon = active.icon;
+  // Prefer the mode-specific logo, then the other, then the icon mark.
+  const logoUrl =
+    resolvedTheme === "dark"
+      ? (branding.logoDarkUrl ?? branding.logoLightUrl)
+      : (branding.logoLightUrl ?? branding.logoDarkUrl);
 
   // Permissions gate which workspaces are offered (UX only).
   const access = useQuery(orpc.membership.myAccess.queryOptions({ input: {} }));
@@ -57,11 +65,11 @@ export function WorkspaceSwitcher() {
         }
       >
         <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-primary text-primary-foreground">
-          {branding.logoUrl ? (
+          {logoUrl ? (
             <img
               alt={`${branding.appName} logo`}
               className="size-full object-contain"
-              src={branding.logoUrl}
+              src={logoUrl}
             />
           ) : (
             <ActiveIcon className="size-4" />
