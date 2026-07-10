@@ -48,6 +48,12 @@ export const FEATURE_STATUS = {
     source: "real",
     contracts: ["inventory.list", "inventory.adjust"],
   },
+  "inventory.negativeStock": {
+    key: "inventory.negativeStock",
+    title: "Negative stock report",
+    source: "real",
+    contracts: ["inventory.stockByLocation", "inventory.adjust"],
+  },
   "inventory.ledger": {
     key: "inventory.ledger",
     title: "Stock movement ledger",

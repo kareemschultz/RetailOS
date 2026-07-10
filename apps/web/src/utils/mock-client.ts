@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noBitwiseOperators: integer hash (hashToUuid) requires bitwise mixing
 import {
   UNITECH_CURRENCY,
   UNITECH_SCALE,
@@ -128,13 +129,13 @@ function skuCatalogRows(q?: string) {
 }
 
 // --- Catalog import (preview + commit) --------------------------------------
-type ImportRow = {
-  rowNumber: number;
-  productSku: string;
-  skuCode?: string | null;
+interface ImportRow {
   lotNumber?: string | null;
   openingQtyBase?: number | null;
-};
+  productSku: string;
+  rowNumber: number;
+  skuCode?: string | null;
+}
 
 // Client-parsed rows arrive already well-formed; the preview mirrors the real
 // server checks that don't need a database: SKU presence + duplicate detection
@@ -145,15 +146,15 @@ function previewImportRows(rows: ImportRow[]) {
   const previewed = rows.map((row) => {
     const errors: string[] = [];
     const sku = (row.productSku ?? "").trim();
-    if (!sku) {
-      errors.push("missing product SKU");
-    } else {
+    if (sku) {
       const firstSeen = seen.get(sku.toLowerCase());
       if (firstSeen) {
         errors.push(`duplicate SKU "${sku}" (also row ${firstSeen})`);
       } else {
         seen.set(sku.toLowerCase(), row.rowNumber);
       }
+    } else {
+      errors.push("missing product SKU");
     }
     return {
       rowNumber: row.rowNumber,
@@ -175,22 +176,20 @@ type Handler = (input: unknown) => unknown;
 
 const handlers: Record<string, Handler> = {
   "catalog.importPreview": (input) =>
-    previewImportRows(((input as { rows?: ImportRow[] })?.rows ?? []) as ImportRow[]),
+    previewImportRows(
+      ((input as { rows?: ImportRow[] })?.rows ?? []) as ImportRow[]
+    ),
   "catalog.importCommit": (input) => {
     const rows = ((input as { rows?: ImportRow[] })?.rows ?? []) as ImportRow[];
     const results = rows.map((row) => ({
       rowNumber: row.rowNumber,
       productId: hashToUuid(`import-product:${row.productSku}`),
-      skuId: row.skuCode
-        ? hashToUuid(`import-sku:${row.skuCode}`)
-        : null,
-      lotId: row.lotNumber
-        ? hashToUuid(`import-lot:${row.lotNumber}`)
-        : null,
+      skuId: row.skuCode ? hashToUuid(`import-sku:${row.skuCode}`) : null,
+      lotId: row.lotNumber ? hashToUuid(`import-lot:${row.lotNumber}`) : null,
       openingMovementId:
-        row.openingQtyBase != null
-          ? hashToUuid(`import-move:${row.rowNumber}`)
-          : null,
+        row.openingQtyBase == null
+          ? null
+          : hashToUuid(`import-move:${row.rowNumber}`),
     }));
     return {
       createdProductCount: results.length,
@@ -204,7 +203,7 @@ const handlers: Record<string, Handler> = {
     sales: {
       currency: UNITECH_CURRENCY,
       scale: UNITECH_SCALE,
-      totalMinor: 4_285_000_00,
+      totalMinor: 428_500_000,
     },
     transactionCount: 128,
     inventoryValue: {
@@ -265,6 +264,30 @@ const handlers: Record<string, Handler> = {
   "pos.locationList": () => [{ id: LOCATION_ID, name: LOCATION_NAME }],
   "inventory.stockByLocation": (input) =>
     stockRows((input as { locationId?: string } | undefined)?.locationId),
+  "inventory.adjust": (input) => {
+    // Mirror the real ledger-append result. No persistence in preview: the
+    // caller optimistically drops the reconciled row from its own view.
+    const i = (input as {
+      skuId: string;
+      qtyDelta: number;
+      reasonCode: string;
+    }) ?? { skuId: "", qtyDelta: 0, reasonCode: "" };
+    return {
+      movementId: hashToUuid(`adjust:${i.skuId}:${now()}`),
+      skuId: i.skuId,
+      qtyDelta: i.qtyDelta,
+      reasonCode: i.reasonCode,
+      createdAt: now(),
+    };
+  },
+  "inventory.receive": (input) => {
+    const i = (input as { skuId?: string; qty: number }) ?? { qty: 0 };
+    return {
+      movementId: hashToUuid(`receive:${i.skuId ?? ""}:${now()}`),
+      qty: i.qty,
+      createdAt: now(),
+    };
+  },
   "catalog.skuCatalogList": (input) =>
     skuCatalogRows((input as { q?: string } | undefined)?.q),
   "catalog.categoryList": () =>
@@ -303,9 +326,10 @@ const handlers: Record<string, Handler> = {
 };
 
 // List-shaped procedure names get [] as their safe default; everything else {}.
+const LIST_LEAF_RE = /(list|search|catalog|ledger)$/i;
 function emptyDefault(path: string): unknown {
   const leaf = path.split(".").at(-1) ?? "";
-  if (/(list|search|catalog|ledger)$/i.test(leaf)) {
+  if (LIST_LEAF_RE.test(leaf)) {
     return [];
   }
   return {};
@@ -321,7 +345,7 @@ function makeNode(path: string): unknown {
   return new Proxy(fn, {
     get(_target, prop: string) {
       if (prop === "then" || typeof prop === "symbol") {
-        return undefined;
+        return;
       }
       return makeNode(path ? `${path}.${prop}` : prop);
     },

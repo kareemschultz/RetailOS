@@ -5,9 +5,9 @@ import {
   BarChart3,
   Bell,
   Boxes,
+  CircleDollarSign,
   ClipboardCheck,
   ClipboardList,
-  CircleDollarSign,
   FileText,
   FolderTree,
   History,
@@ -24,6 +24,7 @@ import {
   Settings2,
   Store,
   Tags,
+  TriangleAlert,
   Truck,
   Users,
   Wallet,
@@ -122,6 +123,12 @@ export const navGroups: NavGroup[] = [
     workspaces: ["retail", "inventory"],
     items: [
       { icon: Boxes, label: "Stock on hand", to: "/inventory" },
+      {
+        icon: TriangleAlert,
+        label: "Negative stock",
+        permission: "inventory.adjust",
+        to: "/negative-stock",
+      },
       { icon: History, label: "Stock ledger", to: "/stock-ledger" },
       {
         icon: ClipboardCheck,

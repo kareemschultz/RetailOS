@@ -31,6 +31,7 @@ import { Route as AppPosRouteImport } from './routes/_app/pos'
 import { Route as AppPayablesRouteImport } from './routes/_app/payables'
 import { Route as AppOperationsRouteImport } from './routes/_app/operations'
 import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
+import { Route as AppNegativeStockRouteImport } from './routes/_app/negative-stock'
 import { Route as AppLotsRouteImport } from './routes/_app/lots'
 import { Route as AppLocationsRouteImport } from './routes/_app/locations'
 import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
@@ -168,6 +169,11 @@ const AppOperationsRoute = AppOperationsRouteImport.update({
 const AppNotificationsRoute = AppNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppNegativeStockRoute = AppNegativeStockRouteImport.update({
+  id: '/negative-stock',
+  path: '/negative-stock',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppLotsRoute = AppLotsRouteImport.update({
@@ -338,6 +344,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
   '/lots': typeof AppLotsRoute
+  '/negative-stock': typeof AppNegativeStockRoute
   '/notifications': typeof AppNotificationsRoute
   '/operations': typeof AppOperationsRoute
   '/payables': typeof AppPayablesRoute
@@ -390,6 +397,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
   '/lots': typeof AppLotsRoute
+  '/negative-stock': typeof AppNegativeStockRoute
   '/notifications': typeof AppNotificationsRoute
   '/operations': typeof AppOperationsRoute
   '/payables': typeof AppPayablesRoute
@@ -444,6 +452,7 @@ export interface FileRoutesById {
   '/_app/inventory': typeof AppInventoryRoute
   '/_app/locations': typeof AppLocationsRoute
   '/_app/lots': typeof AppLotsRoute
+  '/_app/negative-stock': typeof AppNegativeStockRoute
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/operations': typeof AppOperationsRoute
   '/_app/payables': typeof AppPayablesRoute
@@ -498,6 +507,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/locations'
     | '/lots'
+    | '/negative-stock'
     | '/notifications'
     | '/operations'
     | '/payables'
@@ -550,6 +560,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/locations'
     | '/lots'
+    | '/negative-stock'
     | '/notifications'
     | '/operations'
     | '/payables'
@@ -603,6 +614,7 @@ export interface FileRouteTypes {
     | '/_app/inventory'
     | '/_app/locations'
     | '/_app/lots'
+    | '/_app/negative-stock'
     | '/_app/notifications'
     | '/_app/operations'
     | '/_app/payables'
@@ -795,6 +807,13 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/notifications'
       preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/negative-stock': {
+      id: '/_app/negative-stock'
+      path: '/negative-stock'
+      fullPath: '/negative-stock'
+      preLoaderRoute: typeof AppNegativeStockRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/lots': {
@@ -1022,6 +1041,7 @@ interface AppRouteRouteChildren {
   AppInventoryRoute: typeof AppInventoryRoute
   AppLocationsRoute: typeof AppLocationsRoute
   AppLotsRoute: typeof AppLotsRoute
+  AppNegativeStockRoute: typeof AppNegativeStockRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppOperationsRoute: typeof AppOperationsRoute
   AppPayablesRoute: typeof AppPayablesRoute
@@ -1072,6 +1092,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppInventoryRoute: AppInventoryRoute,
   AppLocationsRoute: AppLocationsRoute,
   AppLotsRoute: AppLotsRoute,
+  AppNegativeStockRoute: AppNegativeStockRoute,
   AppNotificationsRoute: AppNotificationsRoute,
   AppOperationsRoute: AppOperationsRoute,
   AppPayablesRoute: AppPayablesRoute,
