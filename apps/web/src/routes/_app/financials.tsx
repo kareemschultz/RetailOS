@@ -12,6 +12,7 @@ import {
 } from "@RetailOS/ui/components/dialog";
 import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
+import { PageBody, PageHeader } from "@RetailOS/ui/components/page-header";
 import {
   Select,
   SelectContent,
