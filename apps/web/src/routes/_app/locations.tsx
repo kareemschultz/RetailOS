@@ -1,7 +1,6 @@
 import type { AppRouterClient } from "@RetailOS/api/routers/index";
 import { Badge } from "@RetailOS/ui/components/badge";
 import { Button } from "@RetailOS/ui/components/button";
-import { Card, CardContent } from "@RetailOS/ui/components/card";
 import { DataTableCard } from "@RetailOS/ui/components/data-table-card";
 import {
   Dialog,
@@ -14,6 +13,11 @@ import {
 import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
 import {
+  PageBody,
+  PageHeader,
+  PageMetrics,
+} from "@RetailOS/ui/components/page-header";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -21,6 +25,7 @@ import {
   SelectValue,
 } from "@RetailOS/ui/components/select";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
+import { StatCard } from "@RetailOS/ui/components/stat-card";
 import { Switch } from "@RetailOS/ui/components/switch";
 import {
   Table,
@@ -30,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@RetailOS/ui/components/table";
+import { ViewSwitcher } from "@RetailOS/ui/components/view-switcher";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -43,7 +49,6 @@ import {
   TriangleAlert,
   Warehouse,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -269,37 +274,6 @@ function ArchiveLocationDialog({
   );
 }
 
-function KpiCard({
-  label,
-  value,
-  hint,
-  icon: Icon,
-}: {
-  label: string;
-  value: ReactNode;
-  hint?: string;
-  icon: LucideIcon;
-}) {
-  return (
-    <Card className="shadow-sm">
-      <CardContent className="flex items-start justify-between gap-3 p-5">
-        <div className="min-w-0 space-y-1">
-          <p className="text-muted-foreground text-sm">{label}</p>
-          <p className="truncate font-mono font-semibold text-2xl tracking-tight">
-            {value}
-          </p>
-          {hint ? (
-            <p className="text-muted-foreground text-xs">{hint}</p>
-          ) : null}
-        </div>
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Icon className="size-5" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function CapabilityBadges({ location }: { location: LocationRow }) {
   const flags: string[] = [];
   if (location.isSellable) {
@@ -436,12 +410,154 @@ function LocationsTable({
   );
 }
 
+// The location.list DTO is flat, but the design language calls for a
+// Warehouse → facility hierarchy view. We group by location type into an
+// expandable tree so a manager can scan "all warehouses / all stores / all
+// bonded" at a glance — the same data, shaped the way the eye reads it.
+const HIERARCHY_ORDER: LocationType[] = [
+  "warehouse",
+  "distribution_center",
+  "fulfillment_center",
+  "store",
+  "bonded",
+];
+
+const GROUP_ICONS: Record<LocationType, LucideIcon> = {
+  warehouse: Warehouse,
+  distribution_center: Warehouse,
+  fulfillment_center: Warehouse,
+  store: Building2,
+  bonded: ShieldCheck,
+};
+
+function LocationHierarchy({
+  onEdit,
+  rows,
+}: {
+  onEdit: (row: LocationRow) => void;
+  rows: LocationRow[];
+}) {
+  const groups = HIERARCHY_ORDER.map((type) => ({
+    type,
+    label: TYPE_LABELS[type] ?? type,
+    icon: GROUP_ICONS[type],
+    items: rows.filter((r) => r.type === type),
+  })).filter((g) => g.items.length > 0);
+
+  if (groups.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+        <div className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <MapPin className="size-5" />
+        </div>
+        <p className="font-medium">No locations yet</p>
+        <p className="text-muted-foreground text-sm">
+          Stores, warehouses, and bonded facilities will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {groups.map((group) => {
+        const GroupIcon = group.icon;
+        return (
+          <div className="overflow-hidden rounded-2xl border" key={group.type}>
+            <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-3">
+              <GroupIcon className="size-4 text-muted-foreground" />
+              <span className="font-medium">{group.label}</span>
+              <Badge className="ml-auto" variant="secondary">
+                {group.items.length}
+              </Badge>
+            </div>
+            <ul className="divide-y">
+              {group.items.map((location) => (
+                <li
+                  className="flex items-center gap-3 px-4 py-3 pl-10"
+                  key={location.id}
+                >
+                  <span className="size-1.5 shrink-0 rounded-full bg-primary/50" />
+                  <span className="min-w-0 flex-1 truncate font-medium text-sm">
+                    {location.name}
+                  </span>
+                  <CapabilityBadges location={location} />
+                  <Button
+                    onClick={() => onEdit(location)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <Pencil className="size-3.5" />
+                    <span className="sr-only">Edit {location.name}</span>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function LocationMetrics({
+  isLoading,
+  rows,
+  settled,
+}: {
+  isLoading: boolean;
+  rows: LocationRow[];
+  settled: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {SKELETON_KEYS.slice(0, 4).map((k) => (
+          <Skeleton className="h-28 rounded-2xl" key={k} />
+        ))}
+      </div>
+    );
+  }
+  const storeCount = rows.filter((l) => l.type === "store").length;
+  const warehouseCount = rows.filter((l) => l.type === "warehouse").length;
+  const bondedCount = rows.filter((l) => l.isBonded).length;
+  return (
+    <PageMetrics>
+      <StatCard
+        hint="All facilities"
+        icon={MapPin}
+        label="Locations"
+        value={settled ? rows.length : "—"}
+      />
+      <StatCard
+        hint="Retail outlets"
+        icon={Building2}
+        label="Stores"
+        value={settled ? storeCount : "—"}
+      />
+      <StatCard
+        hint="Storage sites"
+        icon={Warehouse}
+        label="Warehouses"
+        value={settled ? warehouseCount : "—"}
+      />
+      <StatCard
+        hint="Bonded facilities"
+        icon={ShieldCheck}
+        label="Bonded"
+        value={settled ? bondedCount : "—"}
+      />
+    </PageMetrics>
+  );
+}
+
 function LocationsScreen() {
   // location.list returns a display-safe DTO; counts below are plain array
   // tallies (not money/business math), so deriving them client-side is safe.
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<LocationRow | undefined>();
   const [archiveTarget, setArchiveTarget] = useState<LocationRow | undefined>();
+  const [view, setView] = useState<"table" | "hierarchy">("table");
   const locations = useQuery(
     // The management screen is the ONE place internal in-transit nodes are
     // visible (with their badge) — every picker elsewhere excludes them.
@@ -455,55 +571,9 @@ function LocationsScreen() {
   const settled = !(locations.isLoading || locations.isError);
   const companyId = rows.at(0)?.companyId;
 
-  const storeCount = rows.filter((l) => l.type === "store").length;
-  const warehouseCount = rows.filter((l) => l.type === "warehouse").length;
-  const bondedCount = rows.filter((l) => l.isBonded).length;
-
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="font-semibold text-2xl tracking-tight">Locations</h1>
-        <p className="text-muted-foreground">
-          Your stores, warehouses, and bonded facilities.
-        </p>
-      </div>
-
-      {locations.isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {SKELETON_KEYS.slice(0, 4).map((k) => (
-            <Skeleton className="h-28 rounded-2xl" key={k} />
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard
-            hint="All facilities"
-            icon={MapPin}
-            label="Locations"
-            value={settled ? rows.length : "—"}
-          />
-          <KpiCard
-            hint="Retail outlets"
-            icon={Building2}
-            label="Stores"
-            value={settled ? storeCount : "—"}
-          />
-          <KpiCard
-            hint="Storage sites"
-            icon={Warehouse}
-            label="Warehouses"
-            value={settled ? warehouseCount : "—"}
-          />
-          <KpiCard
-            hint="Bonded facilities"
-            icon={ShieldCheck}
-            label="Bonded"
-            value={settled ? bondedCount : "—"}
-          />
-        </div>
-      )}
-
-      <DataTableCard
+    <PageBody className="mx-auto w-full max-w-7xl p-6">
+      <PageHeader
         actions={
           <Button
             disabled={!companyId}
@@ -518,6 +588,31 @@ function LocationsScreen() {
             New location
           </Button>
         }
+        description="Your stores, warehouses, and bonded facilities."
+        title={
+          <span className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <MapPin className="size-5" />
+            </span>
+            Locations
+          </span>
+        }
+      />
+
+      <LocationMetrics
+        isLoading={locations.isLoading}
+        rows={rows}
+        settled={settled}
+      />
+
+      <DataTableCard
+        actions={
+          <ViewSwitcher
+            onChange={(next) => setView(next as "table" | "hierarchy")}
+            value={view}
+            views={["table", "hierarchy"]}
+          />
+        }
         count={settled ? rows.length : undefined}
         footer={
           settled && rows.length > 0
@@ -526,14 +621,18 @@ function LocationsScreen() {
         }
         title="All locations"
       >
-        <LocationsTable
-          errorMessage={locations.error?.message}
-          isError={locations.isError}
-          isLoading={locations.isLoading}
-          onArchive={setArchiveTarget}
-          onEdit={setEditTarget}
-          rows={rows}
-        />
+        {view === "hierarchy" ? (
+          <LocationHierarchy onEdit={setEditTarget} rows={rows} />
+        ) : (
+          <LocationsTable
+            errorMessage={locations.error?.message}
+            isError={locations.isError}
+            isLoading={locations.isLoading}
+            onArchive={setArchiveTarget}
+            onEdit={setEditTarget}
+            rows={rows}
+          />
+        )}
       </DataTableCard>
       {editTarget ? (
         <EditLocationDialog
@@ -614,6 +713,6 @@ function LocationsScreen() {
           open={dialogOpen}
         />
       ) : null}
-    </div>
+    </PageBody>
   );
 }

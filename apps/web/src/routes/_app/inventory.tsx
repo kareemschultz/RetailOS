@@ -12,6 +12,7 @@ import {
 } from "@RetailOS/ui/components/dialog";
 import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
+import { PageBody, PageHeader } from "@RetailOS/ui/components/page-header";
 import {
   Select,
   SelectContent,
@@ -32,6 +33,7 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  Boxes,
   ClipboardList,
   History,
   MapPin,
@@ -1559,22 +1561,10 @@ function InventoryScreen() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="font-semibold text-2xl tracking-tight">Inventory</h1>
-        <p className="text-muted-foreground">
-          Stock on hand and recent movements across every location.
-        </p>
-      </div>
-
-      <DataTableCard
+    <PageBody className="mx-auto w-full max-w-7xl p-6">
+      <PageHeader
         actions={
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <LocationFilter
-              locations={locationOptions}
-              onChange={setLocationFilter}
-              value={locationFilter}
-            />
             <Button
               onClick={() => {
                 setDialogNonce((n) => n + 1);
@@ -1595,6 +1585,25 @@ function InventoryScreen() {
               Receive stock
             </Button>
           </div>
+        }
+        description="Stock on hand and recent movements across every location."
+        title={
+          <span className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Boxes className="size-5" />
+            </span>
+            Inventory
+          </span>
+        }
+      />
+
+      <DataTableCard
+        actions={
+          <LocationFilter
+            locations={locationOptions}
+            onChange={setLocationFilter}
+            value={locationFilter}
+          />
         }
         count={stockSettled ? stockRows.length : undefined}
         title="Stock on hand"
@@ -1648,6 +1657,6 @@ function InventoryScreen() {
           skus={skuOptions}
         />
       ) : null}
-    </div>
+    </PageBody>
   );
 }

@@ -23,7 +23,7 @@
 ### Shared primitives (`packages/ui/src/components/`)
 - `status-chip.tsx` — `StatusChip` + `DomainStatusChip` (active/inactive/pending/failed/draft… → semantic color + Lucide icon).
 - `page-header.tsx` — `PageHeader`, `PageMetrics`, `PageBody` (the Header→Context→Actions→Metrics→Work-area spine).
-- `view-switcher.tsx` — `MultiViewSwitcher` (Table/Card/Detail/Timeline/Kanban/Calendar/Map/Hierarchy) on Base UI ToggleGroup.
+- `view-switcher.tsx` — `ViewSwitcher` (icon-only Table/Card/Timeline/Kanban/Calendar/Map/Hierarchy toggle with tooltips) on Base UI ToggleGroup.
 - (existing, reused) `stat-card.tsx`, `data-table-card.tsx`, `states.tsx` (Empty/Error/Loading), `connection-status.tsx`.
 
 ### Data layer (`apps/web/src/data/`)
@@ -55,10 +55,11 @@
 | Pricing & price lists (`/pricing`) | DONE | mock | |
 | Promotions (`/promotions`) | DONE | mock | |
 | Stock adjustments (`/adjustments`) | DONE | mock | |
-| Dashboards (exec/ops) | TODO | real+mock | Rebuild KPIs/exceptions |
-| Catalog: Products (wizard + tabbed detail) | TODO | real | |
-| Catalog: Categories / Brands / Units | TODO | real | Re-theme existing |
-| Inventory + Warehouse (hierarchy, timeline) | TODO | real+mock | |
+| Dashboards (exec/ops) | DONE | real+mock | On shared PageHeader/PageMetrics spine |
+| Catalog: Products (index on shared spine) | DONE | real | Header actions + feature-consistent |
+| Catalog: Categories / Brands / Units | PARTIAL | real | Functional; header re-theme pending |
+| Inventory (stock on hand + movements) | DONE | real | On shared spine |
+| Locations/Warehouse (Table + Hierarchy view) | DONE | real | ViewSwitcher hierarchy tree added |
 | Procurement (POs, receiving) | TODO | real+mock | |
 | Finance (accounting, GRA/PAYE/NIS) | TODO | mock | |
 | Reports | TODO | mock | |
