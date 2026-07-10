@@ -48,8 +48,9 @@ export function WorkspaceSwitcher() {
   // Permissions gate which workspaces are offered (UX only).
   const access = useQuery(orpc.membership.myAccess.queryOptions({ input: {} }));
   const permissions = access.data?.permissions ?? [];
+  const grantedPermissions = permissions as readonly string[];
   const available = WORKSPACES.filter(
-    (w) => !w.permission || permissions.includes(w.permission)
+    (w) => !w.permission || grantedPermissions.includes(w.permission)
   );
 
   const collapsed = state === "collapsed";

@@ -22,7 +22,6 @@ import {
   ScanLine,
   ScrollText,
   Settings2,
-  ShieldCheck,
   Store,
   Tags,
   Truck,
