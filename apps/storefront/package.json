@@ -11,6 +11,7 @@
   "dependencies": {
     "@RetailOS/api": "workspace:*",
     "@RetailOS/env": "workspace:*",
+    "@RetailOS/sample-data": "workspace:*",
     "@RetailOS/ui": "workspace:*",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.2.7",

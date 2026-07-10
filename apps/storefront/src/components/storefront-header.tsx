@@ -10,9 +10,10 @@ import { IS_MOCK_DATA } from "../lib/commerce";
 
 const NAV = [
   { label: "Shop all", to: "/shop", search: {} as { category?: string } },
-  { label: "Home & Living", to: "/shop", search: { category: "home-living" } },
-  { label: "Kitchen", to: "/shop", search: { category: "kitchen" } },
-  { label: "Coffee & Pantry", to: "/shop", search: { category: "coffee-pantry" } },
+  { label: "Fridges", to: "/shop", search: { category: "fridges" } },
+  { label: "Kitchen Appliances", to: "/shop", search: { category: "kitchen-appliances" } },
+  { label: "Television", to: "/shop", search: { category: "television" } },
+  { label: "Air Conditioning", to: "/shop", search: { category: "air-conditioning" } },
 ];
 
 export function StorefrontHeader() {
@@ -40,12 +41,12 @@ export function StorefrontHeader() {
         <Link
           className="flex shrink-0 items-center gap-2"
           to="/"
-          aria-label="Shopix home"
+          aria-label="Unitech home"
         >
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <ShoppingBag className="size-4" />
           </span>
-          <span className="font-semibold text-lg tracking-tight">Shopix</span>
+          <span className="font-semibold text-lg tracking-tight">Unitech</span>
         </Link>
 
         <nav className="ml-4 hidden items-center gap-1 lg:flex">

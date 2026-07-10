@@ -196,7 +196,7 @@ function CheckoutPage() {
             {checkout.isPending ? "Placing order…" : "Place order"}
           </Button>
           <p className="text-center text-muted-foreground text-xs">
-            By placing this order you agree to Shopix&apos;s terms of sale.
+            By placing this order you agree to Unitech&apos;s terms of sale.
           </p>
         </div>
       </form>

@@ -146,7 +146,7 @@ async function submitCheckout(
     const quote = buildMockQuote(lines);
     return mocked({
       currency: quote.currency,
-      orderNumber: orderRef("SHX"),
+      orderNumber: orderRef("UNI"),
       saleNumber: orderRef("SALE"),
       scale: quote.scale,
       status: "confirmed",

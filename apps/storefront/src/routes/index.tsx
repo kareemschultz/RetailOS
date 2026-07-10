@@ -67,7 +67,7 @@ function HomePage() {
               Shop by category
             </h2>
             <p className="text-muted-foreground">
-              Everything for a considered home.
+              Appliances and electronics for every room.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -95,7 +95,7 @@ function HomePage() {
           <div>
             <h2 className="font-semibold text-2xl tracking-tight">Featured</h2>
             <p className="text-muted-foreground">
-              Handpicked pieces our team is loving right now.
+              Big-ticket favourites, ready for delivery.
             </p>
           </div>
           <Button render={<Link search={{}} to="/shop" />} variant="ghost">

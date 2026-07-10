@@ -27,9 +27,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       {
         name: "description",
         content:
-          "Shopix — a modern home, kitchen and living store. Considered goods for everyday rituals, powered by RetailOS.",
+          "Unitech Solutions — Guyana's home for appliances and electronics. Fridges, stoves, washers, TVs and more, powered by RetailOS.",
       },
-      { title: "Shopix — Home, Kitchen & Living" },
+      { title: "Unitech Solutions — Appliances & Electronics" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

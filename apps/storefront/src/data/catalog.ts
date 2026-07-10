@@ -1,27 +1,68 @@
-import type {
-  CatalogItem,
-  ProductDetail,
-  Quote,
-} from "./commerce-types";
+import {
+  UNITECH_CURRENCY,
+  UNITECH_SCALE,
+  unitechCategories,
+  unitechProducts,
+} from "@RetailOS/sample-data";
+import type { CatalogItem, ProductDetail, Quote } from "./commerce-types";
 
-// Typed mock storefront catalog. Shapes match the PUBLIC commerce DTOs exactly
-// (commerce.catalog / commerce.product / commerce.quote) so this can be swapped
-// for the live endpoints by flipping USE_MOCK in lib/commerce.ts — no page
-// edits. Prices are backend-authoritative minor units (GYD, scale 2), never
-// computed in the UI. Availability is coarse ("in_stock"/"out_of_stock") — the
-// same anti-scrape read model the public router will expose.
+// Storefront mock catalog, derived from the REAL client dataset
+// (Unitech Solutions / Services — @RetailOS/sample-data). Shapes match the
+// PUBLIC commerce DTOs exactly (commerce.catalog / commerce.product /
+// commerce.quote) so this can be swapped for the live endpoints by flipping
+// USE_MOCK in lib/commerce.ts — no page edits. Prices are backend-authoritative
+// minor units (GYD, scale 2), never computed in the UI. Availability is coarse
+// ("in_stock"/"out_of_stock") — the same anti-scrape read model the public
+// router exposes; derived here from the exported on-hand quantity.
 
-const CURRENCY = "GYD";
-const SCALE = 2;
+const CURRENCY = UNITECH_CURRENCY;
+const SCALE = UNITECH_SCALE;
 
 function money(amountMinor: number) {
   return { amountMinor, currency: CURRENCY, scale: SCALE };
 }
 
+// Departments that are ledger artifacts in the export, not real shopping
+// categories — hidden from the storefront.
+const HIDDEN_CATEGORIES = new Set(["total", "fee"]);
+
+// One representative photo per department (real product imagery, reused across
+// the department — the export ships no per-SKU images). Falls back to a neutral
+// parcel image for the long tail of small departments.
+const DEPT_IMAGE: Record<string, string> = {
+  "kitchen-appliances": "/img/dept/kitchen-appliances.png",
+  fridges: "/img/dept/fridges.png",
+  accessories: "/img/dept/accessories.png",
+  "washers-dryers": "/img/dept/washers-dryers.png",
+  freezers: "/img/dept/freezers.png",
+  stoves: "/img/dept/stoves.png",
+  "kitchen-ware": "/img/dept/kitchen-ware.png",
+  "air-conditioning": "/img/dept/air-conditioning.png",
+  television: "/img/dept/television.png",
+  tv: "/img/dept/television.png",
+  generator: "/img/dept/generator.png",
+  microwaves: "/img/dept/microwaves.png",
+  music: "/img/dept/music.png",
+  fan: "/img/dept/fan.png",
+  dispensers: "/img/dept/dispensers.png",
+  "tools-machinary": "/img/dept/tools-machinary.png",
+  mats: "/img/dept/mats.png",
+  camera: "/img/dept/camera.png",
+  furniture: "/img/dept/furniture.png",
+  chairs: "/img/dept/furniture.png",
+  table: "/img/dept/furniture.png",
+  shelfs: "/img/dept/furniture.png",
+  decor: "/img/dept/furniture.png",
+};
+
+function imageFor(categoryHandle: string): string {
+  return DEPT_IMAGE[categoryHandle] ?? "/img/dept/generic.png";
+}
+
 // Presentation copy that is NOT part of the strict public commerce DTO —
-// description/highlights/tagline/rating would come from a product-content field
-// or CMS. Kept separate from the DTO-shaped data so the contract boundary stays
-// honest (the real catalog/product endpoints do not return these today).
+// tagline/description/highlights/rating would come from a product-content field
+// or CMS. Synthesized deterministically from the real name + department so the
+// storefront reads naturally without inventing per-SKU marketing data.
 export type ProductContent = {
   tagline: string;
   description: string;
@@ -30,7 +71,64 @@ export type ProductContent = {
   reviewCount: number;
 };
 
-type Seed = {
+const DEPT_TAGLINE: Record<string, string> = {
+  "kitchen-appliances": "Everyday kitchen essentials",
+  fridges: "Cool, quiet and energy-smart",
+  accessories: "The little things that complete the setup",
+  "washers-dryers": "Laundry day, sorted",
+  freezers: "Extra storage that keeps its cool",
+  stoves: "Cook with confidence",
+  "kitchen-ware": "Built for the daily cook",
+  "air-conditioning": "Stay cool through the dry season",
+  television: "Bring the picture home",
+  generator: "Power you can rely on",
+  microwaves: "Fast, even, everyday heating",
+  music: "Turn it up",
+  fan: "Keep the air moving",
+  dispensers: "Fresh water on tap",
+  "tools-machinary": "For the job that needs doing",
+};
+
+// Small deterministic hash so ratings/counts are stable across renders/builds.
+function hash(str: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function buildContent(
+  handle: string,
+  name: string,
+  categoryHandle: string,
+  categoryName: string,
+  description: string
+): ProductContent {
+  const h = hash(handle);
+  const rating = Number((4.2 + (h % 8) / 10).toFixed(1)); // 4.2 – 4.9
+  const reviewCount = 8 + (h % 240);
+  const cleanDesc = description.trim();
+  // The export's "description" column is often a spec code, not prose — only
+  // use it when it reads like real text.
+  const hasProse = /[a-z]/.test(cleanDesc) && cleanDesc.length > 3;
+  return {
+    tagline: DEPT_TAGLINE[categoryHandle] ?? categoryName,
+    description: hasProse
+      ? `${name}. ${cleanDesc}. Part of our ${categoryName} range, backed by in-store support and islandwide delivery.`
+      : `${name} from our ${categoryName} range. Backed by in-store support, warranty options, and islandwide delivery across Guyana.`,
+    highlights: [
+      categoryName,
+      hasProse ? cleanDesc : "Genuine stock",
+      "Warranty available",
+    ],
+    rating,
+    reviewCount,
+  };
+}
+
+type StoreSeed = {
   handle: string;
   name: string;
   categoryHandle: string;
@@ -41,172 +139,61 @@ type Seed = {
   content: ProductContent;
 };
 
-const SEEDS: Seed[] = [
-  {
-    handle: "highland-reserve-coffee",
-    name: "Highland Reserve Coffee Beans",
-    categoryHandle: "coffee-pantry",
-    categoryName: "Coffee & Pantry",
-    priceMinor: 450_000,
-    image: "/img/coffee.png",
-    availability: "in_stock",
-    content: {
-      tagline: "Small-batch, medium-dark, whole bean",
-      description:
-        "A rounded, chocolate-forward roast sourced from highland estates and roasted in small batches for a smooth, low-acidity cup. Whole bean, 340g resealable bag.",
-      highlights: ["340g whole bean", "Medium-dark roast", "Roasted to order"],
-      rating: 4.8,
-      reviewCount: 126,
-    },
-  },
-  {
-    handle: "stoneware-pour-over-set",
-    name: "Stoneware Pour-Over Set",
-    categoryHandle: "kitchen",
-    categoryName: "Kitchen",
-    priceMinor: 890_000,
-    image: "/img/mug.png",
-    availability: "in_stock",
-    content: {
-      tagline: "Matte ceramic dripper + mug",
-      description:
-        "A hand-glazed stoneware dripper that nests neatly on the matching 350ml mug. Even extraction, no paper taste, and a calm stone-gray finish that suits any counter.",
-      highlights: ["Dripper + 350ml mug", "Hand-glazed stoneware", "Dishwasher safe"],
-      rating: 4.6,
-      reviewCount: 74,
-    },
-  },
-  {
-    handle: "rattan-pendant-lamp",
-    name: "Rattan Pendant Lamp",
-    categoryHandle: "home-living",
-    categoryName: "Home & Living",
-    priceMinor: 1_575_000,
-    image: "/img/lamp.png",
-    availability: "in_stock",
-    content: {
-      tagline: "Hand-woven natural shade",
-      description:
-        "A warm, hand-woven rattan pendant that throws a soft dappled glow. Ships with a 1.5m braided cord and ceiling fixture. Bulb not included.",
-      highlights: ["40cm hand-woven shade", "1.5m braided cord", "E27 fitting"],
-      rating: 4.7,
-      reviewCount: 51,
-    },
-  },
-  {
-    handle: "linen-weave-throw",
-    name: "Linen Weave Throw",
-    categoryHandle: "home-living",
-    categoryName: "Home & Living",
-    priceMinor: 1_120_000,
-    image: "/img/throw.png",
-    availability: "in_stock",
-    content: {
-      tagline: "Stonewashed pure linen",
-      description:
-        "A breathable, stonewashed linen throw with a subtle fringe — light enough for warm evenings, generous at 130 x 170cm. Softens with every wash.",
-      highlights: ["130 x 170cm", "100% stonewashed linen", "Oeko-Tex certified"],
-      rating: 4.9,
-      reviewCount: 88,
-    },
-  },
-  {
-    handle: "cast-iron-skillet-12",
-    name: 'Cast Iron Skillet 12"',
-    categoryHandle: "kitchen",
-    categoryName: "Kitchen",
-    priceMinor: 980_000,
-    image: "/img/skillet.png",
-    availability: "in_stock",
-    content: {
-      tagline: "Pre-seasoned, oven to table",
-      description:
-        "A pre-seasoned 30cm cast iron skillet that sears, bakes, and holds heat beautifully. Pour spouts on both sides and a helper handle for a confident lift.",
-      highlights: ['12" / 30cm', "Pre-seasoned", "Oven safe to 260°C"],
-      rating: 4.8,
-      reviewCount: 203,
-    },
-  },
-  {
-    handle: "insulated-water-bottle-750",
-    name: "Insulated Water Bottle 750ml",
-    categoryHandle: "bags-accessories",
-    categoryName: "Bags & Accessories",
-    priceMinor: 340_000,
-    image: "/img/bottle.png",
-    availability: "in_stock",
-    content: {
-      tagline: "Cold 24h, hot 12h",
-      description:
-        "Double-walled stainless steel in a soft powder-blue matte finish. Leakproof lid, wide mouth for ice, and a footprint that fits standard cup holders.",
-      highlights: ["750ml", "Double-wall vacuum", "Leakproof lid"],
-      rating: 4.5,
-      reviewCount: 167,
-    },
-  },
-  {
-    handle: "soy-candle-vetiver",
-    name: "Soy Wax Candle — Vetiver",
-    categoryHandle: "home-living",
-    categoryName: "Home & Living",
-    priceMinor: 390_000,
-    image: "/img/candle.png",
-    availability: "in_stock",
-    content: {
-      tagline: "Vetiver, cedar & warm amber",
-      description:
-        "A clean-burning soy blend in frosted glass with a cotton wick. Grounded notes of vetiver and cedar over warm amber. ~45 hours of calm.",
-      highlights: ["200g soy blend", "~45h burn time", "Cotton wick"],
-      rating: 4.7,
-      reviewCount: 92,
-    },
-  },
-  {
-    handle: "woven-market-tote",
-    name: "Woven Market Tote",
-    categoryHandle: "bags-accessories",
-    categoryName: "Bags & Accessories",
-    priceMinor: 625_000,
-    image: "/img/tote.png",
-    availability: "in_stock",
-    content: {
-      tagline: "Straw body, leather handles",
-      description:
-        "A roomy hand-woven straw tote with tanned leather handles and a snap closure. Holds a market run or a beach day with equal ease.",
-      highlights: ["Hand-woven straw", "Leather handles", "Snap closure"],
-      rating: 4.6,
-      reviewCount: 44,
-    },
-  },
-  {
-    handle: "stoneware-dinner-set",
-    name: "Stoneware Dinner Set (4)",
-    categoryHandle: "kitchen",
-    categoryName: "Kitchen",
-    priceMinor: 1_350_000,
-    image: "/img/plates.png",
-    availability: "out_of_stock",
-    content: {
-      tagline: "Four reactive-glaze plates",
-      description:
-        "A set of four 27cm stoneware dinner plates in mixed sand and slate-blue reactive glazes — every piece a little different. Microwave and dishwasher safe.",
-      highlights: ["Set of 4 · 27cm", "Reactive glaze", "Microwave safe"],
-      rating: 4.8,
-      reviewCount: 61,
-    },
-  },
-];
+const SEEDS: StoreSeed[] = unitechProducts
+  .filter(
+    (p) => !HIDDEN_CATEGORIES.has(p.categoryHandle) && p.priceMinor > 0
+  )
+  .map((p) => {
+    const categoryName = p.department;
+    return {
+      handle: p.handle,
+      name: p.name,
+      categoryHandle: p.categoryHandle,
+      categoryName,
+      priceMinor: p.priceMinor,
+      image: imageFor(p.categoryHandle),
+      // On-hand <= 0 (the frequent negative/zero legacy values) reads as
+      // out-of-stock to shoppers; the admin sees the true signed quantity.
+      availability: p.onHand > 0 ? "in_stock" : "out_of_stock",
+      content: buildContent(
+        p.handle,
+        p.name,
+        p.categoryHandle,
+        categoryName,
+        p.description
+      ),
+    } satisfies StoreSeed;
+  });
 
 export const CONTENT_BY_HANDLE: Record<string, ProductContent> =
   Object.fromEntries(SEEDS.map((s) => [s.handle, s.content]));
 
-// Editorial "featured" selection (presentation curation, not a DTO field).
-export const FEATURED_HANDLES = [
-  "highland-reserve-coffee",
-  "rattan-pendant-lamp",
-  "cast-iron-skillet-12",
-  "linen-weave-throw",
-];
+// Featured = a few high-value, in-stock items spread across flagship
+// departments, chosen deterministically so the home page stays stable.
+export const FEATURED_HANDLES: string[] = (() => {
+  const flagship = ["television", "fridges", "generator", "air-conditioning"];
+  const picks: string[] = [];
+  for (const cat of flagship) {
+    const best = SEEDS.filter(
+      (s) => s.categoryHandle === cat && s.availability === "in_stock"
+    ).sort((a, b) => b.priceMinor - a.priceMinor)[0];
+    if (best) {
+      picks.push(best.handle);
+    }
+  }
+  // Backfill if any flagship department had no in-stock item.
+  if (picks.length < 4) {
+    for (const s of SEEDS) {
+      if (s.availability === "in_stock" && !picks.includes(s.handle)) {
+        picks.push(s.handle);
+      }
+      if (picks.length >= 4) {
+        break;
+      }
+    }
+  }
+  return picks.slice(0, 4);
+})();
 
 export const MOCK_CATALOG: CatalogItem[] = SEEDS.map((s) => ({
   handle: s.handle,
@@ -232,9 +219,9 @@ export const MOCK_PRODUCTS: Record<string, ProductDetail> = Object.fromEntries(
   ])
 );
 
-export const MOCK_CATEGORIES = Array.from(
-  new Map(SEEDS.map((s) => [s.categoryHandle, s.categoryName])).entries()
-).map(([handle, name]) => ({ handle, name }));
+export const MOCK_CATEGORIES = unitechCategories
+  .filter((c) => !HIDDEN_CATEGORIES.has(c.handle))
+  .map((c) => ({ handle: c.handle, name: c.name }));
 
 export function priceMinorFor(handle: string): number {
   return MOCK_PRODUCTS[handle]?.price.amountMinor ?? 0;

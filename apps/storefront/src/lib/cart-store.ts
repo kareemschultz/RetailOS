@@ -62,7 +62,7 @@ export const useCart = create<CartState>()(
         })),
       clear: () => set({ lines: [] }),
     }),
-    { name: "shopix-cart" }
+    { name: "unitech-cart" }
   )
 );
 

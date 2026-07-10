@@ -6,9 +6,9 @@ const COLUMNS = [
     title: "Shop",
     links: [
       { label: "All products", to: "/shop", search: {} as Record<string, string> },
-      { label: "Home & Living", to: "/shop", search: { category: "home-living" } },
-      { label: "Kitchen", to: "/shop", search: { category: "kitchen" } },
-      { label: "Coffee & Pantry", to: "/shop", search: { category: "coffee-pantry" } },
+      { label: "Fridges & Freezers", to: "/shop", search: { category: "fridges" } },
+      { label: "Kitchen Appliances", to: "/shop", search: { category: "kitchen-appliances" } },
+      { label: "Television", to: "/shop", search: { category: "television" } },
     ],
   },
   {
@@ -31,11 +31,12 @@ export function StorefrontFooter() {
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <ShoppingBag className="size-4" />
             </span>
-            <span className="font-semibold text-lg tracking-tight">Shopix</span>
+            <span className="font-semibold text-lg tracking-tight">Unitech</span>
           </div>
           <p className="mt-3 text-muted-foreground text-sm leading-relaxed">
-            Considered goods for everyday rituals — home, kitchen and pantry
-            essentials, chosen to last. A demo storefront running on RetailOS.
+            Guyana&apos;s home for appliances and electronics — fridges, stoves,
+            washers, TVs and more, with warranty and islandwide delivery.
+            Powered by RetailOS.
           </p>
         </div>
 
@@ -61,7 +62,7 @@ export function StorefrontFooter() {
 
       <div className="border-border/70 border-t">
         <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-muted-foreground text-xs sm:flex-row sm:px-6">
-          <p>© {new Date().getFullYear()} Shopix. All prices in Guyanese dollars (GYD).</p>
+          <p>© {new Date().getFullYear()} Unitech Solutions. All prices in Guyanese dollars (GYD).</p>
           <p>Powered by RetailOS</p>
         </div>
       </div>
