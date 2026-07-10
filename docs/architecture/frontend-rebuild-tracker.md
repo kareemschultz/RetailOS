@@ -60,12 +60,15 @@
 | Catalog: Categories / Brands / Units | PARTIAL | real | Functional; header re-theme pending |
 | Inventory (stock on hand + movements) | DONE | real | On shared spine |
 | Locations/Warehouse (Table + Hierarchy view) | DONE | real | ViewSwitcher hierarchy tree added |
-| Procurement (POs, receiving) | TODO | real+mock | |
-| Finance (accounting, GRA/PAYE/NIS) | TODO | mock | |
-| Reports | TODO | mock | |
-| Settings (tabbed) / Staff / RBAC / Audit | TODO | real+mock | |
-| POS register (full-screen) | TODO | real | |
-| Customer storefront (`apps/storefront`) | TODO | commerce API | |
+| Procurement (POs, receiving, suppliers, bills) | DONE | real | On shared spine; tabbed |
+| Finance (accounting: COA, periods, journals) | DONE | real | On shared spine; tabbed |
+| Reports hub | DONE | real | On shared spine; honest "coming soon" |
+| Settings hub (+ Branding card) | DONE | real+mock | On shared spine |
+| Staff & access (members + roles matrix) | DONE | real | On shared spine; tabbed |
+| Audit trail | DONE | real | On shared spine |
+| Commerce back-office (orders + status) | DONE | real | On shared spine |
+| POS register (full-screen, touch) | DONE | real | Purpose-built compact header (by design) |
+| Customer storefront (`apps/storefront`) | TODO | commerce API | Separate app — not yet built |
 
 ## Backend contracts needed (for the backend team)
 Surfaces currently on mock that need APIs to go "real" (see `feature-status.ts` for keys):
