@@ -141,6 +141,24 @@ export const FEATURE_STATUS = {
     source: "mock",
     note: "No notifications service yet — preview data.",
   },
+  "pricing.lists": {
+    key: "pricing.lists",
+    title: "Pricing & price lists",
+    source: "mock",
+    note: "No pricing engine yet — preview data.",
+  },
+  "inventory.adjustments": {
+    key: "inventory.adjustments",
+    title: "Stock adjustments",
+    source: "mock",
+    note: "Adjustment posting not wired yet — preview data.",
+  },
+  "branding.whitelabel": {
+    key: "branding.whitelabel",
+    title: "White-label branding",
+    source: "mock",
+    note: "Branding is stored locally in this preview; tenant persistence pending.",
+  },
 } satisfies Record<string, FeatureStatus>;
 
 export type FeatureKey = keyof typeof FEATURE_STATUS;
