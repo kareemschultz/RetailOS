@@ -22,6 +22,14 @@ export type PublicImage = {
   isPrimary: boolean;
 };
 
+// Derived client-side from catalog items' `category` field (the public router
+// has no separate categories endpoint) — used for nav and category tiles.
+export type StoreCategory = {
+  handle: string;
+  name: string;
+  productCount: number;
+};
+
 // commerce.catalog -> items[]
 export type CatalogItem = {
   handle: string;

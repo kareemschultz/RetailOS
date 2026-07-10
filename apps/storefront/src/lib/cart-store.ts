@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { OrderConfirmation } from "../data/commerce-types";
 
 // Client-side cart (session state, not durable app data). Lines carry the same
 // { handle, quantity } identity the public commerce cart endpoints use, plus a
@@ -69,3 +70,17 @@ export const useCart = create<CartState>()(
 export function useCartCount(): number {
   return useCart((s) => s.lines.reduce((sum, l) => sum + l.quantity, 0));
 }
+
+// Hands the just-placed order to the confirmation page (session-only, cleared
+// on view). Not persisted — a refresh on the confirmation page returns home.
+type OrderState = {
+  order: OrderConfirmation | null;
+  setOrder: (order: OrderConfirmation) => void;
+  clearOrder: () => void;
+};
+
+export const useOrder = create<OrderState>((set) => ({
+  order: null,
+  setOrder: (order) => set({ order }),
+  clearOrder: () => set({ order: null }),
+}));

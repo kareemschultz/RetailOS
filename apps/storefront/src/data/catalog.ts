@@ -200,6 +200,14 @@ const SEEDS: Seed[] = [
 export const CONTENT_BY_HANDLE: Record<string, ProductContent> =
   Object.fromEntries(SEEDS.map((s) => [s.handle, s.content]));
 
+// Editorial "featured" selection (presentation curation, not a DTO field).
+export const FEATURED_HANDLES = [
+  "highland-reserve-coffee",
+  "rattan-pendant-lamp",
+  "cast-iron-skillet-12",
+  "linen-weave-throw",
+];
+
 export const MOCK_CATALOG: CatalogItem[] = SEEDS.map((s) => ({
   handle: s.handle,
   name: s.name,

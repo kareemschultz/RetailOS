@@ -3,7 +3,12 @@ import { env } from "@RetailOS/env/web";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { RouterClient } from "@orpc/server";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import {
+  useMutation,
+  type UseMutationResult,
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 
 import {
   buildMockQuote,
@@ -12,8 +17,10 @@ import {
 } from "../data/catalog";
 import type {
   CatalogItem,
+  OrderConfirmation,
   ProductDetail,
   Quote,
+  StoreCategory,
 } from "../data/commerce-types";
 
 // ---------------------------------------------------------------------------
@@ -59,6 +66,27 @@ async function fetchCatalog(q?: string): Promise<CatalogItem[]> {
   return res.items as CatalogItem[];
 }
 
+async function fetchCategories(): Promise<StoreCategory[]> {
+  const items = await fetchCatalog();
+  const map = new Map<string, StoreCategory>();
+  for (const item of items) {
+    if (!item.category) {
+      continue;
+    }
+    const existing = map.get(item.category.handle);
+    if (existing) {
+      existing.productCount += 1;
+    } else {
+      map.set(item.category.handle, {
+        handle: item.category.handle,
+        name: item.category.name,
+        productCount: 1,
+      });
+    }
+  }
+  return [...map.values()];
+}
+
 async function fetchProduct(handle: string): Promise<ProductDetail> {
   if (USE_MOCK) {
     const product = MOCK_PRODUCTS[handle];
@@ -89,6 +117,61 @@ async function fetchQuote(
   return (await client.commerce.quote({ lines })) as Quote;
 }
 
+export type CheckoutDetails = {
+  fullName: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  paymentMethod: "cash" | "card" | "mobile";
+  note?: string;
+};
+
+function orderRef(prefix: string): string {
+  const n = Math.floor(100_000 + Math.random() * 900_000);
+  return `${prefix}-${n}`;
+}
+
+// Mock checkout: mirrors the customer-facing result of the real two-step flow
+// (commerce.checkoutCreate -> commerce.checkoutConfirm). The live path needs a
+// server-persisted guest cart (cartId + guest-token customerId, design §5/§10)
+// and runs both calls inside the storefrontProcedure; the total is always the
+// server's, never recomputed here. In preview we synthesize the confirmation
+// from the authoritative quote so the full purchase journey is walkable.
+async function submitCheckout(
+  _details: CheckoutDetails,
+  lines: { handle: string; quantity: number }[]
+): Promise<OrderConfirmation> {
+  if (USE_MOCK) {
+    const quote = buildMockQuote(lines);
+    return mocked({
+      currency: quote.currency,
+      orderNumber: orderRef("SHX"),
+      saleNumber: orderRef("SALE"),
+      scale: quote.scale,
+      status: "confirmed",
+      totalMinor: quote.totals.totalMinor,
+    });
+  }
+  // Live: create a checkout intent for the server cart, then confirm it.
+  const created = await client.commerce.checkoutCreate({
+    cartId: getCartSession().cartId,
+    customerId: getCartSession().customerId,
+    fulfillment: "delivery",
+  });
+  return (await client.commerce.checkoutConfirm({
+    checkoutIntentId: created.checkoutIntentId,
+  })) as OrderConfirmation;
+}
+
+// Placeholder for the live guest-cart session (cartId + guest-token customerId).
+// Wired up when USE_MOCK is off; unused in preview.
+function getCartSession(): { cartId: string; customerId: string } {
+  throw new Error(
+    "Live checkout requires a persisted guest cart session (see commerce-cart.ts)."
+  );
+}
+
 // --- Hooks -----------------------------------------------------------------
 
 export const IS_MOCK_DATA = USE_MOCK;
@@ -97,6 +180,13 @@ export function useCatalog(q?: string): UseQueryResult<CatalogItem[]> {
   return useQuery({
     queryKey: [USE_MOCK ? "mock" : "live", "catalog", q ?? ""],
     queryFn: () => fetchCatalog(q),
+  });
+}
+
+export function useCategories(): UseQueryResult<StoreCategory[]> {
+  return useQuery({
+    queryKey: [USE_MOCK ? "mock" : "live", "categories"],
+    queryFn: fetchCategories,
   });
 }
 
@@ -114,5 +204,18 @@ export function useQuote(
     queryKey: [USE_MOCK ? "mock" : "live", "quote", lines],
     queryFn: () => fetchQuote(lines),
     staleTime: 0,
+  });
+}
+
+export function useCheckout(): UseMutationResult<
+  OrderConfirmation,
+  Error,
+  {
+    details: CheckoutDetails;
+    lines: { handle: string; quantity: number }[];
+  }
+> {
+  return useMutation({
+    mutationFn: ({ details, lines }) => submitCheckout(details, lines),
   });
 }
