@@ -103,6 +103,12 @@ export const FEATURE_STATUS = {
     source: "mock",
     note: "No dedicated CRM router yet — preview data with realistic shape.",
   },
+  "sales.hirePurchase": {
+    key: "sales.hirePurchase",
+    title: "Hire purchase / layaway",
+    source: "mock",
+    note: "No financing router yet — preview data with realistic schedules.",
+  },
   "pos.register": {
     key: "pos.register",
     title: "POS register",

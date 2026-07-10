@@ -35,6 +35,7 @@ import { Route as AppNegativeStockRouteImport } from './routes/_app/negative-sto
 import { Route as AppLotsRouteImport } from './routes/_app/lots'
 import { Route as AppLocationsRouteImport } from './routes/_app/locations'
 import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
+import { Route as AppHirePurchaseRouteImport } from './routes/_app/hire-purchase'
 import { Route as AppFinancialsRouteImport } from './routes/_app/financials'
 import { Route as AppErrorMaintenanceRouteImport } from './routes/_app/error-maintenance'
 import { Route as AppError500RouteImport } from './routes/_app/error-500'
@@ -191,6 +192,11 @@ const AppInventoryRoute = AppInventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppHirePurchaseRoute = AppHirePurchaseRouteImport.update({
+  id: '/hire-purchase',
+  path: '/hire-purchase',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppFinancialsRoute = AppFinancialsRouteImport.update({
   id: '/financials',
   path: '/financials',
@@ -341,6 +347,7 @@ export interface FileRoutesByFullPath {
   '/error-500': typeof AppError500Route
   '/error-maintenance': typeof AppErrorMaintenanceRoute
   '/financials': typeof AppFinancialsRoute
+  '/hire-purchase': typeof AppHirePurchaseRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
   '/lots': typeof AppLotsRoute
@@ -394,6 +401,7 @@ export interface FileRoutesByTo {
   '/error-500': typeof AppError500Route
   '/error-maintenance': typeof AppErrorMaintenanceRoute
   '/financials': typeof AppFinancialsRoute
+  '/hire-purchase': typeof AppHirePurchaseRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
   '/lots': typeof AppLotsRoute
@@ -449,6 +457,7 @@ export interface FileRoutesById {
   '/_app/error-500': typeof AppError500Route
   '/_app/error-maintenance': typeof AppErrorMaintenanceRoute
   '/_app/financials': typeof AppFinancialsRoute
+  '/_app/hire-purchase': typeof AppHirePurchaseRoute
   '/_app/inventory': typeof AppInventoryRoute
   '/_app/locations': typeof AppLocationsRoute
   '/_app/lots': typeof AppLotsRoute
@@ -504,6 +513,7 @@ export interface FileRouteTypes {
     | '/error-500'
     | '/error-maintenance'
     | '/financials'
+    | '/hire-purchase'
     | '/inventory'
     | '/locations'
     | '/lots'
@@ -557,6 +567,7 @@ export interface FileRouteTypes {
     | '/error-500'
     | '/error-maintenance'
     | '/financials'
+    | '/hire-purchase'
     | '/inventory'
     | '/locations'
     | '/lots'
@@ -611,6 +622,7 @@ export interface FileRouteTypes {
     | '/_app/error-500'
     | '/_app/error-maintenance'
     | '/_app/financials'
+    | '/_app/hire-purchase'
     | '/_app/inventory'
     | '/_app/locations'
     | '/_app/lots'
@@ -837,6 +849,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppInventoryRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/hire-purchase': {
+      id: '/_app/hire-purchase'
+      path: '/hire-purchase'
+      fullPath: '/hire-purchase'
+      preLoaderRoute: typeof AppHirePurchaseRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/financials': {
       id: '/_app/financials'
       path: '/financials'
@@ -1038,6 +1057,7 @@ interface AppRouteRouteChildren {
   AppError500Route: typeof AppError500Route
   AppErrorMaintenanceRoute: typeof AppErrorMaintenanceRoute
   AppFinancialsRoute: typeof AppFinancialsRoute
+  AppHirePurchaseRoute: typeof AppHirePurchaseRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppLocationsRoute: typeof AppLocationsRoute
   AppLotsRoute: typeof AppLotsRoute
@@ -1089,6 +1109,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppError500Route: AppError500Route,
   AppErrorMaintenanceRoute: AppErrorMaintenanceRoute,
   AppFinancialsRoute: AppFinancialsRoute,
+  AppHirePurchaseRoute: AppHirePurchaseRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppLocationsRoute: AppLocationsRoute,
   AppLotsRoute: AppLotsRoute,

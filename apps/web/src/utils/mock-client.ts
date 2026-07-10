@@ -81,6 +81,11 @@ function productCatalogRows(q?: string) {
       scale: UNITECH_SCALE,
       primaryImageAltText: p.name,
       primaryImageUrl: imageUrl(p.categoryHandle),
+      // Preview-only enrichment: the real product.catalog contract omits
+      // category, so these are optional on the consumer side. They power the
+      // department facet on the catalog-at-scale view.
+      department: p.department,
+      categoryHandle: p.categoryHandle,
     }));
 }
 

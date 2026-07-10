@@ -20,16 +20,9 @@ import {
   SelectValue,
 } from "@RetailOS/ui/components/select";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@RetailOS/ui/components/table";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Archive,
   ImageIcon,
@@ -64,7 +57,11 @@ const TRACKING_OPTIONS: Array<{ label: string; value: TrackingMode }> = [
 ];
 
 interface ProductRow {
+  // Optional: only present in preview (the real product.catalog contract omits
+  // category). Drives the department facet on the catalog-at-scale view.
+  categoryHandle?: string;
   currency: string;
+  department?: string;
   id: string;
   name: string;
   priceMinor: number;
@@ -74,6 +71,9 @@ interface ProductRow {
   sku: string;
   trackingMode: string;
 }
+
+const ALL_DEPARTMENTS = "__all__";
+const ROW_HEIGHT = 68;
 
 const SKELETON_KEYS = ["a", "b", "c", "d", "e"] as const;
 

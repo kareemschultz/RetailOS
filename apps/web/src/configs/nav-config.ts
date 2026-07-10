@@ -8,6 +8,7 @@ import {
   CircleDollarSign,
   ClipboardCheck,
   ClipboardList,
+  CreditCard,
   FileText,
   FolderTree,
   History,
@@ -91,6 +92,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { icon: ScanLine, label: "Point of Sale", to: "/pos" },
       { icon: ReceiptText, label: "Orders & Receipts", to: "/sales" },
+      { icon: CreditCard, label: "Hire Purchase", to: "/hire-purchase" },
       { icon: Users, label: "Customers", to: "/customers" },
       {
         icon: Percent,
