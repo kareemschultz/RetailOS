@@ -1,3 +1,4 @@
+import { env } from "@RetailOS/env/web";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
 import { AppShell } from "@/components/app-shell";
@@ -28,6 +29,11 @@ async function getSessionFailClosed() {
 export const Route = createFileRoute("/_app")({
   ssr: false,
   beforeLoad: async () => {
+    // Frontend-only preview: skip the session gate so the rebuilt shell and
+    // modules render against the mock layer without a live backend.
+    if (env.VITE_PREVIEW_NO_AUTH) {
+      return { session: null };
+    }
     const session = await getSessionFailClosed();
     if (!session?.data) {
       throw redirect({ to: "/login" });
