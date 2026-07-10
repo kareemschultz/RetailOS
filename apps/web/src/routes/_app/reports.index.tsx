@@ -1,5 +1,6 @@
 import { Badge } from "@RetailOS/ui/components/badge";
 import { Card, CardContent } from "@RetailOS/ui/components/card";
+import { PageBody, PageHeader } from "@RetailOS/ui/components/page-header";
 import { createFileRoute, Link, type LinkProps } from "@tanstack/react-router";
 import {
   ArrowLeftRight,
@@ -104,16 +105,18 @@ const UPCOMING_REPORTS: { description: string; title: string }[] = [
 
 function ReportsHub() {
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="flex items-center gap-2 font-semibold text-2xl tracking-tight">
-          <BarChart3 className="size-6" />
-          Reports
-        </h1>
-        <p className="text-muted-foreground">
-          Every report here opens a live screen backed by your real data.
-        </p>
-      </div>
+    <PageBody className="mx-auto w-full max-w-7xl p-6">
+      <PageHeader
+        description="Every report here opens a live screen backed by your real data."
+        title={
+          <span className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <BarChart3 className="size-5" />
+            </span>
+            Reports
+          </span>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {AVAILABLE_REPORTS.map((report) => (
@@ -158,6 +161,6 @@ function ReportsHub() {
           ))}
         </div>
       </div>
-    </div>
+    </PageBody>
   );
 }

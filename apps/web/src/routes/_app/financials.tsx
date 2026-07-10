@@ -1064,19 +1064,18 @@ function FinancialsScreen() {
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="flex items-center gap-2 font-semibold text-2xl tracking-tight">
-          <Landmark className="size-6" />
-          Financials
-        </h1>
-        <p className="text-muted-foreground">
-          Chart of accounts, posting periods, and manual journals — the
-          accounting foundation. Automatic event-driven posting (sales,
-          payments, procurement) and financial statements (trial balance,
-          P&amp;L, balance sheet) are not built yet.
-        </p>
-      </div>
+    <PageBody className="mx-auto w-full max-w-7xl p-6">
+      <PageHeader
+        description="Chart of accounts, posting periods, and manual journals — the accounting foundation. Automatic event-driven posting (sales, payments, procurement) and financial statements (trial balance, P&L, balance sheet) are not built yet."
+        title={
+          <span className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Landmark className="size-5" />
+            </span>
+            Financials
+          </span>
+        }
+      />
 
       <Tabs defaultValue="journals">
         <TabsList>
@@ -1106,6 +1105,6 @@ function FinancialsScreen() {
           <PostingPeriodsPanel />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageBody>
   );
 }
