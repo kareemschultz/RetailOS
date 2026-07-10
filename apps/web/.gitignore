@@ -31,6 +31,8 @@
 # Environment & local files
 .env*
 !.env.example
+# Non-secret dev defaults (local server URL); dev-mode only, never in prod builds.
+!.env.development
 .DS_Store
 *.pem
 *.local
