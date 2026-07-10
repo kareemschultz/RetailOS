@@ -1,0 +1,18 @@
+/* Shopix storefront — shares the RetailOS token layer (blue accent, radius,
+   status colors) so the public shop reads as the same product family as the
+   admin/POS surfaces, but with its own marketing-grade shell. Fonts ship with
+   the app via @fontsource (no CDN, works offline — charter §13). */
+@import "@fontsource-variable/inter";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@RetailOS/ui/globals.css";
+
+/* Storefront prefers a crisp white canvas over the admin's tinted surface so
+   product photography sits on neutral ground. Tokens (primary/brand/border/
+   ring/status) are inherited unchanged from the RetailOS theme. */
+:root {
+  --background: oklch(1 0 0);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.97 0.006 271);
+}
