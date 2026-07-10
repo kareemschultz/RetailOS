@@ -11,6 +11,7 @@ import {
 } from "@RetailOS/ui/components/dialog";
 import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
+import { PageBody, PageHeader } from "@RetailOS/ui/components/page-header";
 import {
   Select,
   SelectContent,
@@ -409,16 +410,18 @@ function StaffScreen() {
   const rows = (members.data ?? []) as MemberRow[];
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="font-semibold text-2xl tracking-tight">
-          Staff &amp; access
-        </h1>
-        <p className="text-muted-foreground">
-          Who can sign in to this business and what each role lets them do. The
-          backend enforces every permission — this page controls the grants.
-        </p>
-      </div>
+    <PageBody className="mx-auto w-full max-w-7xl p-6">
+      <PageHeader
+        description="Who can sign in to this business and what each role lets them do. The backend enforces every permission — this page controls the grants."
+        title={
+          <span className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Users className="size-5" />
+            </span>
+            Staff &amp; access
+          </span>
+        }
+      />
       <Tabs defaultValue="members">
         <TabsList>
           <TabsTrigger value="members">
@@ -536,6 +539,6 @@ function StaffScreen() {
           open={Boolean(revokeTarget)}
         />
       ) : null}
-    </div>
+    </PageBody>
   );
 }

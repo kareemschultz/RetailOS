@@ -1,11 +1,14 @@
 import { Card, CardContent } from "@RetailOS/ui/components/card";
+import { PageBody, PageHeader } from "@RetailOS/ui/components/page-header";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Building2,
   ChevronRight,
   Hash,
+  Palette,
   Percent,
   ScrollText,
+  Settings2,
   Users,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -42,6 +45,13 @@ const SETTINGS_AREAS: Array<{
     title: "Document numbering",
   },
   {
+    description:
+      "White-label the app — name, logo, brand color, and login page. Applies instantly across every screen.",
+    href: "/settings/branding",
+    icon: Palette,
+    title: "White-label & branding",
+  },
+  {
     description: "Who can sign in and what each role is allowed to do.",
     href: "/staff",
     icon: Users,
@@ -57,14 +67,18 @@ const SETTINGS_AREAS: Array<{
 
 function SettingsScreen() {
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="font-semibold text-2xl tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">
-          Business setup and administration. Changes here apply to the whole
-          business.
-        </p>
-      </div>
+    <PageBody className="mx-auto w-full max-w-5xl p-6">
+      <PageHeader
+        description="Business setup and administration. Changes here apply to the whole business."
+        title={
+          <span className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Settings2 className="size-5" />
+            </span>
+            Settings
+          </span>
+        }
+      />
       <div className="grid gap-4 sm:grid-cols-2">
         {SETTINGS_AREAS.map((area) => (
           <Link key={area.href} to={area.href}>
@@ -87,6 +101,6 @@ function SettingsScreen() {
           </Link>
         ))}
       </div>
-    </div>
+    </PageBody>
   );
 }
