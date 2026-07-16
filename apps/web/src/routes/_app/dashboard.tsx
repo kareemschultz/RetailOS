@@ -6,6 +6,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@RetailOS/ui/components/card";
+import {
+  PageBody,
+  PageHeader,
+  PageMetrics,
+} from "@RetailOS/ui/components/page-header";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
 import { StatCard } from "@RetailOS/ui/components/stat-card";
 import { useQuery } from "@tanstack/react-query";
@@ -202,13 +207,11 @@ function DashboardScreen() {
   const productPreview = (catalog.data ?? []).slice(0, PRODUCT_PREVIEW_LIMIT);
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="font-semibold text-2xl tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          A live snapshot of sales and inventory across your stores.
-        </p>
-      </div>
+    <PageBody className="mx-auto w-full max-w-7xl p-6">
+      <PageHeader
+        description="A live snapshot of sales and inventory across your stores."
+        title="Dashboard"
+      />
 
       {summary.isError ? (
         <Card className="border-destructive/30 shadow-sm">
@@ -232,7 +235,7 @@ function DashboardScreen() {
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <PageMetrics>
           <StatCard
             hint={data?.sales ? "Completed sales" : "No sales yet"}
             icon={Wallet}
@@ -275,7 +278,7 @@ function DashboardScreen() {
             label="Low-Stock Items"
             value={data?.lowStockCount ?? 0}
           />
-        </div>
+        </PageMetrics>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
@@ -315,6 +318,6 @@ function DashboardScreen() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageBody>
   );
 }

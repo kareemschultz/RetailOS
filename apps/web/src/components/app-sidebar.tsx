@@ -6,6 +6,7 @@ import {
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -16,24 +17,30 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  SidebarSeparator,
 } from "@RetailOS/ui/components/sidebar";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ChevronRightIcon, Store } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 
 import {
   filterNavGroups,
-  type NavMenuItem,
+  groupsForWorkspace,
+  navFooterGroup,
   navGroups,
+  type NavGroup,
+  type NavMenuItem,
 } from "@/configs/nav-config";
+import { useWorkspace } from "@/configs/workspace-store";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { useSettings } from "@/theme/settings-store";
 import { orpc } from "@/utils/orpc";
 
-// RetailOS application sidebar — dropped in from the AdminCN template
-// `Sidebar.tsx` (Assembly Law: their structure + collapsible nesting, badges,
-// active-state), edited only for our stack: next/link → TanStack <Link>,
-// next/navigation usePathname → useRouterState, their settings/logo → ours.
-// Renders the hybrid nav model (workspace → group → nested, depth 2).
+// RetailOS application sidebar. Renders the hybrid nav model from nav-config
+// (workspace → group → nested, depth 2): the workspace switcher re-scopes the
+// operational groups, role permissions filter items (UX only), and the
+// Administration group is pinned to the footer, visually separated from the
+// operational nav. Source of truth: docs/architecture/navigation-ia.md.
 
 function MenuItemNode({
   item,
@@ -99,11 +106,35 @@ function MenuItemNode({
   );
 }
 
+function NavGroupSection({
+  group,
+  pathname,
+}: {
+  group: NavGroup;
+  pathname: string;
+}) {
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel className="text-sidebar-foreground/50 uppercase tracking-wider">
+        {group.groupLabel}
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {group.items.map((item) => (
+            <MenuItemNode item={item} key={item.label} pathname={pathname} />
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
 export function AppSidebar() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
   const { settings } = useSettings();
+  const { workspace } = useWorkspace();
   // Map our settings.variant (default/inset/floating) to the sidebar primitive's
   // variant (sidebar/inset/floating) so the customizer's controls apply live.
   const variant = settings.variant === "default" ? "sidebar" : settings.variant;
@@ -111,40 +142,36 @@ export function AppSidebar() {
   // Fallback [] hides gated items until access loads — nothing sensitive
   // flashes, items just appear once permissions arrive.
   const access = useQuery(orpc.membership.myAccess.queryOptions({ input: {} }));
-  const groups = filterNavGroups(navGroups, access.data?.permissions ?? []);
+  const permissions = access.data?.permissions ?? [];
+  // Scope to the active workspace, then filter by permission.
+  const scoped = groupsForWorkspace(navGroups, workspace);
+  const groups = filterNavGroups(scoped, permissions);
+  const footerGroups = filterNavGroups([navFooterGroup], permissions);
 
   return (
     <Sidebar collapsible={settings.collapsible} variant={variant}>
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Store className="size-4" />
-          </div>
-          <span className="truncate font-semibold group-data-[collapsible=icon]:hidden">
-            RetailOS
-          </span>
-        </div>
+        <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarContent className="group-data-[collapsible=icon]:overflow-y-auto">
         {groups.map((group) => (
-          <SidebarGroup key={group.groupLabel}>
-            <SidebarGroupLabel className="text-sidebar-foreground/50 uppercase tracking-wider">
-              {group.groupLabel}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => (
-                  <MenuItemNode
-                    item={item}
-                    key={item.label}
-                    pathname={pathname}
-                  />
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <NavGroupSection
+            group={group}
+            key={group.groupLabel}
+            pathname={pathname}
+          />
         ))}
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarSeparator className="mb-1" />
+        {footerGroups.map((group) => (
+          <SidebarMenu key={group.groupLabel}>
+            {group.items.map((item) => (
+              <MenuItemNode item={item} key={item.label} pathname={pathname} />
+            ))}
+          </SidebarMenu>
+        ))}
+      </SidebarFooter>
     </Sidebar>
   );
 }

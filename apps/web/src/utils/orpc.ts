@@ -7,6 +7,8 @@ import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { mockClient } from "./mock-client";
+
 export function createQueryClient() {
   return new QueryClient({
     queryCache: new QueryCache({
@@ -37,6 +39,11 @@ const link = new RPCLink({
 
 const getORPCClient = () => createORPCClient(link) as RouterClient<AppRouter>;
 
-export const client: RouterClient<AppRouter> = getORPCClient();
+// In the frontend-only preview there is no backend to reach. Serve the typed
+// Unitech mock client instead so every admin screen renders real catalog data.
+// MUST be gated on the same preview flag used for the auth bypass.
+export const client: RouterClient<AppRouter> = env.VITE_PREVIEW_NO_AUTH
+  ? (mockClient as RouterClient<AppRouter>)
+  : getORPCClient();
 
 export const orpc = createTanstackQueryUtils(client);

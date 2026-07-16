@@ -17,17 +17,25 @@ import { Route as AppVariantsRouteImport } from './routes/_app/variants'
 import { Route as AppUomConversionsRouteImport } from './routes/_app/uom-conversions'
 import { Route as AppUnitsRouteImport } from './routes/_app/units'
 import { Route as AppTransfersRouteImport } from './routes/_app/transfers'
+import { Route as AppSuppliersRouteImport } from './routes/_app/suppliers'
 import { Route as AppStockLedgerRouteImport } from './routes/_app/stock-ledger'
 import { Route as AppStaffRouteImport } from './routes/_app/staff'
 import { Route as AppSkusRouteImport } from './routes/_app/skus'
 import { Route as AppShiftsRouteImport } from './routes/_app/shifts'
 import { Route as AppSalesRouteImport } from './routes/_app/sales'
+import { Route as AppReceivablesRouteImport } from './routes/_app/receivables'
+import { Route as AppPromotionsRouteImport } from './routes/_app/promotions'
 import { Route as AppProcurementRouteImport } from './routes/_app/procurement'
+import { Route as AppPricingRouteImport } from './routes/_app/pricing'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
+import { Route as AppPayablesRouteImport } from './routes/_app/payables'
 import { Route as AppOperationsRouteImport } from './routes/_app/operations'
+import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
+import { Route as AppNegativeStockRouteImport } from './routes/_app/negative-stock'
 import { Route as AppLotsRouteImport } from './routes/_app/lots'
 import { Route as AppLocationsRouteImport } from './routes/_app/locations'
 import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
+import { Route as AppHirePurchaseRouteImport } from './routes/_app/hire-purchase'
 import { Route as AppFinancialsRouteImport } from './routes/_app/financials'
 import { Route as AppErrorMaintenanceRouteImport } from './routes/_app/error-maintenance'
 import { Route as AppError500RouteImport } from './routes/_app/error-500'
@@ -35,18 +43,21 @@ import { Route as AppError404RouteImport } from './routes/_app/error-404'
 import { Route as AppError403RouteImport } from './routes/_app/error-403'
 import { Route as AppError401RouteImport } from './routes/_app/error-401'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppCustomersRouteImport } from './routes/_app/customers'
 import { Route as AppCommerceRouteImport } from './routes/_app/commerce'
 import { Route as AppCategoriesRouteImport } from './routes/_app/categories'
 import { Route as AppBrandsRouteImport } from './routes/_app/brands'
 import { Route as AppBondsRouteImport } from './routes/_app/bonds'
 import { Route as AppBarcodesRouteImport } from './routes/_app/barcodes'
 import { Route as AppAuditLogRouteImport } from './routes/_app/audit-log'
+import { Route as AppAdjustmentsRouteImport } from './routes/_app/adjustments'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app/settings.index'
 import { Route as AppReportsIndexRouteImport } from './routes/_app/reports.index'
 import { Route as AppProductsIndexRouteImport } from './routes/_app/products.index'
 import { Route as AppSettingsTaxRouteImport } from './routes/_app/settings.tax'
 import { Route as AppSettingsNumberingRouteImport } from './routes/_app/settings.numbering'
 import { Route as AppSettingsCompaniesRouteImport } from './routes/_app/settings.companies'
+import { Route as AppSettingsBrandingRouteImport } from './routes/_app/settings.branding'
 import { Route as AppReportsNumberLeasesRouteImport } from './routes/_app/reports.number-leases'
 import { Route as AppReportsFinancialRouteImport } from './routes/_app/reports.financial'
 import { Route as AppProductsImportRouteImport } from './routes/_app/products.import'
@@ -91,6 +102,11 @@ const AppTransfersRoute = AppTransfersRouteImport.update({
   path: '/transfers',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppSuppliersRoute = AppSuppliersRouteImport.update({
+  id: '/suppliers',
+  path: '/suppliers',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppStockLedgerRoute = AppStockLedgerRouteImport.update({
   id: '/stock-ledger',
   path: '/stock-ledger',
@@ -116,9 +132,24 @@ const AppSalesRoute = AppSalesRouteImport.update({
   path: '/sales',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppReceivablesRoute = AppReceivablesRouteImport.update({
+  id: '/receivables',
+  path: '/receivables',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppPromotionsRoute = AppPromotionsRouteImport.update({
+  id: '/promotions',
+  path: '/promotions',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppProcurementRoute = AppProcurementRouteImport.update({
   id: '/procurement',
   path: '/procurement',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppPricingRoute = AppPricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppPosRoute = AppPosRouteImport.update({
@@ -126,9 +157,24 @@ const AppPosRoute = AppPosRouteImport.update({
   path: '/pos',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppPayablesRoute = AppPayablesRouteImport.update({
+  id: '/payables',
+  path: '/payables',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppOperationsRoute = AppOperationsRouteImport.update({
   id: '/operations',
   path: '/operations',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppNegativeStockRoute = AppNegativeStockRouteImport.update({
+  id: '/negative-stock',
+  path: '/negative-stock',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppLotsRoute = AppLotsRouteImport.update({
@@ -144,6 +190,11 @@ const AppLocationsRoute = AppLocationsRouteImport.update({
 const AppInventoryRoute = AppInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppHirePurchaseRoute = AppHirePurchaseRouteImport.update({
+  id: '/hire-purchase',
+  path: '/hire-purchase',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppFinancialsRoute = AppFinancialsRouteImport.update({
@@ -181,6 +232,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppCustomersRoute = AppCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppCommerceRoute = AppCommerceRouteImport.update({
   id: '/commerce',
   path: '/commerce',
@@ -209,6 +265,11 @@ const AppBarcodesRoute = AppBarcodesRouteImport.update({
 const AppAuditLogRoute = AppAuditLogRouteImport.update({
   id: '/audit-log',
   path: '/audit-log',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppAdjustmentsRoute = AppAdjustmentsRouteImport.update({
+  id: '/adjustments',
+  path: '/adjustments',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
@@ -241,6 +302,11 @@ const AppSettingsCompaniesRoute = AppSettingsCompaniesRouteImport.update({
   path: '/settings/companies',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppSettingsBrandingRoute = AppSettingsBrandingRouteImport.update({
+  id: '/settings/branding',
+  path: '/settings/branding',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppReportsNumberLeasesRoute = AppReportsNumberLeasesRouteImport.update({
   id: '/reports/number-leases',
   path: '/reports/number-leases',
@@ -266,12 +332,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/adjustments': typeof AppAdjustmentsRoute
   '/audit-log': typeof AppAuditLogRoute
   '/barcodes': typeof AppBarcodesRoute
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
   '/categories': typeof AppCategoriesRoute
   '/commerce': typeof AppCommerceRoute
+  '/customers': typeof AppCustomersRoute
   '/dashboard': typeof AppDashboardRoute
   '/error-401': typeof AppError401Route
   '/error-403': typeof AppError403Route
@@ -279,17 +347,25 @@ export interface FileRoutesByFullPath {
   '/error-500': typeof AppError500Route
   '/error-maintenance': typeof AppErrorMaintenanceRoute
   '/financials': typeof AppFinancialsRoute
+  '/hire-purchase': typeof AppHirePurchaseRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
   '/lots': typeof AppLotsRoute
+  '/negative-stock': typeof AppNegativeStockRoute
+  '/notifications': typeof AppNotificationsRoute
   '/operations': typeof AppOperationsRoute
+  '/payables': typeof AppPayablesRoute
   '/pos': typeof AppPosRoute
+  '/pricing': typeof AppPricingRoute
   '/procurement': typeof AppProcurementRoute
+  '/promotions': typeof AppPromotionsRoute
+  '/receivables': typeof AppReceivablesRoute
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
   '/staff': typeof AppStaffRoute
   '/stock-ledger': typeof AppStockLedgerRoute
+  '/suppliers': typeof AppSuppliersRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
   '/uom-conversions': typeof AppUomConversionsRoute
@@ -298,6 +374,7 @@ export interface FileRoutesByFullPath {
   '/products/import': typeof AppProductsImportRoute
   '/reports/financial': typeof AppReportsFinancialRoute
   '/reports/number-leases': typeof AppReportsNumberLeasesRoute
+  '/settings/branding': typeof AppSettingsBrandingRoute
   '/settings/companies': typeof AppSettingsCompaniesRoute
   '/settings/numbering': typeof AppSettingsNumberingRoute
   '/settings/tax': typeof AppSettingsTaxRoute
@@ -309,12 +386,14 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/adjustments': typeof AppAdjustmentsRoute
   '/audit-log': typeof AppAuditLogRoute
   '/barcodes': typeof AppBarcodesRoute
   '/bonds': typeof AppBondsRoute
   '/brands': typeof AppBrandsRoute
   '/categories': typeof AppCategoriesRoute
   '/commerce': typeof AppCommerceRoute
+  '/customers': typeof AppCustomersRoute
   '/dashboard': typeof AppDashboardRoute
   '/error-401': typeof AppError401Route
   '/error-403': typeof AppError403Route
@@ -322,17 +401,25 @@ export interface FileRoutesByTo {
   '/error-500': typeof AppError500Route
   '/error-maintenance': typeof AppErrorMaintenanceRoute
   '/financials': typeof AppFinancialsRoute
+  '/hire-purchase': typeof AppHirePurchaseRoute
   '/inventory': typeof AppInventoryRoute
   '/locations': typeof AppLocationsRoute
   '/lots': typeof AppLotsRoute
+  '/negative-stock': typeof AppNegativeStockRoute
+  '/notifications': typeof AppNotificationsRoute
   '/operations': typeof AppOperationsRoute
+  '/payables': typeof AppPayablesRoute
   '/pos': typeof AppPosRoute
+  '/pricing': typeof AppPricingRoute
   '/procurement': typeof AppProcurementRoute
+  '/promotions': typeof AppPromotionsRoute
+  '/receivables': typeof AppReceivablesRoute
   '/sales': typeof AppSalesRoute
   '/shifts': typeof AppShiftsRoute
   '/skus': typeof AppSkusRoute
   '/staff': typeof AppStaffRoute
   '/stock-ledger': typeof AppStockLedgerRoute
+  '/suppliers': typeof AppSuppliersRoute
   '/transfers': typeof AppTransfersRoute
   '/units': typeof AppUnitsRoute
   '/uom-conversions': typeof AppUomConversionsRoute
@@ -341,6 +428,7 @@ export interface FileRoutesByTo {
   '/products/import': typeof AppProductsImportRoute
   '/reports/financial': typeof AppReportsFinancialRoute
   '/reports/number-leases': typeof AppReportsNumberLeasesRoute
+  '/settings/branding': typeof AppSettingsBrandingRoute
   '/settings/companies': typeof AppSettingsCompaniesRoute
   '/settings/numbering': typeof AppSettingsNumberingRoute
   '/settings/tax': typeof AppSettingsTaxRoute
@@ -354,12 +442,14 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/_app/adjustments': typeof AppAdjustmentsRoute
   '/_app/audit-log': typeof AppAuditLogRoute
   '/_app/barcodes': typeof AppBarcodesRoute
   '/_app/bonds': typeof AppBondsRoute
   '/_app/brands': typeof AppBrandsRoute
   '/_app/categories': typeof AppCategoriesRoute
   '/_app/commerce': typeof AppCommerceRoute
+  '/_app/customers': typeof AppCustomersRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/error-401': typeof AppError401Route
   '/_app/error-403': typeof AppError403Route
@@ -367,17 +457,25 @@ export interface FileRoutesById {
   '/_app/error-500': typeof AppError500Route
   '/_app/error-maintenance': typeof AppErrorMaintenanceRoute
   '/_app/financials': typeof AppFinancialsRoute
+  '/_app/hire-purchase': typeof AppHirePurchaseRoute
   '/_app/inventory': typeof AppInventoryRoute
   '/_app/locations': typeof AppLocationsRoute
   '/_app/lots': typeof AppLotsRoute
+  '/_app/negative-stock': typeof AppNegativeStockRoute
+  '/_app/notifications': typeof AppNotificationsRoute
   '/_app/operations': typeof AppOperationsRoute
+  '/_app/payables': typeof AppPayablesRoute
   '/_app/pos': typeof AppPosRoute
+  '/_app/pricing': typeof AppPricingRoute
   '/_app/procurement': typeof AppProcurementRoute
+  '/_app/promotions': typeof AppPromotionsRoute
+  '/_app/receivables': typeof AppReceivablesRoute
   '/_app/sales': typeof AppSalesRoute
   '/_app/shifts': typeof AppShiftsRoute
   '/_app/skus': typeof AppSkusRoute
   '/_app/staff': typeof AppStaffRoute
   '/_app/stock-ledger': typeof AppStockLedgerRoute
+  '/_app/suppliers': typeof AppSuppliersRoute
   '/_app/transfers': typeof AppTransfersRoute
   '/_app/units': typeof AppUnitsRoute
   '/_app/uom-conversions': typeof AppUomConversionsRoute
@@ -386,6 +484,7 @@ export interface FileRoutesById {
   '/_app/products/import': typeof AppProductsImportRoute
   '/_app/reports/financial': typeof AppReportsFinancialRoute
   '/_app/reports/number-leases': typeof AppReportsNumberLeasesRoute
+  '/_app/settings/branding': typeof AppSettingsBrandingRoute
   '/_app/settings/companies': typeof AppSettingsCompaniesRoute
   '/_app/settings/numbering': typeof AppSettingsNumberingRoute
   '/_app/settings/tax': typeof AppSettingsTaxRoute
@@ -399,12 +498,14 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/onboarding'
+    | '/adjustments'
     | '/audit-log'
     | '/barcodes'
     | '/bonds'
     | '/brands'
     | '/categories'
     | '/commerce'
+    | '/customers'
     | '/dashboard'
     | '/error-401'
     | '/error-403'
@@ -412,17 +513,25 @@ export interface FileRouteTypes {
     | '/error-500'
     | '/error-maintenance'
     | '/financials'
+    | '/hire-purchase'
     | '/inventory'
     | '/locations'
     | '/lots'
+    | '/negative-stock'
+    | '/notifications'
     | '/operations'
+    | '/payables'
     | '/pos'
+    | '/pricing'
     | '/procurement'
+    | '/promotions'
+    | '/receivables'
     | '/sales'
     | '/shifts'
     | '/skus'
     | '/staff'
     | '/stock-ledger'
+    | '/suppliers'
     | '/transfers'
     | '/units'
     | '/uom-conversions'
@@ -431,6 +540,7 @@ export interface FileRouteTypes {
     | '/products/import'
     | '/reports/financial'
     | '/reports/number-leases'
+    | '/settings/branding'
     | '/settings/companies'
     | '/settings/numbering'
     | '/settings/tax'
@@ -442,12 +552,14 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/onboarding'
+    | '/adjustments'
     | '/audit-log'
     | '/barcodes'
     | '/bonds'
     | '/brands'
     | '/categories'
     | '/commerce'
+    | '/customers'
     | '/dashboard'
     | '/error-401'
     | '/error-403'
@@ -455,17 +567,25 @@ export interface FileRouteTypes {
     | '/error-500'
     | '/error-maintenance'
     | '/financials'
+    | '/hire-purchase'
     | '/inventory'
     | '/locations'
     | '/lots'
+    | '/negative-stock'
+    | '/notifications'
     | '/operations'
+    | '/payables'
     | '/pos'
+    | '/pricing'
     | '/procurement'
+    | '/promotions'
+    | '/receivables'
     | '/sales'
     | '/shifts'
     | '/skus'
     | '/staff'
     | '/stock-ledger'
+    | '/suppliers'
     | '/transfers'
     | '/units'
     | '/uom-conversions'
@@ -474,6 +594,7 @@ export interface FileRouteTypes {
     | '/products/import'
     | '/reports/financial'
     | '/reports/number-leases'
+    | '/settings/branding'
     | '/settings/companies'
     | '/settings/numbering'
     | '/settings/tax'
@@ -486,12 +607,14 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/onboarding'
+    | '/_app/adjustments'
     | '/_app/audit-log'
     | '/_app/barcodes'
     | '/_app/bonds'
     | '/_app/brands'
     | '/_app/categories'
     | '/_app/commerce'
+    | '/_app/customers'
     | '/_app/dashboard'
     | '/_app/error-401'
     | '/_app/error-403'
@@ -499,17 +622,25 @@ export interface FileRouteTypes {
     | '/_app/error-500'
     | '/_app/error-maintenance'
     | '/_app/financials'
+    | '/_app/hire-purchase'
     | '/_app/inventory'
     | '/_app/locations'
     | '/_app/lots'
+    | '/_app/negative-stock'
+    | '/_app/notifications'
     | '/_app/operations'
+    | '/_app/payables'
     | '/_app/pos'
+    | '/_app/pricing'
     | '/_app/procurement'
+    | '/_app/promotions'
+    | '/_app/receivables'
     | '/_app/sales'
     | '/_app/shifts'
     | '/_app/skus'
     | '/_app/staff'
     | '/_app/stock-ledger'
+    | '/_app/suppliers'
     | '/_app/transfers'
     | '/_app/units'
     | '/_app/uom-conversions'
@@ -518,6 +649,7 @@ export interface FileRouteTypes {
     | '/_app/products/import'
     | '/_app/reports/financial'
     | '/_app/reports/number-leases'
+    | '/_app/settings/branding'
     | '/_app/settings/companies'
     | '/_app/settings/numbering'
     | '/_app/settings/tax'
@@ -591,6 +723,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTransfersRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/suppliers': {
+      id: '/_app/suppliers'
+      path: '/suppliers'
+      fullPath: '/suppliers'
+      preLoaderRoute: typeof AppSuppliersRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/stock-ledger': {
       id: '/_app/stock-ledger'
       path: '/stock-ledger'
@@ -626,11 +765,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSalesRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/receivables': {
+      id: '/_app/receivables'
+      path: '/receivables'
+      fullPath: '/receivables'
+      preLoaderRoute: typeof AppReceivablesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/promotions': {
+      id: '/_app/promotions'
+      path: '/promotions'
+      fullPath: '/promotions'
+      preLoaderRoute: typeof AppPromotionsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/procurement': {
       id: '/_app/procurement'
       path: '/procurement'
       fullPath: '/procurement'
       preLoaderRoute: typeof AppProcurementRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/pricing': {
+      id: '/_app/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof AppPricingRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/pos': {
@@ -640,11 +800,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPosRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/payables': {
+      id: '/_app/payables'
+      path: '/payables'
+      fullPath: '/payables'
+      preLoaderRoute: typeof AppPayablesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/operations': {
       id: '/_app/operations'
       path: '/operations'
       fullPath: '/operations'
       preLoaderRoute: typeof AppOperationsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/notifications': {
+      id: '/_app/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/negative-stock': {
+      id: '/_app/negative-stock'
+      path: '/negative-stock'
+      fullPath: '/negative-stock'
+      preLoaderRoute: typeof AppNegativeStockRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/lots': {
@@ -666,6 +847,13 @@ declare module '@tanstack/react-router' {
       path: '/inventory'
       fullPath: '/inventory'
       preLoaderRoute: typeof AppInventoryRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/hire-purchase': {
+      id: '/_app/hire-purchase'
+      path: '/hire-purchase'
+      fullPath: '/hire-purchase'
+      preLoaderRoute: typeof AppHirePurchaseRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/financials': {
@@ -717,6 +905,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/customers': {
+      id: '/_app/customers'
+      path: '/customers'
+      fullPath: '/customers'
+      preLoaderRoute: typeof AppCustomersRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/commerce': {
       id: '/_app/commerce'
       path: '/commerce'
@@ -757,6 +952,13 @@ declare module '@tanstack/react-router' {
       path: '/audit-log'
       fullPath: '/audit-log'
       preLoaderRoute: typeof AppAuditLogRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/adjustments': {
+      id: '/_app/adjustments'
+      path: '/adjustments'
+      fullPath: '/adjustments'
+      preLoaderRoute: typeof AppAdjustmentsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/settings/': {
@@ -801,6 +1003,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsCompaniesRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/settings/branding': {
+      id: '/_app/settings/branding'
+      path: '/settings/branding'
+      fullPath: '/settings/branding'
+      preLoaderRoute: typeof AppSettingsBrandingRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/reports/number-leases': {
       id: '/_app/reports/number-leases'
       path: '/reports/number-leases'
@@ -833,12 +1042,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteRouteChildren {
+  AppAdjustmentsRoute: typeof AppAdjustmentsRoute
   AppAuditLogRoute: typeof AppAuditLogRoute
   AppBarcodesRoute: typeof AppBarcodesRoute
   AppBondsRoute: typeof AppBondsRoute
   AppBrandsRoute: typeof AppBrandsRoute
   AppCategoriesRoute: typeof AppCategoriesRoute
   AppCommerceRoute: typeof AppCommerceRoute
+  AppCustomersRoute: typeof AppCustomersRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppError401Route: typeof AppError401Route
   AppError403Route: typeof AppError403Route
@@ -846,17 +1057,25 @@ interface AppRouteRouteChildren {
   AppError500Route: typeof AppError500Route
   AppErrorMaintenanceRoute: typeof AppErrorMaintenanceRoute
   AppFinancialsRoute: typeof AppFinancialsRoute
+  AppHirePurchaseRoute: typeof AppHirePurchaseRoute
   AppInventoryRoute: typeof AppInventoryRoute
   AppLocationsRoute: typeof AppLocationsRoute
   AppLotsRoute: typeof AppLotsRoute
+  AppNegativeStockRoute: typeof AppNegativeStockRoute
+  AppNotificationsRoute: typeof AppNotificationsRoute
   AppOperationsRoute: typeof AppOperationsRoute
+  AppPayablesRoute: typeof AppPayablesRoute
   AppPosRoute: typeof AppPosRoute
+  AppPricingRoute: typeof AppPricingRoute
   AppProcurementRoute: typeof AppProcurementRoute
+  AppPromotionsRoute: typeof AppPromotionsRoute
+  AppReceivablesRoute: typeof AppReceivablesRoute
   AppSalesRoute: typeof AppSalesRoute
   AppShiftsRoute: typeof AppShiftsRoute
   AppSkusRoute: typeof AppSkusRoute
   AppStaffRoute: typeof AppStaffRoute
   AppStockLedgerRoute: typeof AppStockLedgerRoute
+  AppSuppliersRoute: typeof AppSuppliersRoute
   AppTransfersRoute: typeof AppTransfersRoute
   AppUnitsRoute: typeof AppUnitsRoute
   AppUomConversionsRoute: typeof AppUomConversionsRoute
@@ -865,6 +1084,7 @@ interface AppRouteRouteChildren {
   AppProductsImportRoute: typeof AppProductsImportRoute
   AppReportsFinancialRoute: typeof AppReportsFinancialRoute
   AppReportsNumberLeasesRoute: typeof AppReportsNumberLeasesRoute
+  AppSettingsBrandingRoute: typeof AppSettingsBrandingRoute
   AppSettingsCompaniesRoute: typeof AppSettingsCompaniesRoute
   AppSettingsNumberingRoute: typeof AppSettingsNumberingRoute
   AppSettingsTaxRoute: typeof AppSettingsTaxRoute
@@ -874,12 +1094,14 @@ interface AppRouteRouteChildren {
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppAdjustmentsRoute: AppAdjustmentsRoute,
   AppAuditLogRoute: AppAuditLogRoute,
   AppBarcodesRoute: AppBarcodesRoute,
   AppBondsRoute: AppBondsRoute,
   AppBrandsRoute: AppBrandsRoute,
   AppCategoriesRoute: AppCategoriesRoute,
   AppCommerceRoute: AppCommerceRoute,
+  AppCustomersRoute: AppCustomersRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppError401Route: AppError401Route,
   AppError403Route: AppError403Route,
@@ -887,17 +1109,25 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppError500Route: AppError500Route,
   AppErrorMaintenanceRoute: AppErrorMaintenanceRoute,
   AppFinancialsRoute: AppFinancialsRoute,
+  AppHirePurchaseRoute: AppHirePurchaseRoute,
   AppInventoryRoute: AppInventoryRoute,
   AppLocationsRoute: AppLocationsRoute,
   AppLotsRoute: AppLotsRoute,
+  AppNegativeStockRoute: AppNegativeStockRoute,
+  AppNotificationsRoute: AppNotificationsRoute,
   AppOperationsRoute: AppOperationsRoute,
+  AppPayablesRoute: AppPayablesRoute,
   AppPosRoute: AppPosRoute,
+  AppPricingRoute: AppPricingRoute,
   AppProcurementRoute: AppProcurementRoute,
+  AppPromotionsRoute: AppPromotionsRoute,
+  AppReceivablesRoute: AppReceivablesRoute,
   AppSalesRoute: AppSalesRoute,
   AppShiftsRoute: AppShiftsRoute,
   AppSkusRoute: AppSkusRoute,
   AppStaffRoute: AppStaffRoute,
   AppStockLedgerRoute: AppStockLedgerRoute,
+  AppSuppliersRoute: AppSuppliersRoute,
   AppTransfersRoute: AppTransfersRoute,
   AppUnitsRoute: AppUnitsRoute,
   AppUomConversionsRoute: AppUomConversionsRoute,
@@ -906,6 +1136,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppProductsImportRoute: AppProductsImportRoute,
   AppReportsFinancialRoute: AppReportsFinancialRoute,
   AppReportsNumberLeasesRoute: AppReportsNumberLeasesRoute,
+  AppSettingsBrandingRoute: AppSettingsBrandingRoute,
   AppSettingsCompaniesRoute: AppSettingsCompaniesRoute,
   AppSettingsNumberingRoute: AppSettingsNumberingRoute,
   AppSettingsTaxRoute: AppSettingsTaxRoute,
@@ -927,3 +1158,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}

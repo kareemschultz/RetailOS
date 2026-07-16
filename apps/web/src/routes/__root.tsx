@@ -14,6 +14,7 @@ import type { orpc } from "@/utils/orpc";
 
 import { ThemeProvider } from "../components/theme-provider";
 import appCss from "../index.css?url";
+import { BrandingProvider } from "../theme/branding-store";
 import { SettingsProvider } from "../theme/settings-store";
 export interface RouterAppContext {
   orpc: typeof orpc;
@@ -54,12 +55,14 @@ function RootDocument() {
           disableTransitionOnChange
           enableSystem
         >
-          <SettingsProvider>
-            <TooltipProvider>
-              <Outlet />
-            </TooltipProvider>
-            <Toaster richColors />
-          </SettingsProvider>
+          <BrandingProvider>
+            <SettingsProvider>
+              <TooltipProvider>
+                <Outlet />
+              </TooltipProvider>
+              <Toaster richColors />
+            </SettingsProvider>
+          </BrandingProvider>
         </ThemeProvider>
         <TanStackRouterDevtools position="bottom-left" />
         <ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />

@@ -11,6 +11,7 @@ import {
 } from "@RetailOS/ui/components/dialog";
 import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
+import { PageBody, PageHeader } from "@RetailOS/ui/components/page-header";
 import {
   Select,
   SelectContent,
@@ -19,16 +20,9 @@ import {
   SelectValue,
 } from "@RetailOS/ui/components/select";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@RetailOS/ui/components/table";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Archive,
   ImageIcon,
@@ -63,7 +57,11 @@ const TRACKING_OPTIONS: Array<{ label: string; value: TrackingMode }> = [
 ];
 
 interface ProductRow {
+  // Optional: only present in preview (the real product.catalog contract omits
+  // category). Drives the department facet on the catalog-at-scale view.
+  categoryHandle?: string;
   currency: string;
+  department?: string;
   id: string;
   name: string;
   priceMinor: number;
@@ -73,6 +71,9 @@ interface ProductRow {
   sku: string;
   trackingMode: string;
 }
+
+const ALL_DEPARTMENTS = "__all__";
+const ROW_HEIGHT = 68;
 
 const SKELETON_KEYS = ["a", "b", "c", "d", "e"] as const;
 
@@ -412,25 +413,10 @@ function ProductsScreen() {
   const isSaving = createProduct.isPending || updateProduct.isPending;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="font-semibold text-2xl tracking-tight">Products</h1>
-        <p className="text-muted-foreground">
-          Your shared catalog — the same items POS and inventory draw from.
-        </p>
-      </div>
-      <DataTableCard
+    <PageBody className="mx-auto w-full max-w-7xl p-6">
+      <PageHeader
         actions={
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="h-9 rounded-lg pl-9"
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search name or SKU…"
-                value={query}
-              />
-            </div>
             <Button render={<Link to="/products/import" />} variant="outline">
               <Upload className="size-4" />
               Import
@@ -444,6 +430,28 @@ function ProductsScreen() {
               <Plus className="size-4" />
               New product
             </Button>
+          </div>
+        }
+        description="Your shared catalog — the same items POS and inventory draw from."
+        title={
+          <span className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Package className="size-5" />
+            </span>
+            Products
+          </span>
+        }
+      />
+      <DataTableCard
+        actions={
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="h-9 rounded-lg pl-9"
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name or SKU…"
+              value={query}
+            />
           </div>
         }
         count={settled ? filtered.length : undefined}
@@ -514,6 +522,6 @@ function ProductsScreen() {
           product={editingProduct}
         />
       ) : null}
-    </div>
+    </PageBody>
   );
 }
