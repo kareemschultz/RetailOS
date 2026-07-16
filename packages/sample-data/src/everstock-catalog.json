@@ -1,0 +1,3126 @@
+{
+  "products": [
+    {
+      "handle": "solstice-power-strip-1000",
+      "sku": "1000",
+      "name": "SOLSTICE POWER STRIP",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 2112585,
+      "onHand": -3,
+      "description": ""
+    },
+    {
+      "handle": "crestline-xl-surge-protector-1001",
+      "sku": "1001",
+      "name": "CRESTLINE XL SURGE PROTECTOR",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1647841,
+      "onHand": 0,
+      "description": ""
+    },
+    {
+      "handle": "extension-cord-1002",
+      "sku": "1002",
+      "name": "EXTENSION CORD",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 842550,
+      "onHand": -8,
+      "description": ""
+    },
+    {
+      "handle": "pro-usb-charging-hub-1003",
+      "sku": "1003",
+      "name": "PRO USB CHARGING HUB",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 643216,
+      "onHand": -12,
+      "description": ""
+    },
+    {
+      "handle": "nova-mini-wireless-remote-1004",
+      "sku": "1004",
+      "name": "NOVA MINI WIRELESS REMOTE",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1492153,
+      "onHand": 59,
+      "description": ""
+    },
+    {
+      "handle": "crestline-compact-hdmi-cable-kit-1005",
+      "sku": "1005",
+      "name": "CRESTLINE COMPACT HDMI CABLE KIT",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1363759,
+      "onHand": 15,
+      "description": ""
+    },
+    {
+      "handle": "large-usb-charging-hub-1006",
+      "sku": "1006",
+      "name": "LARGE USB CHARGING HUB",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 790188,
+      "onHand": -1,
+      "description": ""
+    },
+    {
+      "handle": "compact-wireless-remote-1007",
+      "sku": "1007",
+      "name": "COMPACT WIRELESS REMOTE",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1893288,
+      "onHand": 7,
+      "description": ""
+    },
+    {
+      "handle": "mini-usb-charging-hub-1008",
+      "sku": "1008",
+      "name": "MINI USB CHARGING HUB",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1398051,
+      "onHand": 39,
+      "description": ""
+    },
+    {
+      "handle": "usb-charging-hub-1009",
+      "sku": "1009",
+      "name": "USB CHARGING HUB",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1078515,
+      "onHand": 42,
+      "description": ""
+    },
+    {
+      "handle": "everline-cordless-phone-1010",
+      "sku": "1010",
+      "name": "EVERLINE CORDLESS PHONE",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1098901,
+      "onHand": 29,
+      "description": ""
+    },
+    {
+      "handle": "wireless-remote-1011",
+      "sku": "1011",
+      "name": "WIRELESS REMOTE",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1072459,
+      "onHand": 24,
+      "description": ""
+    },
+    {
+      "handle": "mini-universal-remote-1012",
+      "sku": "1012",
+      "name": "MINI UNIVERSAL REMOTE",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1308150,
+      "onHand": 14,
+      "description": ""
+    },
+    {
+      "handle": "extension-cord-1013",
+      "sku": "1013",
+      "name": "EXTENSION CORD",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 786966,
+      "onHand": 22,
+      "description": ""
+    },
+    {
+      "handle": "xl-hdmi-cable-kit-1014",
+      "sku": "1014",
+      "name": "XL HDMI CABLE KIT",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1986706,
+      "onHand": -6,
+      "description": ""
+    },
+    {
+      "handle": "vantage-cordless-phone-1015",
+      "sku": "1015",
+      "name": "VANTAGE CORDLESS PHONE",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1715362,
+      "onHand": 18,
+      "description": ""
+    },
+    {
+      "handle": "extension-cord-1016",
+      "sku": "1016",
+      "name": "EXTENSION CORD",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1807037,
+      "onHand": 29,
+      "description": ""
+    },
+    {
+      "handle": "nova-compact-usb-charging-hub-1017",
+      "sku": "1017",
+      "name": "NOVA COMPACT USB CHARGING HUB",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 401865,
+      "onHand": 47,
+      "description": ""
+    },
+    {
+      "handle": "mini-power-strip-1018",
+      "sku": "1018",
+      "name": "MINI POWER STRIP",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 891774,
+      "onHand": 56,
+      "description": ""
+    },
+    {
+      "handle": "xl-extension-cord-1019",
+      "sku": "1019",
+      "name": "XL EXTENSION CORD",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 299519,
+      "onHand": 53,
+      "description": ""
+    },
+    {
+      "handle": "everline-wireless-remote-1020",
+      "sku": "1020",
+      "name": "EVERLINE WIRELESS REMOTE",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1500054,
+      "onHand": -9,
+      "description": ""
+    },
+    {
+      "handle": "brightline-mini-usb-charging-hub-1021",
+      "sku": "1021",
+      "name": "BRIGHTLINE MINI USB CHARGING HUB",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 765543,
+      "onHand": 13,
+      "description": ""
+    },
+    {
+      "handle": "brightline-standard-usb-charging-hub-1022",
+      "sku": "1022",
+      "name": "BRIGHTLINE STANDARD USB CHARGING HUB",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 311088,
+      "onHand": 24,
+      "description": ""
+    },
+    {
+      "handle": "extension-cord-1023",
+      "sku": "1023",
+      "name": "EXTENSION CORD",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 534897,
+      "onHand": 0,
+      "description": ""
+    },
+    {
+      "handle": "compact-cordless-phone-1024",
+      "sku": "1024",
+      "name": "COMPACT CORDLESS PHONE",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 871887,
+      "onHand": 4,
+      "description": ""
+    },
+    {
+      "handle": "vantage-usb-charging-hub-1025",
+      "sku": "1025",
+      "name": "VANTAGE USB CHARGING HUB",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 709389,
+      "onHand": 49,
+      "description": ""
+    },
+    {
+      "handle": "nova-usb-charging-hub-1026",
+      "sku": "1026",
+      "name": "NOVA USB CHARGING HUB",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 895684,
+      "onHand": 21,
+      "description": ""
+    },
+    {
+      "handle": "wireless-remote-1027",
+      "sku": "1027",
+      "name": "WIRELESS REMOTE",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1856527,
+      "onHand": -10,
+      "description": ""
+    },
+    {
+      "handle": "vantage-compact-surge-protector-1028",
+      "sku": "1028",
+      "name": "VANTAGE COMPACT SURGE PROTECTOR",
+      "department": "Accessories",
+      "categoryHandle": "accessories",
+      "priceMinor": 1840397,
+      "onHand": 24,
+      "description": ""
+    },
+    {
+      "handle": "inverter-ac-unit-1029",
+      "sku": "1029",
+      "name": "INVERTER AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 46596108,
+      "onHand": 25,
+      "description": ""
+    },
+    {
+      "handle": "zenith-window-ac-unit-1030",
+      "sku": "1030",
+      "name": "ZENITH WINDOW AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 23476985,
+      "onHand": 9,
+      "description": ""
+    },
+    {
+      "handle": "window-ac-unit-1031",
+      "sku": "1031",
+      "name": "WINDOW AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 27227373,
+      "onHand": 59,
+      "description": ""
+    },
+    {
+      "handle": "inverter-ac-unit-1032",
+      "sku": "1032",
+      "name": "INVERTER AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 41055498,
+      "onHand": 9,
+      "description": ""
+    },
+    {
+      "handle": "vantage-standard-portable-ac-unit-1033",
+      "sku": "1033",
+      "name": "VANTAGE STANDARD PORTABLE AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 24871100,
+      "onHand": 44,
+      "description": ""
+    },
+    {
+      "handle": "solstice-inverter-ac-unit-1034",
+      "sku": "1034",
+      "name": "SOLSTICE INVERTER AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 44799301,
+      "onHand": 3,
+      "description": ""
+    },
+    {
+      "handle": "everline-xl-window-ac-unit-1035",
+      "sku": "1035",
+      "name": "EVERLINE XL WINDOW AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 17296614,
+      "onHand": 28,
+      "description": ""
+    },
+    {
+      "handle": "meridian-portable-ac-unit-1036",
+      "sku": "1036",
+      "name": "MERIDIAN PORTABLE AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 18572806,
+      "onHand": 8,
+      "description": ""
+    },
+    {
+      "handle": "everline-window-ac-unit-1037",
+      "sku": "1037",
+      "name": "EVERLINE WINDOW AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 26797108,
+      "onHand": 43,
+      "description": ""
+    },
+    {
+      "handle": "compact-portable-ac-unit-1038",
+      "sku": "1038",
+      "name": "COMPACT PORTABLE AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 20998415,
+      "onHand": 24,
+      "description": ""
+    },
+    {
+      "handle": "xl-portable-ac-unit-1039",
+      "sku": "1039",
+      "name": "XL PORTABLE AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 13670910,
+      "onHand": 41,
+      "description": ""
+    },
+    {
+      "handle": "aurora-inverter-ac-unit-1040",
+      "sku": "1040",
+      "name": "AURORA INVERTER AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 14669011,
+      "onHand": 35,
+      "description": ""
+    },
+    {
+      "handle": "nova-inverter-ac-unit-1041",
+      "sku": "1041",
+      "name": "NOVA INVERTER AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 41223078,
+      "onHand": 39,
+      "description": ""
+    },
+    {
+      "handle": "inverter-ac-unit-1042",
+      "sku": "1042",
+      "name": "INVERTER AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 32528346,
+      "onHand": 2,
+      "description": ""
+    },
+    {
+      "handle": "portable-ac-unit-1043",
+      "sku": "1043",
+      "name": "PORTABLE AC UNIT",
+      "department": "Air Conditioning",
+      "categoryHandle": "air-conditioning",
+      "priceMinor": 11677074,
+      "onHand": 48,
+      "description": ""
+    },
+    {
+      "handle": "vantage-xl-wireless-doorbell-camera-1044",
+      "sku": "1044",
+      "name": "VANTAGE XL WIRELESS DOORBELL CAMERA",
+      "department": "Camera",
+      "categoryHandle": "camera",
+      "priceMinor": 1146639,
+      "onHand": 33,
+      "description": ""
+    },
+    {
+      "handle": "wireless-doorbell-camera-1045",
+      "sku": "1045",
+      "name": "WIRELESS DOORBELL CAMERA",
+      "department": "Camera",
+      "categoryHandle": "camera",
+      "priceMinor": 511201,
+      "onHand": 24,
+      "description": ""
+    },
+    {
+      "handle": "meridian-xl-wireless-doorbell-camera-1046",
+      "sku": "1046",
+      "name": "MERIDIAN XL WIRELESS DOORBELL CAMERA",
+      "department": "Camera",
+      "categoryHandle": "camera",
+      "priceMinor": 1274586,
+      "onHand": 26,
+      "description": ""
+    },
+    {
+      "handle": "aurora-mini-wireless-doorbell-camera-1047",
+      "sku": "1047",
+      "name": "AURORA MINI WIRELESS DOORBELL CAMERA",
+      "department": "Camera",
+      "categoryHandle": "camera",
+      "priceMinor": 769290,
+      "onHand": -12,
+      "description": ""
+    },
+    {
+      "handle": "aurora-standard-dome-security-camera-1048",
+      "sku": "1048",
+      "name": "AURORA STANDARD DOME SECURITY CAMERA",
+      "department": "Camera",
+      "categoryHandle": "camera",
+      "priceMinor": 2092788,
+      "onHand": 39,
+      "description": ""
+    },
+    {
+      "handle": "solstice-dining-chair-1049",
+      "sku": "1049",
+      "name": "SOLSTICE DINING CHAIR",
+      "department": "Chairs",
+      "categoryHandle": "chairs",
+      "priceMinor": 1904960,
+      "onHand": 24,
+      "description": ""
+    },
+    {
+      "handle": "compact-office-chair-1050",
+      "sku": "1050",
+      "name": "COMPACT OFFICE CHAIR",
+      "department": "Chairs",
+      "categoryHandle": "chairs",
+      "priceMinor": 1275639,
+      "onHand": 32,
+      "description": ""
+    },
+    {
+      "handle": "northgate-bar-stool-1051",
+      "sku": "1051",
+      "name": "NORTHGATE BAR STOOL",
+      "department": "Chairs",
+      "categoryHandle": "chairs",
+      "priceMinor": 1838800,
+      "onHand": 55,
+      "description": ""
+    },
+    {
+      "handle": "everline-compact-recliner-chair-1052",
+      "sku": "1052",
+      "name": "EVERLINE COMPACT RECLINER CHAIR",
+      "department": "Chairs",
+      "categoryHandle": "chairs",
+      "priceMinor": 435197,
+      "onHand": 9,
+      "description": ""
+    },
+    {
+      "handle": "mini-office-chair-1053",
+      "sku": "1053",
+      "name": "MINI OFFICE CHAIR",
+      "department": "Chairs",
+      "categoryHandle": "chairs",
+      "priceMinor": 1151405,
+      "onHand": 21,
+      "description": ""
+    },
+    {
+      "handle": "blackout-curtain-panel-1054",
+      "sku": "1054",
+      "name": "BLACKOUT CURTAIN PANEL",
+      "department": "Curtain",
+      "categoryHandle": "curtain",
+      "priceMinor": 1823646,
+      "onHand": -11,
+      "description": ""
+    },
+    {
+      "handle": "solstice-large-sheer-curtain-panel-1055",
+      "sku": "1055",
+      "name": "SOLSTICE LARGE SHEER CURTAIN PANEL",
+      "department": "Curtain",
+      "categoryHandle": "curtain",
+      "priceMinor": 1888795,
+      "onHand": 0,
+      "description": ""
+    },
+    {
+      "handle": "nova-blackout-curtain-panel-1056",
+      "sku": "1056",
+      "name": "NOVA BLACKOUT CURTAIN PANEL",
+      "department": "Curtain",
+      "categoryHandle": "curtain",
+      "priceMinor": 924399,
+      "onHand": 41,
+      "description": ""
+    },
+    {
+      "handle": "blackout-curtain-panel-1057",
+      "sku": "1057",
+      "name": "BLACKOUT CURTAIN PANEL",
+      "department": "Curtain",
+      "categoryHandle": "curtain",
+      "priceMinor": 1135233,
+      "onHand": 45,
+      "description": ""
+    },
+    {
+      "handle": "meridian-sheer-curtain-panel-1058",
+      "sku": "1058",
+      "name": "MERIDIAN SHEER CURTAIN PANEL",
+      "department": "Curtain",
+      "categoryHandle": "curtain",
+      "priceMinor": 485859,
+      "onHand": 31,
+      "description": ""
+    },
+    {
+      "handle": "aurora-large-wall-clock-1059",
+      "sku": "1059",
+      "name": "AURORA LARGE WALL CLOCK",
+      "department": "Decor",
+      "categoryHandle": "decor",
+      "priceMinor": 753426,
+      "onHand": 11,
+      "description": ""
+    },
+    {
+      "handle": "northgate-picture-frame-set-1060",
+      "sku": "1060",
+      "name": "NORTHGATE PICTURE FRAME SET",
+      "department": "Decor",
+      "categoryHandle": "decor",
+      "priceMinor": 308960,
+      "onHand": 20,
+      "description": ""
+    },
+    {
+      "handle": "large-wall-clock-1061",
+      "sku": "1061",
+      "name": "LARGE WALL CLOCK",
+      "department": "Decor",
+      "categoryHandle": "decor",
+      "priceMinor": 1946060,
+      "onHand": 20,
+      "description": ""
+    },
+    {
+      "handle": "wall-clock-1062",
+      "sku": "1062",
+      "name": "WALL CLOCK",
+      "department": "Decor",
+      "categoryHandle": "decor",
+      "priceMinor": 848746,
+      "onHand": 52,
+      "description": ""
+    },
+    {
+      "handle": "northgate-standard-wall-clock-1063",
+      "sku": "1063",
+      "name": "NORTHGATE STANDARD WALL CLOCK",
+      "department": "Decor",
+      "categoryHandle": "decor",
+      "priceMinor": 1242247,
+      "onHand": 42,
+      "description": ""
+    },
+    {
+      "handle": "aurora-bottom-load-water-dispenser-1064",
+      "sku": "1064",
+      "name": "AURORA BOTTOM-LOAD WATER DISPENSER",
+      "department": "Dispensers",
+      "categoryHandle": "dispensers",
+      "priceMinor": 605444,
+      "onHand": 10,
+      "description": ""
+    },
+    {
+      "handle": "meridian-large-bottom-load-water-dispenser-1065",
+      "sku": "1065",
+      "name": "MERIDIAN LARGE BOTTOM-LOAD WATER DISPENSER",
+      "department": "Dispensers",
+      "categoryHandle": "dispensers",
+      "priceMinor": 1936946,
+      "onHand": 28,
+      "description": ""
+    },
+    {
+      "handle": "pro-top-load-water-dispenser-1066",
+      "sku": "1066",
+      "name": "PRO TOP-LOAD WATER DISPENSER",
+      "department": "Dispensers",
+      "categoryHandle": "dispensers",
+      "priceMinor": 1460099,
+      "onHand": 46,
+      "description": ""
+    },
+    {
+      "handle": "vantage-top-load-water-dispenser-1067",
+      "sku": "1067",
+      "name": "VANTAGE TOP-LOAD WATER DISPENSER",
+      "department": "Dispensers",
+      "categoryHandle": "dispensers",
+      "priceMinor": 935325,
+      "onHand": -2,
+      "description": ""
+    },
+    {
+      "handle": "bottom-load-water-dispenser-1068",
+      "sku": "1068",
+      "name": "BOTTOM-LOAD WATER DISPENSER",
+      "department": "Dispensers",
+      "categoryHandle": "dispensers",
+      "priceMinor": 1377634,
+      "onHand": 5,
+      "description": ""
+    },
+    {
+      "handle": "large-soap-dispenser-1069",
+      "sku": "1069",
+      "name": "LARGE SOAP DISPENSER",
+      "department": "Dispensers",
+      "categoryHandle": "dispensers",
+      "priceMinor": 1767026,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "meridian-standard-bottom-load-water-dispenser-1070",
+      "sku": "1070",
+      "name": "MERIDIAN STANDARD BOTTOM-LOAD WATER DISPENSER",
+      "department": "Dispensers",
+      "categoryHandle": "dispensers",
+      "priceMinor": 257221,
+      "onHand": 33,
+      "description": ""
+    },
+    {
+      "handle": "standing-fan-1071",
+      "sku": "1071",
+      "name": "STANDING FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 1989026,
+      "onHand": 54,
+      "description": ""
+    },
+    {
+      "handle": "crestline-xl-wall-mount-fan-1072",
+      "sku": "1072",
+      "name": "CRESTLINE XL WALL-MOUNT FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 654691,
+      "onHand": 29,
+      "description": ""
+    },
+    {
+      "handle": "table-fan-1073",
+      "sku": "1073",
+      "name": "TABLE FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 1525297,
+      "onHand": 9,
+      "description": ""
+    },
+    {
+      "handle": "aurora-compact-table-fan-1074",
+      "sku": "1074",
+      "name": "AURORA COMPACT TABLE FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 1907973,
+      "onHand": 44,
+      "description": ""
+    },
+    {
+      "handle": "vantage-xl-table-fan-1075",
+      "sku": "1075",
+      "name": "VANTAGE XL TABLE FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 222074,
+      "onHand": 43,
+      "description": ""
+    },
+    {
+      "handle": "standing-fan-1076",
+      "sku": "1076",
+      "name": "STANDING FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 1461977,
+      "onHand": 0,
+      "description": ""
+    },
+    {
+      "handle": "ceiling-fan-1077",
+      "sku": "1077",
+      "name": "CEILING FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 1012707,
+      "onHand": 26,
+      "description": ""
+    },
+    {
+      "handle": "compact-table-fan-1078",
+      "sku": "1078",
+      "name": "COMPACT TABLE FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 1674739,
+      "onHand": 14,
+      "description": ""
+    },
+    {
+      "handle": "meridian-xl-wall-mount-fan-1079",
+      "sku": "1079",
+      "name": "MERIDIAN XL WALL-MOUNT FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 1277950,
+      "onHand": 3,
+      "description": ""
+    },
+    {
+      "handle": "aurora-ceiling-fan-1080",
+      "sku": "1080",
+      "name": "AURORA CEILING FAN",
+      "department": "Fan",
+      "categoryHandle": "fan",
+      "priceMinor": 1595561,
+      "onHand": 58,
+      "description": ""
+    },
+    {
+      "handle": "zenith-laminate-flooring-plank-1081",
+      "sku": "1081",
+      "name": "ZENITH LAMINATE FLOORING PLANK",
+      "department": "Flooring",
+      "categoryHandle": "flooring",
+      "priceMinor": 1017900,
+      "onHand": 21,
+      "description": ""
+    },
+    {
+      "handle": "solstice-vinyl-flooring-tile-1082",
+      "sku": "1082",
+      "name": "SOLSTICE VINYL FLOORING TILE",
+      "department": "Flooring",
+      "categoryHandle": "flooring",
+      "priceMinor": 496171,
+      "onHand": 15,
+      "description": ""
+    },
+    {
+      "handle": "standard-laminate-flooring-plank-1083",
+      "sku": "1083",
+      "name": "STANDARD LAMINATE FLOORING PLANK",
+      "department": "Flooring",
+      "categoryHandle": "flooring",
+      "priceMinor": 1615245,
+      "onHand": 45,
+      "description": ""
+    },
+    {
+      "handle": "vinyl-flooring-tile-1084",
+      "sku": "1084",
+      "name": "VINYL FLOORING TILE",
+      "department": "Flooring",
+      "categoryHandle": "flooring",
+      "priceMinor": 1773836,
+      "onHand": 46,
+      "description": ""
+    },
+    {
+      "handle": "vinyl-flooring-tile-1085",
+      "sku": "1085",
+      "name": "VINYL FLOORING TILE",
+      "department": "Flooring",
+      "categoryHandle": "flooring",
+      "priceMinor": 227479,
+      "onHand": 3,
+      "description": ""
+    },
+    {
+      "handle": "chest-freezer-1086",
+      "sku": "1086",
+      "name": "CHEST FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 24885122,
+      "onHand": 41,
+      "description": ""
+    },
+    {
+      "handle": "crestline-upright-freezer-1087",
+      "sku": "1087",
+      "name": "CRESTLINE UPRIGHT FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 47997152,
+      "onHand": 36,
+      "description": ""
+    },
+    {
+      "handle": "solstice-compact-freezer-1088",
+      "sku": "1088",
+      "name": "SOLSTICE COMPACT FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 9187979,
+      "onHand": 15,
+      "description": ""
+    },
+    {
+      "handle": "brightline-chest-freezer-1089",
+      "sku": "1089",
+      "name": "BRIGHTLINE CHEST FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 15079986,
+      "onHand": 46,
+      "description": ""
+    },
+    {
+      "handle": "chest-freezer-1090",
+      "sku": "1090",
+      "name": "CHEST FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 35301550,
+      "onHand": -6,
+      "description": ""
+    },
+    {
+      "handle": "everline-compact-upright-freezer-1091",
+      "sku": "1091",
+      "name": "EVERLINE COMPACT UPRIGHT FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 45555404,
+      "onHand": 8,
+      "description": ""
+    },
+    {
+      "handle": "standard-chest-freezer-1092",
+      "sku": "1092",
+      "name": "STANDARD CHEST FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 29038115,
+      "onHand": 41,
+      "description": ""
+    },
+    {
+      "handle": "pro-chest-freezer-1093",
+      "sku": "1093",
+      "name": "PRO CHEST FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 25769711,
+      "onHand": 47,
+      "description": ""
+    },
+    {
+      "handle": "pro-chest-freezer-1094",
+      "sku": "1094",
+      "name": "PRO CHEST FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 20545349,
+      "onHand": 6,
+      "description": ""
+    },
+    {
+      "handle": "aurora-large-compact-freezer-1095",
+      "sku": "1095",
+      "name": "AURORA LARGE COMPACT FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 36495656,
+      "onHand": 59,
+      "description": ""
+    },
+    {
+      "handle": "nova-standard-upright-freezer-1096",
+      "sku": "1096",
+      "name": "NOVA STANDARD UPRIGHT FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 37723972,
+      "onHand": 42,
+      "description": ""
+    },
+    {
+      "handle": "solstice-pro-compact-freezer-1097",
+      "sku": "1097",
+      "name": "SOLSTICE PRO COMPACT FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 28907801,
+      "onHand": 7,
+      "description": ""
+    },
+    {
+      "handle": "everline-pro-chest-freezer-1098",
+      "sku": "1098",
+      "name": "EVERLINE PRO CHEST FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 29404825,
+      "onHand": 51,
+      "description": ""
+    },
+    {
+      "handle": "crestline-compact-freezer-1099",
+      "sku": "1099",
+      "name": "CRESTLINE COMPACT FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 41284958,
+      "onHand": 2,
+      "description": ""
+    },
+    {
+      "handle": "crestline-compact-freezer-1100",
+      "sku": "1100",
+      "name": "CRESTLINE COMPACT FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 43763933,
+      "onHand": 18,
+      "description": ""
+    },
+    {
+      "handle": "compact-freezer-1101",
+      "sku": "1101",
+      "name": "COMPACT FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 19430336,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "chest-freezer-1102",
+      "sku": "1102",
+      "name": "CHEST FREEZER",
+      "department": "Freezers",
+      "categoryHandle": "freezers",
+      "priceMinor": 29664811,
+      "onHand": 17,
+      "description": ""
+    },
+    {
+      "handle": "side-by-side-fridge-1103",
+      "sku": "1103",
+      "name": "SIDE-BY-SIDE FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 42359646,
+      "onHand": 44,
+      "description": ""
+    },
+    {
+      "handle": "pro-mini-fridge-1104",
+      "sku": "1104",
+      "name": "PRO MINI FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 44118592,
+      "onHand": 21,
+      "description": ""
+    },
+    {
+      "handle": "solstice-compact-top-freezer-fridge-1105",
+      "sku": "1105",
+      "name": "SOLSTICE COMPACT TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 30797560,
+      "onHand": 55,
+      "description": ""
+    },
+    {
+      "handle": "standard-double-door-fridge-1106",
+      "sku": "1106",
+      "name": "STANDARD DOUBLE DOOR FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 29124280,
+      "onHand": 1,
+      "description": ""
+    },
+    {
+      "handle": "compact-fridge-1107",
+      "sku": "1107",
+      "name": "COMPACT FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 47260403,
+      "onHand": 1,
+      "description": ""
+    },
+    {
+      "handle": "aurora-side-by-side-fridge-1108",
+      "sku": "1108",
+      "name": "AURORA SIDE-BY-SIDE FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 44468479,
+      "onHand": 30,
+      "description": ""
+    },
+    {
+      "handle": "everline-mini-fridge-1109",
+      "sku": "1109",
+      "name": "EVERLINE MINI FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 18127655,
+      "onHand": 20,
+      "description": ""
+    },
+    {
+      "handle": "nova-pro-top-freezer-fridge-1110",
+      "sku": "1110",
+      "name": "NOVA PRO TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 19032303,
+      "onHand": 17,
+      "description": ""
+    },
+    {
+      "handle": "nova-compact-single-door-fridge-1111",
+      "sku": "1111",
+      "name": "NOVA COMPACT SINGLE DOOR FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 38011686,
+      "onHand": 6,
+      "description": ""
+    },
+    {
+      "handle": "meridian-standard-side-by-side-fridge-1112",
+      "sku": "1112",
+      "name": "MERIDIAN STANDARD SIDE-BY-SIDE FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 25488548,
+      "onHand": 13,
+      "description": ""
+    },
+    {
+      "handle": "top-freezer-fridge-1113",
+      "sku": "1113",
+      "name": "TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 18719259,
+      "onHand": -1,
+      "description": ""
+    },
+    {
+      "handle": "meridian-compact-fridge-1114",
+      "sku": "1114",
+      "name": "MERIDIAN COMPACT FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 33231929,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "xl-compact-fridge-1115",
+      "sku": "1115",
+      "name": "XL COMPACT FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 9851631,
+      "onHand": 23,
+      "description": ""
+    },
+    {
+      "handle": "nova-compact-fridge-1116",
+      "sku": "1116",
+      "name": "NOVA COMPACT FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 11791285,
+      "onHand": 5,
+      "description": ""
+    },
+    {
+      "handle": "northgate-top-freezer-fridge-1117",
+      "sku": "1117",
+      "name": "NORTHGATE TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 31201874,
+      "onHand": 31,
+      "description": ""
+    },
+    {
+      "handle": "meridian-top-freezer-fridge-1118",
+      "sku": "1118",
+      "name": "MERIDIAN TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 12946525,
+      "onHand": 47,
+      "description": ""
+    },
+    {
+      "handle": "solstice-mini-side-by-side-fridge-1119",
+      "sku": "1119",
+      "name": "SOLSTICE MINI SIDE-BY-SIDE FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 25500701,
+      "onHand": -2,
+      "description": ""
+    },
+    {
+      "handle": "vantage-standard-single-door-fridge-1120",
+      "sku": "1120",
+      "name": "VANTAGE STANDARD SINGLE DOOR FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 27176202,
+      "onHand": 20,
+      "description": ""
+    },
+    {
+      "handle": "compact-fridge-1121",
+      "sku": "1121",
+      "name": "COMPACT FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 37511331,
+      "onHand": 27,
+      "description": ""
+    },
+    {
+      "handle": "mini-fridge-1122",
+      "sku": "1122",
+      "name": "MINI FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 39368303,
+      "onHand": 55,
+      "description": ""
+    },
+    {
+      "handle": "zenith-top-freezer-fridge-1123",
+      "sku": "1123",
+      "name": "ZENITH TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 43779572,
+      "onHand": -4,
+      "description": ""
+    },
+    {
+      "handle": "brightline-compact-compact-fridge-1124",
+      "sku": "1124",
+      "name": "BRIGHTLINE COMPACT COMPACT FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 9678867,
+      "onHand": -6,
+      "description": ""
+    },
+    {
+      "handle": "brightline-single-door-fridge-1125",
+      "sku": "1125",
+      "name": "BRIGHTLINE SINGLE DOOR FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 13793501,
+      "onHand": 19,
+      "description": ""
+    },
+    {
+      "handle": "mini-double-door-fridge-1126",
+      "sku": "1126",
+      "name": "MINI DOUBLE DOOR FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 9467100,
+      "onHand": 50,
+      "description": ""
+    },
+    {
+      "handle": "side-by-side-fridge-1127",
+      "sku": "1127",
+      "name": "SIDE-BY-SIDE FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 45211496,
+      "onHand": 31,
+      "description": ""
+    },
+    {
+      "handle": "large-top-freezer-fridge-1128",
+      "sku": "1128",
+      "name": "LARGE TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 43210889,
+      "onHand": 55,
+      "description": ""
+    },
+    {
+      "handle": "compact-top-freezer-fridge-1129",
+      "sku": "1129",
+      "name": "COMPACT TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 46006122,
+      "onHand": 13,
+      "description": ""
+    },
+    {
+      "handle": "northgate-side-by-side-fridge-1130",
+      "sku": "1130",
+      "name": "NORTHGATE SIDE-BY-SIDE FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 9268946,
+      "onHand": -10,
+      "description": ""
+    },
+    {
+      "handle": "top-freezer-fridge-1131",
+      "sku": "1131",
+      "name": "TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 35198934,
+      "onHand": 40,
+      "description": ""
+    },
+    {
+      "handle": "brightline-large-double-door-fridge-1132",
+      "sku": "1132",
+      "name": "BRIGHTLINE LARGE DOUBLE DOOR FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 18278700,
+      "onHand": -9,
+      "description": ""
+    },
+    {
+      "handle": "top-freezer-fridge-1133",
+      "sku": "1133",
+      "name": "TOP FREEZER FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 40538815,
+      "onHand": -9,
+      "description": ""
+    },
+    {
+      "handle": "xl-side-by-side-fridge-1134",
+      "sku": "1134",
+      "name": "XL SIDE-BY-SIDE FRIDGE",
+      "department": "Fridges",
+      "categoryHandle": "fridges",
+      "priceMinor": 19630503,
+      "onHand": 35,
+      "description": ""
+    },
+    {
+      "handle": "standard-tv-stand-1135",
+      "sku": "1135",
+      "name": "STANDARD TV STAND",
+      "department": "Furniture",
+      "categoryHandle": "furniture",
+      "priceMinor": 2742027,
+      "onHand": 7,
+      "description": ""
+    },
+    {
+      "handle": "pro-bookshelf-1136",
+      "sku": "1136",
+      "name": "PRO BOOKSHELF",
+      "department": "Furniture",
+      "categoryHandle": "furniture",
+      "priceMinor": 1685565,
+      "onHand": -8,
+      "description": ""
+    },
+    {
+      "handle": "everline-tv-stand-1137",
+      "sku": "1137",
+      "name": "EVERLINE TV STAND",
+      "department": "Furniture",
+      "categoryHandle": "furniture",
+      "priceMinor": 7799287,
+      "onHand": 1,
+      "description": ""
+    },
+    {
+      "handle": "meridian-mini-storage-bench-1138",
+      "sku": "1138",
+      "name": "MERIDIAN MINI STORAGE BENCH",
+      "department": "Furniture",
+      "categoryHandle": "furniture",
+      "priceMinor": 2011292,
+      "onHand": 0,
+      "description": ""
+    },
+    {
+      "handle": "compact-tv-stand-1139",
+      "sku": "1139",
+      "name": "COMPACT TV STAND",
+      "department": "Furniture",
+      "categoryHandle": "furniture",
+      "priceMinor": 5578553,
+      "onHand": -4,
+      "description": ""
+    },
+    {
+      "handle": "large-standby-generator-1140",
+      "sku": "1140",
+      "name": "LARGE STANDBY GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 41899122,
+      "onHand": 40,
+      "description": ""
+    },
+    {
+      "handle": "zenith-compact-standby-generator-1141",
+      "sku": "1141",
+      "name": "ZENITH COMPACT STANDBY GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 35673944,
+      "onHand": 55,
+      "description": ""
+    },
+    {
+      "handle": "compact-portable-generator-1142",
+      "sku": "1142",
+      "name": "COMPACT PORTABLE GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 12236038,
+      "onHand": -11,
+      "description": ""
+    },
+    {
+      "handle": "crestline-portable-generator-1143",
+      "sku": "1143",
+      "name": "CRESTLINE PORTABLE GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 17842025,
+      "onHand": 52,
+      "description": ""
+    },
+    {
+      "handle": "crestline-xl-standby-generator-1144",
+      "sku": "1144",
+      "name": "CRESTLINE XL STANDBY GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 19425261,
+      "onHand": -12,
+      "description": ""
+    },
+    {
+      "handle": "meridian-inverter-generator-1145",
+      "sku": "1145",
+      "name": "MERIDIAN INVERTER GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 32298389,
+      "onHand": 31,
+      "description": ""
+    },
+    {
+      "handle": "inverter-generator-1146",
+      "sku": "1146",
+      "name": "INVERTER GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 33047263,
+      "onHand": -6,
+      "description": ""
+    },
+    {
+      "handle": "solstice-pro-standby-generator-1147",
+      "sku": "1147",
+      "name": "SOLSTICE PRO STANDBY GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 26588107,
+      "onHand": 46,
+      "description": ""
+    },
+    {
+      "handle": "northgate-compact-portable-generator-1148",
+      "sku": "1148",
+      "name": "NORTHGATE COMPACT PORTABLE GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 9241646,
+      "onHand": -12,
+      "description": ""
+    },
+    {
+      "handle": "nova-standard-standby-generator-1149",
+      "sku": "1149",
+      "name": "NOVA STANDARD STANDBY GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 18395346,
+      "onHand": -10,
+      "description": ""
+    },
+    {
+      "handle": "everline-compact-portable-generator-1150",
+      "sku": "1150",
+      "name": "EVERLINE COMPACT PORTABLE GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 32835598,
+      "onHand": -1,
+      "description": ""
+    },
+    {
+      "handle": "brightline-portable-generator-1151",
+      "sku": "1151",
+      "name": "BRIGHTLINE PORTABLE GENERATOR",
+      "department": "Generator",
+      "categoryHandle": "generator",
+      "priceMinor": 25161051,
+      "onHand": 21,
+      "description": ""
+    },
+    {
+      "handle": "waffle-maker-1152",
+      "sku": "1152",
+      "name": "WAFFLE MAKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 2453474,
+      "onHand": 24,
+      "description": ""
+    },
+    {
+      "handle": "food-processor-1153",
+      "sku": "1153",
+      "name": "FOOD PROCESSOR",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 6250252,
+      "onHand": 1,
+      "description": ""
+    },
+    {
+      "handle": "electric-kettle-1154",
+      "sku": "1154",
+      "name": "ELECTRIC KETTLE",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 2160081,
+      "onHand": 16,
+      "description": ""
+    },
+    {
+      "handle": "compact-drip-coffee-maker-1155",
+      "sku": "1155",
+      "name": "COMPACT DRIP COFFEE MAKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 8905476,
+      "onHand": 40,
+      "description": ""
+    },
+    {
+      "handle": "vantage-pro-food-processor-1156",
+      "sku": "1156",
+      "name": "VANTAGE PRO FOOD PROCESSOR",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 5950487,
+      "onHand": 16,
+      "description": ""
+    },
+    {
+      "handle": "brightline-waffle-maker-1157",
+      "sku": "1157",
+      "name": "BRIGHTLINE WAFFLE MAKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 1824006,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "electric-kettle-1158",
+      "sku": "1158",
+      "name": "ELECTRIC KETTLE",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 6060332,
+      "onHand": 50,
+      "description": ""
+    },
+    {
+      "handle": "large-compact-blender-1159",
+      "sku": "1159",
+      "name": "LARGE COMPACT BLENDER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 6709567,
+      "onHand": -2,
+      "description": ""
+    },
+    {
+      "handle": "zenith-large-waffle-maker-1160",
+      "sku": "1160",
+      "name": "ZENITH LARGE WAFFLE MAKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 3170525,
+      "onHand": -4,
+      "description": ""
+    },
+    {
+      "handle": "food-processor-1161",
+      "sku": "1161",
+      "name": "FOOD PROCESSOR",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 4281598,
+      "onHand": 54,
+      "description": ""
+    },
+    {
+      "handle": "solstice-waffle-maker-1162",
+      "sku": "1162",
+      "name": "SOLSTICE WAFFLE MAKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 8695011,
+      "onHand": 41,
+      "description": ""
+    },
+    {
+      "handle": "solstice-drip-coffee-maker-1163",
+      "sku": "1163",
+      "name": "SOLSTICE DRIP COFFEE MAKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 5399124,
+      "onHand": -9,
+      "description": ""
+    },
+    {
+      "handle": "crestline-food-processor-1164",
+      "sku": "1164",
+      "name": "CRESTLINE FOOD PROCESSOR",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 3516912,
+      "onHand": 24,
+      "description": ""
+    },
+    {
+      "handle": "aurora-standing-mixer-1165",
+      "sku": "1165",
+      "name": "AURORA STANDING MIXER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 2062361,
+      "onHand": 25,
+      "description": ""
+    },
+    {
+      "handle": "meridian-drip-coffee-maker-1166",
+      "sku": "1166",
+      "name": "MERIDIAN DRIP COFFEE MAKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 5752545,
+      "onHand": 36,
+      "description": ""
+    },
+    {
+      "handle": "nova-hand-mixer-1167",
+      "sku": "1167",
+      "name": "NOVA HAND MIXER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 9376071,
+      "onHand": 14,
+      "description": ""
+    },
+    {
+      "handle": "aurora-electric-kettle-1168",
+      "sku": "1168",
+      "name": "AURORA ELECTRIC KETTLE",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 4186017,
+      "onHand": -6,
+      "description": ""
+    },
+    {
+      "handle": "food-processor-1169",
+      "sku": "1169",
+      "name": "FOOD PROCESSOR",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 3537936,
+      "onHand": 4,
+      "description": ""
+    },
+    {
+      "handle": "large-electric-kettle-1170",
+      "sku": "1170",
+      "name": "LARGE ELECTRIC KETTLE",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 8835015,
+      "onHand": 12,
+      "description": ""
+    },
+    {
+      "handle": "meridian-rice-cooker-1171",
+      "sku": "1171",
+      "name": "MERIDIAN RICE COOKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 6182643,
+      "onHand": 36,
+      "description": ""
+    },
+    {
+      "handle": "aurora-food-processor-1172",
+      "sku": "1172",
+      "name": "AURORA FOOD PROCESSOR",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 8098264,
+      "onHand": 58,
+      "description": ""
+    },
+    {
+      "handle": "vantage-standard-standing-mixer-1173",
+      "sku": "1173",
+      "name": "VANTAGE STANDARD STANDING MIXER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 6744863,
+      "onHand": 15,
+      "description": ""
+    },
+    {
+      "handle": "zenith-food-processor-1174",
+      "sku": "1174",
+      "name": "ZENITH FOOD PROCESSOR",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 5974281,
+      "onHand": 57,
+      "description": ""
+    },
+    {
+      "handle": "food-processor-1175",
+      "sku": "1175",
+      "name": "FOOD PROCESSOR",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 1654374,
+      "onHand": 11,
+      "description": ""
+    },
+    {
+      "handle": "sandwich-maker-1176",
+      "sku": "1176",
+      "name": "SANDWICH MAKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 8720342,
+      "onHand": 10,
+      "description": ""
+    },
+    {
+      "handle": "brightline-compact-blender-1177",
+      "sku": "1177",
+      "name": "BRIGHTLINE COMPACT BLENDER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 8019755,
+      "onHand": 53,
+      "description": ""
+    },
+    {
+      "handle": "everline-pro-air-fryer-1178",
+      "sku": "1178",
+      "name": "EVERLINE PRO AIR FRYER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 3251948,
+      "onHand": 47,
+      "description": ""
+    },
+    {
+      "handle": "brightline-large-slow-cooker-1179",
+      "sku": "1179",
+      "name": "BRIGHTLINE LARGE SLOW COOKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 3294214,
+      "onHand": 29,
+      "description": ""
+    },
+    {
+      "handle": "air-fryer-1180",
+      "sku": "1180",
+      "name": "AIR FRYER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 2748762,
+      "onHand": 35,
+      "description": ""
+    },
+    {
+      "handle": "mini-drip-coffee-maker-1181",
+      "sku": "1181",
+      "name": "MINI DRIP COFFEE MAKER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 2738440,
+      "onHand": 48,
+      "description": ""
+    },
+    {
+      "handle": "crestline-compact-blender-1182",
+      "sku": "1182",
+      "name": "CRESTLINE COMPACT BLENDER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 8476509,
+      "onHand": -6,
+      "description": ""
+    },
+    {
+      "handle": "aurora-electric-kettle-1183",
+      "sku": "1183",
+      "name": "AURORA ELECTRIC KETTLE",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 3817632,
+      "onHand": 20,
+      "description": ""
+    },
+    {
+      "handle": "brightline-standing-mixer-1184",
+      "sku": "1184",
+      "name": "BRIGHTLINE STANDING MIXER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 7808143,
+      "onHand": -1,
+      "description": ""
+    },
+    {
+      "handle": "everline-standing-mixer-1185",
+      "sku": "1185",
+      "name": "EVERLINE STANDING MIXER",
+      "department": "Kitchen Appliances",
+      "categoryHandle": "kitchen-appliances",
+      "priceMinor": 4866682,
+      "onHand": 19,
+      "description": ""
+    },
+    {
+      "handle": "compact-storage-container-set-1186",
+      "sku": "1186",
+      "name": "COMPACT STORAGE CONTAINER SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 2325321,
+      "onHand": 8,
+      "description": ""
+    },
+    {
+      "handle": "aurora-cutting-board-set-1187",
+      "sku": "1187",
+      "name": "AURORA CUTTING BOARD SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 2436615,
+      "onHand": 4,
+      "description": ""
+    },
+    {
+      "handle": "northgate-storage-container-set-1188",
+      "sku": "1188",
+      "name": "NORTHGATE STORAGE CONTAINER SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 8834503,
+      "onHand": 14,
+      "description": ""
+    },
+    {
+      "handle": "storage-container-set-1189",
+      "sku": "1189",
+      "name": "STORAGE CONTAINER SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 2484077,
+      "onHand": 3,
+      "description": ""
+    },
+    {
+      "handle": "everline-storage-container-set-1190",
+      "sku": "1190",
+      "name": "EVERLINE STORAGE CONTAINER SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 8964875,
+      "onHand": 56,
+      "description": ""
+    },
+    {
+      "handle": "pro-storage-container-set-1191",
+      "sku": "1191",
+      "name": "PRO STORAGE CONTAINER SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 7894076,
+      "onHand": 12,
+      "description": ""
+    },
+    {
+      "handle": "northgate-mixing-bowl-set-1192",
+      "sku": "1192",
+      "name": "NORTHGATE MIXING BOWL SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 8735209,
+      "onHand": 59,
+      "description": ""
+    },
+    {
+      "handle": "solstice-storage-container-set-1193",
+      "sku": "1193",
+      "name": "SOLSTICE STORAGE CONTAINER SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 3916191,
+      "onHand": 10,
+      "description": ""
+    },
+    {
+      "handle": "vantage-mini-cutting-board-set-1194",
+      "sku": "1194",
+      "name": "VANTAGE MINI CUTTING BOARD SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 5371464,
+      "onHand": 5,
+      "description": ""
+    },
+    {
+      "handle": "crestline-knife-block-set-1195",
+      "sku": "1195",
+      "name": "CRESTLINE KNIFE BLOCK SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 1595744,
+      "onHand": 4,
+      "description": ""
+    },
+    {
+      "handle": "standard-cutting-board-set-1196",
+      "sku": "1196",
+      "name": "STANDARD CUTTING BOARD SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 3417058,
+      "onHand": -8,
+      "description": ""
+    },
+    {
+      "handle": "non-stick-pot-set-1197",
+      "sku": "1197",
+      "name": "NON-STICK POT SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 8482077,
+      "onHand": 1,
+      "description": ""
+    },
+    {
+      "handle": "storage-container-set-1198",
+      "sku": "1198",
+      "name": "STORAGE CONTAINER SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 6436637,
+      "onHand": 27,
+      "description": ""
+    },
+    {
+      "handle": "brightline-mixing-bowl-set-1199",
+      "sku": "1199",
+      "name": "BRIGHTLINE MIXING BOWL SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 9081154,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "meridian-knife-block-set-1200",
+      "sku": "1200",
+      "name": "MERIDIAN KNIFE BLOCK SET",
+      "department": "Kitchen Ware",
+      "categoryHandle": "kitchen-ware",
+      "priceMinor": 7500296,
+      "onHand": 46,
+      "description": ""
+    },
+    {
+      "handle": "crestline-anti-fatigue-mat-1201",
+      "sku": "1201",
+      "name": "CRESTLINE ANTI-FATIGUE MAT",
+      "department": "Mats",
+      "categoryHandle": "mats",
+      "priceMinor": 372010,
+      "onHand": 21,
+      "description": ""
+    },
+    {
+      "handle": "northgate-large-floor-mat-set-1202",
+      "sku": "1202",
+      "name": "NORTHGATE LARGE FLOOR MAT SET",
+      "department": "Mats",
+      "categoryHandle": "mats",
+      "priceMinor": 720580,
+      "onHand": -12,
+      "description": ""
+    },
+    {
+      "handle": "door-mat-1203",
+      "sku": "1203",
+      "name": "DOOR MAT",
+      "department": "Mats",
+      "categoryHandle": "mats",
+      "priceMinor": 1126439,
+      "onHand": 47,
+      "description": ""
+    },
+    {
+      "handle": "northgate-large-floor-mat-set-1204",
+      "sku": "1204",
+      "name": "NORTHGATE LARGE FLOOR MAT SET",
+      "department": "Mats",
+      "categoryHandle": "mats",
+      "priceMinor": 1669678,
+      "onHand": 5,
+      "description": ""
+    },
+    {
+      "handle": "anti-fatigue-mat-1205",
+      "sku": "1205",
+      "name": "ANTI-FATIGUE MAT",
+      "department": "Mats",
+      "categoryHandle": "mats",
+      "priceMinor": 368752,
+      "onHand": 19,
+      "description": ""
+    },
+    {
+      "handle": "microwave-with-grill-1206",
+      "sku": "1206",
+      "name": "MICROWAVE WITH GRILL",
+      "department": "Microwaves",
+      "categoryHandle": "microwaves",
+      "priceMinor": 4723243,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "northgate-microwave-with-grill-1207",
+      "sku": "1207",
+      "name": "NORTHGATE MICROWAVE WITH GRILL",
+      "department": "Microwaves",
+      "categoryHandle": "microwaves",
+      "priceMinor": 1862670,
+      "onHand": 10,
+      "description": ""
+    },
+    {
+      "handle": "mini-microwave-with-grill-1208",
+      "sku": "1208",
+      "name": "MINI MICROWAVE WITH GRILL",
+      "department": "Microwaves",
+      "categoryHandle": "microwaves",
+      "priceMinor": 1733257,
+      "onHand": -11,
+      "description": ""
+    },
+    {
+      "handle": "aurora-countertop-microwave-1209",
+      "sku": "1209",
+      "name": "AURORA COUNTERTOP MICROWAVE",
+      "department": "Microwaves",
+      "categoryHandle": "microwaves",
+      "priceMinor": 1618592,
+      "onHand": -1,
+      "description": ""
+    },
+    {
+      "handle": "compact-microwave-1210",
+      "sku": "1210",
+      "name": "COMPACT MICROWAVE",
+      "department": "Microwaves",
+      "categoryHandle": "microwaves",
+      "priceMinor": 7371890,
+      "onHand": 6,
+      "description": ""
+    },
+    {
+      "handle": "compact-microwave-1211",
+      "sku": "1211",
+      "name": "COMPACT MICROWAVE",
+      "department": "Microwaves",
+      "categoryHandle": "microwaves",
+      "priceMinor": 8290568,
+      "onHand": -5,
+      "description": ""
+    },
+    {
+      "handle": "countertop-microwave-1212",
+      "sku": "1212",
+      "name": "COUNTERTOP MICROWAVE",
+      "department": "Microwaves",
+      "categoryHandle": "microwaves",
+      "priceMinor": 8441463,
+      "onHand": 5,
+      "description": ""
+    },
+    {
+      "handle": "home-theater-system-1213",
+      "sku": "1213",
+      "name": "HOME THEATER SYSTEM",
+      "department": "Music",
+      "categoryHandle": "music",
+      "priceMinor": 4995153,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "brightline-large-sound-bar-1214",
+      "sku": "1214",
+      "name": "BRIGHTLINE LARGE SOUND BAR",
+      "department": "Music",
+      "categoryHandle": "music",
+      "priceMinor": 4208401,
+      "onHand": 53,
+      "description": ""
+    },
+    {
+      "handle": "standard-portable-radio-1215",
+      "sku": "1215",
+      "name": "STANDARD PORTABLE RADIO",
+      "department": "Music",
+      "categoryHandle": "music",
+      "priceMinor": 4701286,
+      "onHand": 44,
+      "description": ""
+    },
+    {
+      "handle": "large-portable-radio-1216",
+      "sku": "1216",
+      "name": "LARGE PORTABLE RADIO",
+      "department": "Music",
+      "categoryHandle": "music",
+      "priceMinor": 8595312,
+      "onHand": 57,
+      "description": ""
+    },
+    {
+      "handle": "everline-standard-portable-radio-1217",
+      "sku": "1217",
+      "name": "EVERLINE STANDARD PORTABLE RADIO",
+      "department": "Music",
+      "categoryHandle": "music",
+      "priceMinor": 7467509,
+      "onHand": 3,
+      "description": ""
+    },
+    {
+      "handle": "home-theater-system-1218",
+      "sku": "1218",
+      "name": "HOME THEATER SYSTEM",
+      "department": "Music",
+      "categoryHandle": "music",
+      "priceMinor": 2746107,
+      "onHand": 39,
+      "description": ""
+    },
+    {
+      "handle": "compact-sound-bar-1219",
+      "sku": "1219",
+      "name": "COMPACT SOUND BAR",
+      "department": "Music",
+      "categoryHandle": "music",
+      "priceMinor": 3740842,
+      "onHand": 52,
+      "description": ""
+    },
+    {
+      "handle": "pool-pump-1220",
+      "sku": "1220",
+      "name": "POOL PUMP",
+      "department": "Pool",
+      "categoryHandle": "pool",
+      "priceMinor": 781874,
+      "onHand": 39,
+      "description": ""
+    },
+    {
+      "handle": "zenith-compact-pool-pump-1221",
+      "sku": "1221",
+      "name": "ZENITH COMPACT POOL PUMP",
+      "department": "Pool",
+      "categoryHandle": "pool",
+      "priceMinor": 656265,
+      "onHand": 44,
+      "description": ""
+    },
+    {
+      "handle": "electric-pressure-washer-1222",
+      "sku": "1222",
+      "name": "ELECTRIC PRESSURE WASHER",
+      "department": "Pressure Washers",
+      "categoryHandle": "pressure-washers",
+      "priceMinor": 1431061,
+      "onHand": 29,
+      "description": ""
+    },
+    {
+      "handle": "northgate-mini-electric-pressure-washer-1223",
+      "sku": "1223",
+      "name": "NORTHGATE MINI ELECTRIC PRESSURE WASHER",
+      "department": "Pressure Washers",
+      "categoryHandle": "pressure-washers",
+      "priceMinor": 1726118,
+      "onHand": 44,
+      "description": ""
+    },
+    {
+      "handle": "aurora-mini-chimney-range-hood-1224",
+      "sku": "1224",
+      "name": "AURORA MINI CHIMNEY RANGE HOOD",
+      "department": "Rangehood",
+      "categoryHandle": "rangehood",
+      "priceMinor": 842137,
+      "onHand": -12,
+      "description": ""
+    },
+    {
+      "handle": "vantage-chimney-range-hood-1225",
+      "sku": "1225",
+      "name": "VANTAGE CHIMNEY RANGE HOOD",
+      "department": "Rangehood",
+      "categoryHandle": "rangehood",
+      "priceMinor": 1839815,
+      "onHand": 35,
+      "description": ""
+    },
+    {
+      "handle": "vantage-wall-shelf-unit-1226",
+      "sku": "1226",
+      "name": "VANTAGE WALL SHELF UNIT",
+      "department": "Shelfs",
+      "categoryHandle": "shelfs",
+      "priceMinor": 1868447,
+      "onHand": 3,
+      "description": ""
+    },
+    {
+      "handle": "northgate-wall-shelf-unit-1227",
+      "sku": "1227",
+      "name": "NORTHGATE WALL SHELF UNIT",
+      "department": "Shelfs",
+      "categoryHandle": "shelfs",
+      "priceMinor": 805466,
+      "onHand": -7,
+      "description": ""
+    },
+    {
+      "handle": "crestline-solar-garden-light-1228",
+      "sku": "1228",
+      "name": "CRESTLINE SOLAR GARDEN LIGHT",
+      "department": "Solar Lights",
+      "categoryHandle": "solar-lights",
+      "priceMinor": 1632440,
+      "onHand": 26,
+      "description": ""
+    },
+    {
+      "handle": "pro-solar-flood-light-1229",
+      "sku": "1229",
+      "name": "PRO SOLAR FLOOD LIGHT",
+      "department": "Solar Lights",
+      "categoryHandle": "solar-lights",
+      "priceMinor": 363101,
+      "onHand": 40,
+      "description": ""
+    },
+    {
+      "handle": "zenith-xl-gas-stove-1230",
+      "sku": "1230",
+      "name": "ZENITH XL GAS STOVE",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 4411681,
+      "onHand": -3,
+      "description": ""
+    },
+    {
+      "handle": "zenith-standard-gas-stove-1231",
+      "sku": "1231",
+      "name": "ZENITH STANDARD GAS STOVE",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 5378870,
+      "onHand": 54,
+      "description": ""
+    },
+    {
+      "handle": "everline-large-tabletop-gas-burner-1232",
+      "sku": "1232",
+      "name": "EVERLINE LARGE TABLETOP GAS BURNER",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 8863499,
+      "onHand": 27,
+      "description": ""
+    },
+    {
+      "handle": "brightline-standard-gas-stove-1233",
+      "sku": "1233",
+      "name": "BRIGHTLINE STANDARD GAS STOVE",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 1579877,
+      "onHand": 9,
+      "description": ""
+    },
+    {
+      "handle": "everline-standard-stove-with-oven-1234",
+      "sku": "1234",
+      "name": "EVERLINE STANDARD STOVE WITH OVEN",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 6100223,
+      "onHand": 25,
+      "description": ""
+    },
+    {
+      "handle": "aurora-electric-stove-1235",
+      "sku": "1235",
+      "name": "AURORA ELECTRIC STOVE",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 4485649,
+      "onHand": 41,
+      "description": ""
+    },
+    {
+      "handle": "tabletop-gas-burner-1236",
+      "sku": "1236",
+      "name": "TABLETOP GAS BURNER",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 1969583,
+      "onHand": 45,
+      "description": ""
+    },
+    {
+      "handle": "meridian-gas-stove-1237",
+      "sku": "1237",
+      "name": "MERIDIAN GAS STOVE",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 8444669,
+      "onHand": 2,
+      "description": ""
+    },
+    {
+      "handle": "zenith-mini-stove-with-oven-1238",
+      "sku": "1238",
+      "name": "ZENITH MINI STOVE WITH OVEN",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 2010938,
+      "onHand": 25,
+      "description": ""
+    },
+    {
+      "handle": "tabletop-gas-burner-1239",
+      "sku": "1239",
+      "name": "TABLETOP GAS BURNER",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 7766563,
+      "onHand": 8,
+      "description": ""
+    },
+    {
+      "handle": "tabletop-gas-burner-1240",
+      "sku": "1240",
+      "name": "TABLETOP GAS BURNER",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 6936645,
+      "onHand": 6,
+      "description": ""
+    },
+    {
+      "handle": "vantage-stove-with-oven-1241",
+      "sku": "1241",
+      "name": "VANTAGE STOVE WITH OVEN",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 3947208,
+      "onHand": -12,
+      "description": ""
+    },
+    {
+      "handle": "stove-with-oven-1242",
+      "sku": "1242",
+      "name": "STOVE WITH OVEN",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 3890813,
+      "onHand": 41,
+      "description": ""
+    },
+    {
+      "handle": "tabletop-gas-burner-1243",
+      "sku": "1243",
+      "name": "TABLETOP GAS BURNER",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 5761647,
+      "onHand": 53,
+      "description": ""
+    },
+    {
+      "handle": "zenith-gas-stove-1244",
+      "sku": "1244",
+      "name": "ZENITH GAS STOVE",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 5597737,
+      "onHand": 30,
+      "description": ""
+    },
+    {
+      "handle": "nova-gas-stove-1245",
+      "sku": "1245",
+      "name": "NOVA GAS STOVE",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 4827581,
+      "onHand": 57,
+      "description": ""
+    },
+    {
+      "handle": "vantage-tabletop-gas-burner-1246",
+      "sku": "1246",
+      "name": "VANTAGE TABLETOP GAS BURNER",
+      "department": "Stoves",
+      "categoryHandle": "stoves",
+      "priceMinor": 9472357,
+      "onHand": 59,
+      "description": ""
+    },
+    {
+      "handle": "coffee-table-1247",
+      "sku": "1247",
+      "name": "COFFEE TABLE",
+      "department": "Table",
+      "categoryHandle": "table",
+      "priceMinor": 888238,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "xl-dining-table-1248",
+      "sku": "1248",
+      "name": "XL DINING TABLE",
+      "department": "Table",
+      "categoryHandle": "table",
+      "priceMinor": 1793704,
+      "onHand": 13,
+      "description": ""
+    },
+    {
+      "handle": "solstice-curved-tv-1249",
+      "sku": "1249",
+      "name": "SOLSTICE CURVED TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 42870069,
+      "onHand": 9,
+      "description": ""
+    },
+    {
+      "handle": "zenith-4k-uhd-tv-1250",
+      "sku": "1250",
+      "name": "ZENITH 4K UHD TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 12613558,
+      "onHand": 9,
+      "description": ""
+    },
+    {
+      "handle": "4k-uhd-tv-1251",
+      "sku": "1251",
+      "name": "4K UHD TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 44191787,
+      "onHand": 6,
+      "description": ""
+    },
+    {
+      "handle": "aurora-standard-smart-tv-1252",
+      "sku": "1252",
+      "name": "AURORA STANDARD SMART TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 36900746,
+      "onHand": 22,
+      "description": ""
+    },
+    {
+      "handle": "solstice-large-smart-tv-1253",
+      "sku": "1253",
+      "name": "SOLSTICE LARGE SMART TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 33488778,
+      "onHand": 30,
+      "description": ""
+    },
+    {
+      "handle": "aurora-curved-tv-1254",
+      "sku": "1254",
+      "name": "AURORA CURVED TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 23748619,
+      "onHand": 10,
+      "description": ""
+    },
+    {
+      "handle": "vantage-smart-tv-1255",
+      "sku": "1255",
+      "name": "VANTAGE SMART TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 16968142,
+      "onHand": 44,
+      "description": ""
+    },
+    {
+      "handle": "crestline-compact-4k-uhd-tv-1256",
+      "sku": "1256",
+      "name": "CRESTLINE COMPACT 4K UHD TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 40633510,
+      "onHand": 2,
+      "description": ""
+    },
+    {
+      "handle": "crestline-led-tv-1257",
+      "sku": "1257",
+      "name": "CRESTLINE LED TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 38613579,
+      "onHand": 48,
+      "description": ""
+    },
+    {
+      "handle": "crestline-standard-curved-tv-1258",
+      "sku": "1258",
+      "name": "CRESTLINE STANDARD CURVED TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 41081003,
+      "onHand": 17,
+      "description": ""
+    },
+    {
+      "handle": "smart-tv-1259",
+      "sku": "1259",
+      "name": "SMART TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 39947783,
+      "onHand": 24,
+      "description": ""
+    },
+    {
+      "handle": "led-tv-1260",
+      "sku": "1260",
+      "name": "LED TV",
+      "department": "Television",
+      "categoryHandle": "television",
+      "priceMinor": 38191376,
+      "onHand": 27,
+      "description": ""
+    },
+    {
+      "handle": "crestline-bench-grinder-1261",
+      "sku": "1261",
+      "name": "CRESTLINE BENCH GRINDER",
+      "department": "Tools/machinary",
+      "categoryHandle": "tools-machinary",
+      "priceMinor": 6471358,
+      "onHand": 27,
+      "description": ""
+    },
+    {
+      "handle": "angle-grinder-1262",
+      "sku": "1262",
+      "name": "ANGLE GRINDER",
+      "department": "Tools/machinary",
+      "categoryHandle": "tools-machinary",
+      "priceMinor": 7965598,
+      "onHand": 22,
+      "description": ""
+    },
+    {
+      "handle": "nova-xl-power-drill-1263",
+      "sku": "1263",
+      "name": "NOVA XL POWER DRILL",
+      "department": "Tools/machinary",
+      "categoryHandle": "tools-machinary",
+      "priceMinor": 1691930,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "pro-bench-grinder-1264",
+      "sku": "1264",
+      "name": "PRO BENCH GRINDER",
+      "department": "Tools/machinary",
+      "categoryHandle": "tools-machinary",
+      "priceMinor": 2041355,
+      "onHand": 42,
+      "description": ""
+    },
+    {
+      "handle": "bench-grinder-1265",
+      "sku": "1265",
+      "name": "BENCH GRINDER",
+      "department": "Tools/machinary",
+      "categoryHandle": "tools-machinary",
+      "priceMinor": 5062035,
+      "onHand": 6,
+      "description": ""
+    },
+    {
+      "handle": "power-drill-1266",
+      "sku": "1266",
+      "name": "POWER DRILL",
+      "department": "Tools/machinary",
+      "categoryHandle": "tools-machinary",
+      "priceMinor": 4998079,
+      "onHand": 37,
+      "description": ""
+    },
+    {
+      "handle": "bench-grinder-1267",
+      "sku": "1267",
+      "name": "BENCH GRINDER",
+      "department": "Tools/machinary",
+      "categoryHandle": "tools-machinary",
+      "priceMinor": 5936956,
+      "onHand": 41,
+      "description": ""
+    },
+    {
+      "handle": "led-tv-1268",
+      "sku": "1268",
+      "name": "LED TV",
+      "department": "Tv",
+      "categoryHandle": "tv",
+      "priceMinor": 2119567,
+      "onHand": 44,
+      "description": ""
+    },
+    {
+      "handle": "aurora-large-led-tv-1269",
+      "sku": "1269",
+      "name": "AURORA LARGE LED TV",
+      "department": "Tv",
+      "categoryHandle": "tv",
+      "priceMinor": 540156,
+      "onHand": 42,
+      "description": ""
+    },
+    {
+      "handle": "vantage-top-load-washer-1270",
+      "sku": "1270",
+      "name": "VANTAGE TOP LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 24366207,
+      "onHand": 17,
+      "description": ""
+    },
+    {
+      "handle": "large-front-load-washer-1271",
+      "sku": "1271",
+      "name": "LARGE FRONT LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 23074254,
+      "onHand": -5,
+      "description": ""
+    },
+    {
+      "handle": "compact-top-load-washer-1272",
+      "sku": "1272",
+      "name": "COMPACT TOP LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 16055058,
+      "onHand": 40,
+      "description": ""
+    },
+    {
+      "handle": "solstice-standard-front-load-washer-1273",
+      "sku": "1273",
+      "name": "SOLSTICE STANDARD FRONT LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 34127208,
+      "onHand": -8,
+      "description": ""
+    },
+    {
+      "handle": "dryer-machine-1274",
+      "sku": "1274",
+      "name": "DRYER MACHINE",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 38977844,
+      "onHand": -2,
+      "description": ""
+    },
+    {
+      "handle": "zenith-front-load-washer-1275",
+      "sku": "1275",
+      "name": "ZENITH FRONT LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 45448990,
+      "onHand": 56,
+      "description": ""
+    },
+    {
+      "handle": "aurora-front-load-washer-1276",
+      "sku": "1276",
+      "name": "AURORA FRONT LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 17586425,
+      "onHand": 1,
+      "description": ""
+    },
+    {
+      "handle": "washer-dryer-combo-1277",
+      "sku": "1277",
+      "name": "WASHER-DRYER COMBO",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 14486219,
+      "onHand": -3,
+      "description": ""
+    },
+    {
+      "handle": "pro-front-load-washer-1278",
+      "sku": "1278",
+      "name": "PRO FRONT LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 11356166,
+      "onHand": 1,
+      "description": ""
+    },
+    {
+      "handle": "aurora-front-load-washer-1279",
+      "sku": "1279",
+      "name": "AURORA FRONT LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 31428529,
+      "onHand": 58,
+      "description": ""
+    },
+    {
+      "handle": "zenith-large-dryer-machine-1280",
+      "sku": "1280",
+      "name": "ZENITH LARGE DRYER MACHINE",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 42496680,
+      "onHand": 40,
+      "description": ""
+    },
+    {
+      "handle": "xl-top-load-washer-1281",
+      "sku": "1281",
+      "name": "XL TOP LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 29486661,
+      "onHand": 55,
+      "description": ""
+    },
+    {
+      "handle": "nova-washer-dryer-combo-1282",
+      "sku": "1282",
+      "name": "NOVA WASHER-DRYER COMBO",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 43600483,
+      "onHand": 12,
+      "description": ""
+    },
+    {
+      "handle": "washer-dryer-combo-1283",
+      "sku": "1283",
+      "name": "WASHER-DRYER COMBO",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 15072659,
+      "onHand": 35,
+      "description": ""
+    },
+    {
+      "handle": "zenith-washer-dryer-combo-1284",
+      "sku": "1284",
+      "name": "ZENITH WASHER-DRYER COMBO",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 35690034,
+      "onHand": -10,
+      "description": ""
+    },
+    {
+      "handle": "dryer-machine-1285",
+      "sku": "1285",
+      "name": "DRYER MACHINE",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 31331393,
+      "onHand": 57,
+      "description": ""
+    },
+    {
+      "handle": "dryer-machine-1286",
+      "sku": "1286",
+      "name": "DRYER MACHINE",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 42899619,
+      "onHand": 50,
+      "description": ""
+    },
+    {
+      "handle": "aurora-front-load-washer-1287",
+      "sku": "1287",
+      "name": "AURORA FRONT LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 24471801,
+      "onHand": 2,
+      "description": ""
+    },
+    {
+      "handle": "crestline-dryer-machine-1288",
+      "sku": "1288",
+      "name": "CRESTLINE DRYER MACHINE",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 15191612,
+      "onHand": 20,
+      "description": ""
+    },
+    {
+      "handle": "vantage-mini-dryer-machine-1289",
+      "sku": "1289",
+      "name": "VANTAGE MINI DRYER MACHINE",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 43167078,
+      "onHand": 31,
+      "description": ""
+    },
+    {
+      "handle": "nova-top-load-washer-1290",
+      "sku": "1290",
+      "name": "NOVA TOP LOAD WASHER",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 18003773,
+      "onHand": 58,
+      "description": ""
+    },
+    {
+      "handle": "everline-washer-dryer-combo-1291",
+      "sku": "1291",
+      "name": "EVERLINE WASHER-DRYER COMBO",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 13067470,
+      "onHand": 16,
+      "description": ""
+    },
+    {
+      "handle": "northgate-dryer-machine-1292",
+      "sku": "1292",
+      "name": "NORTHGATE DRYER MACHINE",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 32451507,
+      "onHand": 26,
+      "description": ""
+    },
+    {
+      "handle": "nova-washer-dryer-combo-1293",
+      "sku": "1293",
+      "name": "NOVA WASHER-DRYER COMBO",
+      "department": "Washers/dryers",
+      "categoryHandle": "washers-dryers",
+      "priceMinor": 43455874,
+      "onHand": 27,
+      "description": ""
+    },
+    {
+      "handle": "northgate-standard-electric-water-heater-1294",
+      "sku": "1294",
+      "name": "NORTHGATE STANDARD ELECTRIC WATER HEATER",
+      "department": "Water Heater",
+      "categoryHandle": "water-heater",
+      "priceMinor": 2094995,
+      "onHand": 32,
+      "description": ""
+    },
+    {
+      "handle": "meridian-electric-water-heater-1295",
+      "sku": "1295",
+      "name": "MERIDIAN ELECTRIC WATER HEATER",
+      "department": "Water Heater",
+      "categoryHandle": "water-heater",
+      "priceMinor": 2112433,
+      "onHand": 41,
+      "description": ""
+    }
+  ],
+  "categories": [
+    {
+      "handle": "accessories",
+      "name": "Accessories",
+      "productCount": 29
+    },
+    {
+      "handle": "air-conditioning",
+      "name": "Air Conditioning",
+      "productCount": 15
+    },
+    {
+      "handle": "camera",
+      "name": "Camera",
+      "productCount": 5
+    },
+    {
+      "handle": "chairs",
+      "name": "Chairs",
+      "productCount": 5
+    },
+    {
+      "handle": "curtain",
+      "name": "Curtain",
+      "productCount": 5
+    },
+    {
+      "handle": "decor",
+      "name": "Decor",
+      "productCount": 5
+    },
+    {
+      "handle": "dispensers",
+      "name": "Dispensers",
+      "productCount": 7
+    },
+    {
+      "handle": "fan",
+      "name": "Fan",
+      "productCount": 10
+    },
+    {
+      "handle": "fee",
+      "name": "Fee",
+      "productCount": 0
+    },
+    {
+      "handle": "flooring",
+      "name": "Flooring",
+      "productCount": 5
+    },
+    {
+      "handle": "freezers",
+      "name": "Freezers",
+      "productCount": 17
+    },
+    {
+      "handle": "fridges",
+      "name": "Fridges",
+      "productCount": 32
+    },
+    {
+      "handle": "furniture",
+      "name": "Furniture",
+      "productCount": 5
+    },
+    {
+      "handle": "generator",
+      "name": "Generator",
+      "productCount": 12
+    },
+    {
+      "handle": "kitchen-appliances",
+      "name": "Kitchen Appliances",
+      "productCount": 34
+    },
+    {
+      "handle": "kitchen-ware",
+      "name": "Kitchen Ware",
+      "productCount": 15
+    },
+    {
+      "handle": "mats",
+      "name": "Mats",
+      "productCount": 5
+    },
+    {
+      "handle": "microwaves",
+      "name": "Microwaves",
+      "productCount": 7
+    },
+    {
+      "handle": "music",
+      "name": "Music",
+      "productCount": 7
+    },
+    {
+      "handle": "pool",
+      "name": "Pool",
+      "productCount": 2
+    },
+    {
+      "handle": "pressure-washers",
+      "name": "Pressure Washers",
+      "productCount": 2
+    },
+    {
+      "handle": "rangehood",
+      "name": "Rangehood",
+      "productCount": 2
+    },
+    {
+      "handle": "shelfs",
+      "name": "Shelfs",
+      "productCount": 2
+    },
+    {
+      "handle": "solar-lights",
+      "name": "Solar Lights",
+      "productCount": 2
+    },
+    {
+      "handle": "stoves",
+      "name": "Stoves",
+      "productCount": 17
+    },
+    {
+      "handle": "table",
+      "name": "Table",
+      "productCount": 2
+    },
+    {
+      "handle": "television",
+      "name": "Television",
+      "productCount": 12
+    },
+    {
+      "handle": "tools-machinary",
+      "name": "Tools/machinary",
+      "productCount": 7
+    },
+    {
+      "handle": "total",
+      "name": "Total",
+      "productCount": 0
+    },
+    {
+      "handle": "tv",
+      "name": "Tv",
+      "productCount": 2
+    },
+    {
+      "handle": "washers-dryers",
+      "name": "Washers/dryers",
+      "productCount": 24
+    },
+    {
+      "handle": "water-heater",
+      "name": "Water Heater",
+      "productCount": 2
+    }
+  ]
+}

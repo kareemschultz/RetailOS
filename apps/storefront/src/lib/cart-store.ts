@@ -10,24 +10,24 @@ import type { OrderConfirmation } from "../data/commerce-types";
 // `useQuote()` (mock buildMockQuote today, commerce.quote when live), exactly as
 // the design requires (server owns totals).
 
-export type CartLine = {
+export interface CartLine {
+  currency: string;
   handle: string;
-  quantity: number;
+  image: string | null;
   // Display snapshot captured at add-time (presentation only).
   name: string;
-  image: string | null;
-  unitPriceMinor: number;
-  currency: string;
+  quantity: number;
   scale: number;
-};
+  unitPriceMinor: number;
+}
 
-type CartState = {
-  lines: CartLine[];
+interface CartState {
   add: (line: Omit<CartLine, "quantity">, quantity?: number) => void;
-  setQuantity: (handle: string, quantity: number) => void;
-  remove: (handle: string) => void;
   clear: () => void;
-};
+  lines: CartLine[];
+  remove: (handle: string) => void;
+  setQuantity: (handle: string, quantity: number) => void;
+}
 
 export const useCart = create<CartState>()(
   persist(
@@ -62,7 +62,7 @@ export const useCart = create<CartState>()(
         })),
       clear: () => set({ lines: [] }),
     }),
-    { name: "unitech-cart" }
+    { name: "everstock-cart" }
   )
 );
 
@@ -73,11 +73,11 @@ export function useCartCount(): number {
 
 // Hands the just-placed order to the confirmation page (session-only, cleared
 // on view). Not persisted — a refresh on the confirmation page returns home.
-type OrderState = {
+interface OrderState {
+  clearOrder: () => void;
   order: OrderConfirmation | null;
   setOrder: (order: OrderConfirmation) => void;
-  clearOrder: () => void;
-};
+}
 
 export const useOrder = create<OrderState>((set) => ({
   order: null,

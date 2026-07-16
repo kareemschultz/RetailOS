@@ -1,10 +1,10 @@
 // biome-ignore-all lint/suspicious/noBitwiseOperators: integer hash (hashToUuid) requires bitwise mixing
 import {
-  UNITECH_CURRENCY,
-  UNITECH_SCALE,
-  unitechCategories,
-  unitechProducts,
-  unitechStats,
+  EVERSTOCK_CURRENCY,
+  EVERSTOCK_SCALE,
+  everstockCategories,
+  everstockProducts,
+  everstockStats,
 } from "@RetailOS/sample-data";
 
 /**
@@ -13,7 +13,7 @@ import {
  * The admin app normally talks to the live oRPC server over HTTP. In the
  * frontend-only preview (VITE_PREVIEW_NO_AUTH=true) there is no backend, so we
  * swap in this object which mirrors the real procedure signatures closely
- * enough for the UI to render the real Unitech catalog.
+ * enough for the UI to render the sample Everstock catalog.
  *
  * `createTanstackQueryUtils` walks the client with `client[prop]` for nested
  * routers and calls leaf procedures as `client.path.to.proc(input, options)`.
@@ -64,7 +64,7 @@ function imageUrl(categoryHandle: string) {
 // --- Row builders (match real procedure projections) ------------------------
 function productCatalogRows(q?: string) {
   const term = q?.trim().toLowerCase();
-  return unitechProducts
+  return everstockProducts
     .filter(
       (p) =>
         !term ||
@@ -77,8 +77,8 @@ function productCatalogRows(q?: string) {
       name: p.name,
       trackingMode: "none",
       priceMinor: p.priceMinor,
-      currency: UNITECH_CURRENCY,
-      scale: UNITECH_SCALE,
+      currency: EVERSTOCK_CURRENCY,
+      scale: EVERSTOCK_SCALE,
       primaryImageAltText: p.name,
       primaryImageUrl: imageUrl(p.categoryHandle),
       // Preview-only enrichment: the real product.catalog contract omits
@@ -93,22 +93,22 @@ function stockRows(locationId?: string) {
   if (locationId && locationId !== LOCATION_ID) {
     return [];
   }
-  return unitechProducts.map((p) => ({
+  return everstockProducts.map((p) => ({
     skuId: skuId(p.handle),
     skuCode: p.sku,
     productName: p.name,
     locationId: LOCATION_ID,
     locationName: LOCATION_NAME,
     qtyOnHand: p.onHand,
-    currency: UNITECH_CURRENCY,
-    scale: UNITECH_SCALE,
+    currency: EVERSTOCK_CURRENCY,
+    scale: EVERSTOCK_SCALE,
     totalValueMinor: p.priceMinor * Math.max(0, p.onHand),
   }));
 }
 
 function skuCatalogRows(q?: string) {
   const term = q?.trim().toLowerCase();
-  return unitechProducts
+  return everstockProducts
     .filter(
       (p) =>
         !term ||
@@ -128,8 +128,8 @@ function skuCatalogRows(q?: string) {
       trackingMode: "none",
       isActive: true,
       createdAt: now(),
-      currency: UNITECH_CURRENCY,
-      scale: UNITECH_SCALE,
+      currency: EVERSTOCK_CURRENCY,
+      scale: EVERSTOCK_SCALE,
     }));
 }
 
@@ -206,30 +206,30 @@ const handlers: Record<string, Handler> = {
   },
   "reports.dashboardSummary": () => ({
     sales: {
-      currency: UNITECH_CURRENCY,
-      scale: UNITECH_SCALE,
+      currency: EVERSTOCK_CURRENCY,
+      scale: EVERSTOCK_SCALE,
       totalMinor: 428_500_000,
     },
     transactionCount: 128,
     inventoryValue: {
-      currency: UNITECH_CURRENCY,
-      scale: UNITECH_SCALE,
-      totalValueMinor: unitechStats.inventoryValueMinor,
+      currency: EVERSTOCK_CURRENCY,
+      scale: EVERSTOCK_SCALE,
+      totalValueMinor: everstockStats.inventoryValueMinor,
     },
-    lowStockCount: unitechStats.negativeStockCount,
+    lowStockCount: everstockStats.negativeStockCount,
   }),
   "reports.operationsSummary": () => ({
     openShifts: 1,
     pendingTransfers: 0,
     openPurchaseOrders: 3,
     openCounts: 0,
-    negativeStockSkus: unitechStats.negativeStockCount,
+    negativeStockSkus: everstockStats.negativeStockCount,
   }),
   "product.catalog": (input) =>
     productCatalogRows((input as { q?: string } | undefined)?.q),
   "product.detail": (input) => {
     const id = (input as { id: string }).id;
-    const p = unitechProducts.find((x) => productId(x.handle) === id);
+    const p = everstockProducts.find((x) => productId(x.handle) === id);
     if (!p) {
       return null;
     }
@@ -239,8 +239,8 @@ const handlers: Record<string, Handler> = {
       name: p.name,
       trackingMode: "none",
       priceMinor: p.priceMinor,
-      currency: UNITECH_CURRENCY,
-      scale: UNITECH_SCALE,
+      currency: EVERSTOCK_CURRENCY,
+      scale: EVERSTOCK_SCALE,
       images: [
         {
           id: hashToUuid(`img:${p.handle}`),
@@ -255,7 +255,7 @@ const handlers: Record<string, Handler> = {
   "location.list": () => [
     {
       id: LOCATION_ID,
-      companyId: hashToUuid("company:unitech"),
+      companyId: hashToUuid("company:everstock"),
       name: LOCATION_NAME,
       type: "store",
       parentLocationId: null,
@@ -296,7 +296,7 @@ const handlers: Record<string, Handler> = {
   "catalog.skuCatalogList": (input) =>
     skuCatalogRows((input as { q?: string } | undefined)?.q),
   "catalog.categoryList": () =>
-    unitechCategories.map((c) => ({
+    everstockCategories.map((c) => ({
       id: hashToUuid(`category:${c.handle}`),
       code: c.handle.toUpperCase().slice(0, 12),
       name: c.name,

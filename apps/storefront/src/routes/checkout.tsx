@@ -56,7 +56,9 @@ function CheckoutPage() {
         <p className="text-muted-foreground">
           Add a few things before checking out.
         </p>
-        <Button render={<Link search={{}} to="/shop" />}>Browse products</Button>
+        <Button render={<Link search={{}} to="/shop" />}>
+          Browse products
+        </Button>
       </div>
     );
   }
@@ -196,7 +198,7 @@ function CheckoutPage() {
             {checkout.isPending ? "Placing order…" : "Place order"}
           </Button>
           <p className="text-center text-muted-foreground text-xs">
-            By placing this order you agree to Unitech&apos;s terms of sale.
+            By placing this order you agree to Everstock&apos;s terms of sale.
           </p>
         </div>
       </form>

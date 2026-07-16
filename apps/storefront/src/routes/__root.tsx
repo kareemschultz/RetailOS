@@ -27,9 +27,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       {
         name: "description",
         content:
-          "Unitech Solutions — Guyana's home for appliances and electronics. Fridges, stoves, washers, TVs and more, powered by RetailOS.",
+          "Everstock — Guyana's home for appliances and electronics. Fridges, stoves, washers, TVs and more, powered by RetailOS.",
       },
-      { title: "Unitech Solutions — Appliances & Electronics" },
+      { title: "Everstock — Appliances & Electronics" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -60,7 +60,7 @@ function RootDocument() {
               </main>
               <StorefrontFooter />
             </div>
-            <Toaster richColors position="top-center" />
+            <Toaster position="top-center" richColors />
           </TooltipProvider>
         </ThemeProvider>
         <Scripts />

@@ -40,8 +40,8 @@ const link = new RPCLink({
 const getORPCClient = () => createORPCClient(link) as RouterClient<AppRouter>;
 
 // In the frontend-only preview there is no backend to reach. Serve the typed
-// Unitech mock client instead so every admin screen renders real catalog data.
-// MUST be gated on the same preview flag used for the auth bypass.
+// Everstock mock client instead so every admin screen renders sample catalog
+// data. MUST be gated on the same preview flag used for the auth bypass.
 export const client: RouterClient<AppRouter> = env.VITE_PREVIEW_NO_AUTH
   ? (mockClient as RouterClient<AppRouter>)
   : getORPCClient();

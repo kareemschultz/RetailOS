@@ -6,10 +6,11 @@ export function HomeHero() {
   return (
     <section className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
       <div className="relative overflow-hidden rounded-3xl bg-muted">
+        {/* biome-ignore lint/correctness/useImageSize: absolutely positioned full-bleed decorative background image, sized entirely by the container via CSS */}
         <img
-          src="/img/hero-appliances.png"
-          alt="Unitech appliance showroom with refrigerators, washing machines and televisions on display"
+          alt="Everstock appliance showroom with refrigerators, washing machines and televisions on display"
           className="absolute inset-0 size-full object-cover"
+          src="/img/hero-appliances.png"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-transparent" />
         <div className="relative flex max-w-xl flex-col gap-5 px-6 py-16 sm:px-12 sm:py-24 lg:py-32">
@@ -25,18 +26,18 @@ export function HomeHero() {
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              size="lg"
               className="h-11 px-5 text-sm"
-              render={<Link to="/shop" search={{}} />}
+              render={<Link search={{}} to="/shop" />}
+              size="lg"
             >
               Shop all products
               <ArrowRight className="size-4" />
             </Button>
             <Button
+              className="h-11 px-5 text-sm"
+              render={<Link search={{ category: "fridges" }} to="/shop" />}
               size="lg"
               variant="outline"
-              className="h-11 px-5 text-sm"
-              render={<Link to="/shop" search={{ category: "fridges" }} />}
             >
               Browse fridges
             </Button>

@@ -1,8 +1,8 @@
 // Hire-purchase / layaway agreements — a core sales model for Guyanese
 // appliance retail. A customer takes a big-ticket item on a deposit + monthly
 // instalments, with a carrying charge on the financed balance. This mock is
-// deterministic and built from the real Unitech catalog + CRM customers so the
-// preview shows believable, internally-consistent numbers.
+// deterministic and built from the sample Everstock catalog + CRM customers so
+// the preview shows believable, internally-consistent numbers.
 
 export type PaymentStatus = "paid" | "due" | "upcoming" | "overdue";
 export type AgreementStatus = "active" | "completed" | "overdue" | "defaulted";

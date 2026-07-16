@@ -5,9 +5,21 @@ const COLUMNS = [
   {
     title: "Shop",
     links: [
-      { label: "All products", to: "/shop", search: {} as Record<string, string> },
-      { label: "Fridges & Freezers", to: "/shop", search: { category: "fridges" } },
-      { label: "Kitchen Appliances", to: "/shop", search: { category: "kitchen-appliances" } },
+      {
+        label: "All products",
+        to: "/shop",
+        search: {} as Record<string, string>,
+      },
+      {
+        label: "Fridges & Freezers",
+        to: "/shop",
+        search: { category: "fridges" },
+      },
+      {
+        label: "Kitchen Appliances",
+        to: "/shop",
+        search: { category: "kitchen-appliances" },
+      },
       { label: "Television", to: "/shop", search: { category: "television" } },
     ],
   },
@@ -31,7 +43,9 @@ export function StorefrontFooter() {
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <ShoppingBag className="size-4" />
             </span>
-            <span className="font-semibold text-lg tracking-tight">Unitech</span>
+            <span className="font-semibold text-lg tracking-tight">
+              Everstock
+            </span>
           </div>
           <p className="mt-3 text-muted-foreground text-sm leading-relaxed">
             Guyana&apos;s home for appliances and electronics — fridges, stoves,
@@ -47,9 +61,9 @@ export function StorefrontFooter() {
               {col.links.map((link) => (
                 <li key={link.label}>
                   <Link
-                    to={link.to}
-                    search={link.search}
                     className="text-muted-foreground text-sm transition-colors hover:text-foreground"
+                    search={link.search}
+                    to={link.to}
                   >
                     {link.label}
                   </Link>
@@ -62,7 +76,10 @@ export function StorefrontFooter() {
 
       <div className="border-border/70 border-t">
         <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-muted-foreground text-xs sm:flex-row sm:px-6">
-          <p>© {new Date().getFullYear()} Unitech Solutions. All prices in Guyanese dollars (GYD).</p>
+          <p>
+            © {new Date().getFullYear()} Everstock. All prices in Guyanese
+            dollars (GYD).
+          </p>
           <p>Powered by RetailOS</p>
         </div>
       </div>

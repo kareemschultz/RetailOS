@@ -1,22 +1,23 @@
 import {
-  UNITECH_CURRENCY,
-  UNITECH_SCALE,
-  unitechCategories,
-  unitechProducts,
+  EVERSTOCK_CURRENCY,
+  EVERSTOCK_SCALE,
+  everstockCategories,
+  everstockProducts,
 } from "@RetailOS/sample-data";
 import type { CatalogItem, ProductDetail, Quote } from "./commerce-types";
 
-// Storefront mock catalog, derived from the REAL client dataset
-// (Unitech Solutions / Services — @RetailOS/sample-data). Shapes match the
-// PUBLIC commerce DTOs exactly (commerce.catalog / commerce.product /
-// commerce.quote) so this can be swapped for the live endpoints by flipping
-// USE_MOCK in lib/commerce.ts — no page edits. Prices are backend-authoritative
-// minor units (GYD, scale 2), never computed in the UI. Availability is coarse
-// ("in_stock"/"out_of_stock") — the same anti-scrape read model the public
-// router exposes; derived here from the exported on-hand quantity.
+// Storefront mock catalog, derived from the SYNTHETIC sample dataset
+// ("Everstock" — @RetailOS/sample-data, generated placeholder data, not a real
+// business). Shapes match the PUBLIC commerce DTOs exactly (commerce.catalog /
+// commerce.product / commerce.quote) so this can be swapped for the live
+// endpoints by flipping USE_MOCK in lib/commerce.ts — no page edits. Prices are
+// backend-authoritative minor units (GYD, scale 2), never computed in the UI.
+// Availability is coarse ("in_stock"/"out_of_stock") — the same anti-scrape
+// read model the public router exposes; derived here from the sample on-hand
+// quantity.
 
-const CURRENCY = UNITECH_CURRENCY;
-const SCALE = UNITECH_SCALE;
+const CURRENCY = EVERSTOCK_CURRENCY;
+const SCALE = EVERSTOCK_SCALE;
 
 function money(amountMinor: number) {
   return { amountMinor, currency: CURRENCY, scale: SCALE };
@@ -63,13 +64,13 @@ function imageFor(categoryHandle: string): string {
 // tagline/description/highlights/rating would come from a product-content field
 // or CMS. Synthesized deterministically from the real name + department so the
 // storefront reads naturally without inventing per-SKU marketing data.
-export type ProductContent = {
-  tagline: string;
+export interface ProductContent {
   description: string;
   highlights: string[];
   rating: number;
   reviewCount: number;
-};
+  tagline: string;
+}
 
 const DEPT_TAGLINE: Record<string, string> = {
   "kitchen-appliances": "Everyday kitchen essentials",
@@ -91,13 +92,17 @@ const DEPT_TAGLINE: Record<string, string> = {
 
 // Small deterministic hash so ratings/counts are stable across renders/builds.
 function hash(str: string): number {
-  let h = 2166136261;
+  let h = 2_166_136_261;
   for (let i = 0; i < str.length; i++) {
+    // biome-ignore lint/suspicious/noBitwiseOperators: integer hash (FNV-1a) requires bitwise mixing
     h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
+    h = Math.imul(h, 16_777_619);
   }
+  // biome-ignore lint/suspicious/noBitwiseOperators: integer hash (FNV-1a) requires bitwise mixing
   return h >>> 0;
 }
+
+const HAS_PROSE_RE = /[a-z]/;
 
 function buildContent(
   handle: string,
@@ -112,7 +117,7 @@ function buildContent(
   const cleanDesc = description.trim();
   // The export's "description" column is often a spec code, not prose — only
   // use it when it reads like real text.
-  const hasProse = /[a-z]/.test(cleanDesc) && cleanDesc.length > 3;
+  const hasProse = HAS_PROSE_RE.test(cleanDesc) && cleanDesc.length > 3;
   return {
     tagline: DEPT_TAGLINE[categoryHandle] ?? categoryName,
     description: hasProse
@@ -128,21 +133,19 @@ function buildContent(
   };
 }
 
-type StoreSeed = {
-  handle: string;
-  name: string;
+interface StoreSeed {
+  availability: CatalogItem["availability"];
   categoryHandle: string;
   categoryName: string;
-  priceMinor: number;
-  image: string;
-  availability: CatalogItem["availability"];
   content: ProductContent;
-};
+  handle: string;
+  image: string;
+  name: string;
+  priceMinor: number;
+}
 
-const SEEDS: StoreSeed[] = unitechProducts
-  .filter(
-    (p) => !HIDDEN_CATEGORIES.has(p.categoryHandle) && p.priceMinor > 0
-  )
+const SEEDS: StoreSeed[] = everstockProducts
+  .filter((p) => !HIDDEN_CATEGORIES.has(p.categoryHandle) && p.priceMinor > 0)
   .map((p) => {
     const categoryName = p.department;
     return {
@@ -219,7 +222,7 @@ export const MOCK_PRODUCTS: Record<string, ProductDetail> = Object.fromEntries(
   ])
 );
 
-export const MOCK_CATEGORIES = unitechCategories
+export const MOCK_CATEGORIES = everstockCategories
   .filter((c) => !HIDDEN_CATEGORIES.has(c.handle))
   .map((c) => ({ handle: c.handle, name: c.name }));
 
@@ -244,7 +247,9 @@ export function buildMockQuote(
       }
       const unitPriceMinor = product.price.amountMinor;
       const lineSubtotalMinor = unitPriceMinor * line.quantity;
-      const taxMinor = Math.round((lineSubtotalMinor * STANDARD_VAT_BPS) / 10_000);
+      const taxMinor = Math.round(
+        (lineSubtotalMinor * STANDARD_VAT_BPS) / 10_000
+      );
       return {
         handle: line.handle,
         name: product.name,
