@@ -2,10 +2,7 @@ import { StatusChip } from "@RetailOS/ui/components/status-chip";
 import { createFileRoute } from "@tanstack/react-router";
 import { Layers, Percent, Tag } from "lucide-react";
 
-import {
-  type ResourceColumn,
-  ResourcePage,
-} from "@/components/resource-page";
+import { type ResourceColumn, ResourcePage } from "@/components/resource-page";
 import { MOCK_PRICE_LIST, type PriceListEntry } from "@/data/mock/finance";
 import { useFeatureQuery } from "@/data/mock-query";
 import { formatMoney } from "@/lib/format";

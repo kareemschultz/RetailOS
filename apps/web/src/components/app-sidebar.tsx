@@ -22,17 +22,16 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
-
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import {
   filterNavGroups,
   groupsForWorkspace,
-  navFooterGroup,
-  navGroups,
   type NavGroup,
   type NavMenuItem,
+  navFooterGroup,
+  navGroups,
 } from "@/configs/nav-config";
 import { useWorkspace } from "@/configs/workspace-store";
-import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { useSettings } from "@/theme/settings-store";
 import { orpc } from "@/utils/orpc";
 

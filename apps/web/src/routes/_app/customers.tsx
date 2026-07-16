@@ -2,10 +2,7 @@ import { StatusChip } from "@RetailOS/ui/components/status-chip";
 import { createFileRoute } from "@tanstack/react-router";
 import { Crown, Users, Wallet } from "lucide-react";
 
-import {
-  type ResourceColumn,
-  ResourcePage,
-} from "@/components/resource-page";
+import { type ResourceColumn, ResourcePage } from "@/components/resource-page";
 import { type Customer, MOCK_CUSTOMERS } from "@/data/mock/crm";
 import { useFeatureQuery } from "@/data/mock-query";
 import { formatMoney } from "@/lib/format";
@@ -59,8 +56,7 @@ const columns: ResourceColumn<Customer>[] = [
     key: "ltv",
     header: "Lifetime spend",
     align: "right",
-    cell: (row) =>
-      formatMoney(row.lifetimeSpendMinor, row.currency, row.scale),
+    cell: (row) => formatMoney(row.lifetimeSpendMinor, row.currency, row.scale),
   },
   {
     key: "balance",

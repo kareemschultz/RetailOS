@@ -4,17 +4,13 @@ import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { RouterClient } from "@orpc/server";
 import {
-  useMutation,
   type UseMutationResult,
-  useQuery,
   type UseQueryResult,
+  useMutation,
+  useQuery,
 } from "@tanstack/react-query";
 
-import {
-  buildMockQuote,
-  MOCK_CATALOG,
-  MOCK_PRODUCTS,
-} from "../data/catalog";
+import { buildMockQuote, MOCK_CATALOG, MOCK_PRODUCTS } from "../data/catalog";
 import type {
   CatalogItem,
   OrderConfirmation,
@@ -38,7 +34,9 @@ const USE_MOCK = env.VITE_PREVIEW_NO_AUTH || !env.VITE_SERVER_URL;
 const MOCK_LATENCY_MS = 300;
 
 function mocked<T>(value: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), MOCK_LATENCY_MS));
+  return new Promise((resolve) =>
+    setTimeout(() => resolve(value), MOCK_LATENCY_MS)
+  );
 }
 
 const link = new RPCLink({
@@ -108,7 +106,12 @@ async function fetchQuote(
       scale: 2,
       lines: [],
       taxBreakdown: [],
-      totals: { subtotalMinor: 0, discountMinor: 0, taxMinor: 0, totalMinor: 0 },
+      totals: {
+        subtotalMinor: 0,
+        discountMinor: 0,
+        taxMinor: 0,
+        totalMinor: 0,
+      },
     };
   }
   if (USE_MOCK) {
@@ -117,15 +120,15 @@ async function fetchQuote(
   return (await client.commerce.quote({ lines })) as Quote;
 }
 
-export type CheckoutDetails = {
-  fullName: string;
-  email: string;
-  phone: string;
+export interface CheckoutDetails {
   address: string;
   city: string;
-  paymentMethod: "cash" | "card" | "mobile";
+  email: string;
+  fullName: string;
   note?: string;
-};
+  paymentMethod: "cash" | "card" | "mobile";
+  phone: string;
+}
 
 function orderRef(prefix: string): string {
   const n = Math.floor(100_000 + Math.random() * 900_000);

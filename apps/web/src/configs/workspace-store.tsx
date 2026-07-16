@@ -32,7 +32,8 @@ function readInitial(): WorkspaceId {
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [workspace, setWorkspaceState] = useState<WorkspaceId>(DEFAULT_WORKSPACE);
+  const [workspace, setWorkspaceState] =
+    useState<WorkspaceId>(DEFAULT_WORKSPACE);
 
   // Hydrate from storage after mount to avoid SSR/client mismatch.
   useEffect(() => {

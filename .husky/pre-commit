@@ -1,3 +1,6 @@
 node scripts/check-mojibake.mjs
 bunx lint-staged
 bun run check-types
+
+# Global secrets guard (2026-07-05)
+~/.githooks/pre-commit || exit 1

@@ -22,62 +22,62 @@ import { Inbox, Plus, Search } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { EmptyState, ErrorState } from "@/components/states";
-import { FeatureStatusBadge } from "@/data/feature-status-badge";
 import type { FeatureKey } from "@/data/feature-status";
+import { FeatureStatusBadge } from "@/data/feature-status-badge";
 
 const SKELETON_KEYS = ["a", "b", "c", "d", "e", "f"] as const;
 
 /** A single metric shown in the PageMetrics strip. */
-export type ResourceMetric = {
-  label: string;
-  value: ReactNode;
+export interface ResourceMetric {
   hint?: string;
   icon: LucideIcon;
-};
+  label: string;
+  value: ReactNode;
+}
 
 /** A column definition for the resource table. */
-export type ResourceColumn<T> = {
-  key: string;
-  header: string;
-  /** Render the cell. Return a string/number or any node. */
-  cell: (row: T) => ReactNode;
+export interface ResourceColumn<T> {
   /** Right-align (numeric/money) columns per the design language. */
   align?: "left" | "right";
+  /** Render the cell. Return a string/number or any node. */
+  cell: (row: T) => ReactNode;
   className?: string;
+  header: string;
   headerClassName?: string;
-};
+  key: string;
+}
 
-export type ResourcePageProps<T> = {
-  title: string;
-  description: string;
-  feature: FeatureKey;
-  icon?: LucideIcon;
-  metrics?: ResourceMetric[];
+export interface ResourcePageProps<T> {
+  /** Content rendered above the table (filters, tabs). */
+  children?: ReactNode;
   columns: ResourceColumn<T>[];
-  rows: T[] | undefined;
-  isLoading: boolean;
-  isError?: boolean;
+  description: string;
+  emptyDescription?: string;
+  emptyIcon?: LucideIcon;
+  emptyTitle?: string;
   errorMessage?: string;
+  feature: FeatureKey;
+  /** Extra header actions (kebab, secondary buttons). */
+  headerActions?: ReactNode;
+  icon?: LucideIcon;
+  isError?: boolean;
+  isLoading: boolean;
+  metrics?: ResourceMetric[];
   onRetry?: () => void;
+  /** Row click handler (opens detail/sheet). */
+  onRowClick?: (row: T) => void;
+  /** Primary create action. */
+  primaryAction?: { label: string; icon?: LucideIcon; onClick: () => void };
   rowKey: (row: T) => string;
+  rows: T[] | undefined;
   /** Predicate used by the built-in search box. Omit to hide search. */
   searchFilter?: (row: T, query: string) => boolean;
   searchPlaceholder?: string;
-  /** Primary create action. */
-  primaryAction?: { label: string; icon?: LucideIcon; onClick: () => void };
+  tableTitle?: string;
+  title: string;
   /** Extra toolbar actions (right of search). */
   toolbarActions?: ReactNode;
-  /** Extra header actions (kebab, secondary buttons). */
-  headerActions?: ReactNode;
-  /** Row click handler (opens detail/sheet). */
-  onRowClick?: (row: T) => void;
-  emptyTitle?: string;
-  emptyDescription?: string;
-  emptyIcon?: LucideIcon;
-  tableTitle?: string;
-  /** Content rendered above the table (filters, tabs). */
-  children?: ReactNode;
-};
+}
 
 /**
  * ResourcePage — the canonical list surface for RetailOS modules. It enforces
@@ -176,7 +176,7 @@ export function ResourcePage<T>({
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               {searchFilter ? (
                 <div className="relative w-full sm:w-64">
-                  <Search className="-translate-y-1/2 absolute top-1/2 left-3 size-4 text-muted-foreground" />
+                  <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     className="h-9 rounded-lg pl-9"
                     onChange={(event) => setQuery(event.target.value)}

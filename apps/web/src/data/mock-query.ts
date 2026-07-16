@@ -17,16 +17,16 @@ import { type FeatureKey, getFeatureStatus } from "./feature-status";
 
 const MOCK_LATENCY_MS = 350;
 
-export type MockQueryOptions<T> = {
-  /** Stable key segment, e.g. ["customers","list"]. Prefixed with "mock". */
-  key: readonly unknown[];
+export interface MockQueryOptions<T> {
   /** The canned data (or a factory) this surface should render. */
   data: T | (() => T);
+  /** Stable key segment, e.g. ["customers","list"]. Prefixed with "mock". */
+  key: readonly unknown[];
   /** Simulated network latency in ms. Defaults to 350ms. */
   latencyMs?: number;
   /** Pass-through TanStack options (enabled, staleTime, select, ...). */
   options?: Omit<UseQueryOptions<T>, "queryKey" | "queryFn">;
-};
+}
 
 /**
  * Returns a real TanStack query backed by in-memory mock data with a small
@@ -53,21 +53,21 @@ export function useMockQuery<T>({
   });
 }
 
-export type FeatureQueryOptions<T> = {
+export interface FeatureQueryOptions<T> {
   /** Registry key; decides whether the real queryFn or the mock is used. */
   feature: FeatureKey;
-  /** Stable query key segment. Prefixed with "mock" when serving mock data. */
-  queryKey: readonly unknown[];
+  latencyMs?: number;
   /** Canned data (or factory) used when the feature is not fully "real". */
   mock: T | (() => T);
+  options?: Omit<UseQueryOptions<T>, "queryKey" | "queryFn">;
+  /** Stable query key segment. Prefixed with "mock" when serving mock data. */
+  queryKey: readonly unknown[];
   /**
    * The real oRPC query function. Only invoked when the feature is "real".
    * Omit it for surfaces with no backend at all — the mock always serves.
    */
   real?: () => Promise<T>;
-  latencyMs?: number;
-  options?: Omit<UseQueryOptions<T>, "queryKey" | "queryFn">;
-};
+}
 
 /**
  * useFeatureQuery — the single entry point every rebuilt surface uses to read

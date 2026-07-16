@@ -2,10 +2,7 @@ import { DomainStatusChip } from "@RetailOS/ui/components/status-chip";
 import { createFileRoute } from "@tanstack/react-router";
 import { ClipboardList, PackageMinus, Scale } from "lucide-react";
 
-import {
-  type ResourceColumn,
-  ResourcePage,
-} from "@/components/resource-page";
+import { type ResourceColumn, ResourcePage } from "@/components/resource-page";
 import { MOCK_ADJUSTMENTS, type StockAdjustment } from "@/data/mock/finance";
 import { useFeatureQuery } from "@/data/mock-query";
 import { formatMoney } from "@/lib/format";
@@ -54,11 +51,7 @@ const columns: ResourceColumn<StockAdjustment>[] = [
         }
       >
         {row.valueChangeMinor < 0 ? "−" : "+"}
-        {formatMoney(
-          Math.abs(row.valueChangeMinor),
-          row.currency,
-          row.scale
-        )}
+        {formatMoney(Math.abs(row.valueChangeMinor), row.currency, row.scale)}
       </span>
     ),
   },

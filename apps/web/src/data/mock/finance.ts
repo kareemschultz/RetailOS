@@ -1,18 +1,18 @@
 // Typed mock data for finance surfaces (AR/AP) pending backend wiring. Money is
 // carried as minor units + scale to match the backend money convention.
 
-export type ReceivableInvoice = {
-  id: string;
-  number: string;
-  customer: string;
-  issuedAt: string;
-  dueAt: string;
-  status: "paid" | "unpaid" | "overdue" | "draft";
-  totalMinor: number;
+export interface ReceivableInvoice {
   balanceMinor: number;
   currency: string;
+  customer: string;
+  dueAt: string;
+  id: string;
+  issuedAt: string;
+  number: string;
   scale: number;
-};
+  status: "paid" | "unpaid" | "overdue" | "draft";
+  totalMinor: number;
+}
 
 export const MOCK_RECEIVABLES: ReceivableInvoice[] = [
   {
@@ -65,18 +65,18 @@ export const MOCK_RECEIVABLES: ReceivableInvoice[] = [
   },
 ];
 
-export type PayableBill = {
-  id: string;
-  number: string;
-  supplier: string;
-  issuedAt: string;
-  dueAt: string;
-  status: "paid" | "unpaid" | "overdue" | "draft";
-  totalMinor: number;
+export interface PayableBill {
   balanceMinor: number;
   currency: string;
+  dueAt: string;
+  id: string;
+  issuedAt: string;
+  number: string;
   scale: number;
-};
+  status: "paid" | "unpaid" | "overdue" | "draft";
+  supplier: string;
+  totalMinor: number;
+}
 
 export const MOCK_PAYABLES: PayableBill[] = [
   {
@@ -117,18 +117,18 @@ export const MOCK_PAYABLES: PayableBill[] = [
   },
 ];
 
-export type PriceListEntry = {
-  id: string;
-  sku: string;
-  product: string;
-  priceList: string;
+export interface PriceListEntry {
   basePriceMinor: number;
+  currency: string;
+  effectiveFrom: string;
+  id: string;
   listPriceMinor: number;
   marginPct: number;
-  currency: string;
+  priceList: string;
+  product: string;
   scale: number;
-  effectiveFrom: string;
-};
+  sku: string;
+}
 
 export const MOCK_PRICE_LIST: PriceListEntry[] = [
   {
@@ -169,17 +169,17 @@ export const MOCK_PRICE_LIST: PriceListEntry[] = [
   },
 ];
 
-export type Promotion = {
+export interface Promotion {
+  code: string;
+  endsAt: string;
   id: string;
   name: string;
-  code: string;
-  type: "percentage" | "fixed" | "bogo";
-  value: string;
-  status: "active" | "draft" | "expired";
   redemptions: number;
   startsAt: string;
-  endsAt: string;
-};
+  status: "active" | "draft" | "expired";
+  type: "percentage" | "fixed" | "bogo";
+  value: string;
+}
 
 export const MOCK_PROMOTIONS: Promotion[] = [
   {
@@ -228,19 +228,19 @@ export const MOCK_PROMOTIONS: Promotion[] = [
   },
 ];
 
-export type StockAdjustment = {
+export interface StockAdjustment {
+  createdAt: string;
+  createdBy: string;
+  currency: string;
   id: string;
-  reference: string;
+  itemsCount: number;
   location: string;
   reason: "damage" | "count" | "theft" | "expiry" | "correction";
-  status: "draft" | "pending" | "completed";
-  itemsCount: number;
-  valueChangeMinor: number;
-  currency: string;
+  reference: string;
   scale: number;
-  createdBy: string;
-  createdAt: string;
-};
+  status: "draft" | "pending" | "completed";
+  valueChangeMinor: number;
+}
 
 export const MOCK_ADJUSTMENTS: StockAdjustment[] = [
   {

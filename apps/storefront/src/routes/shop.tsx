@@ -4,7 +4,10 @@ import { useMemo } from "react";
 import { CatalogListing } from "../components/catalog-listing";
 import { useCatalog, useCategories } from "../lib/commerce";
 
-type ShopSearch = { category?: string; q?: string };
+interface ShopSearch {
+  category?: string;
+  q?: string;
+}
 
 export const Route = createFileRoute("/shop")({
   validateSearch: (search: Record<string, unknown>): ShopSearch => ({
@@ -22,9 +25,7 @@ function ShopPage() {
 
   const items = useMemo(() => {
     const all = catalog.data ?? [];
-    return category
-      ? all.filter((i) => i.category?.handle === category)
-      : all;
+    return category ? all.filter((i) => i.category?.handle === category) : all;
   }, [catalog.data, category]);
 
   const activeCategory = (categories.data ?? []).find(

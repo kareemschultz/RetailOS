@@ -9,15 +9,15 @@ import type { ReactNode } from "react";
 // component: actions live in one designated slot, advanced actions go behind a
 // kebab the caller passes in.
 interface PageHeaderProps {
-  // Row rendered ABOVE the title — breadcrumbs, scope context. Optional.
-  context?: ReactNode;
   // Right-aligned action slot — primary button + kebab/secondary. Optional.
   actions?: ReactNode;
-  className?: string;
-  description?: ReactNode;
-  title: ReactNode;
   // Row rendered BELOW the header — in-page tabs or KPI strip. Optional.
   children?: ReactNode;
+  className?: string;
+  // Row rendered ABOVE the title — breadcrumbs, scope context. Optional.
+  context?: ReactNode;
+  description?: ReactNode;
+  title: ReactNode;
 }
 
 export function PageHeader({
@@ -88,7 +88,5 @@ export function PageBody({
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <div className={cn("flex flex-col gap-6", className)}>{children}</div>
-  );
+  return <div className={cn("flex flex-col gap-6", className)}>{children}</div>;
 }

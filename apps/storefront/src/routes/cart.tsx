@@ -60,7 +60,9 @@ function CartPage() {
                   <img
                     alt={line.name}
                     className="size-full object-cover"
+                    height={80}
                     src={line.image}
+                    width={80}
                   />
                 ) : null}
               </Link>
@@ -130,17 +132,10 @@ function CartPage() {
 
         <div className="flex flex-col gap-4">
           <OrderSummary isLoading={quote.isLoading} quote={quote.data} />
-          <Button
-            className="w-full"
-            render={<Link to="/checkout" />}
-            size="lg"
-          >
+          <Button className="w-full" render={<Link to="/checkout" />} size="lg">
             Proceed to checkout
           </Button>
-          <Button
-            render={<Link search={{}} to="/shop" />}
-            variant="ghost"
-          >
+          <Button render={<Link search={{}} to="/shop" />} variant="ghost">
             Continue shopping
           </Button>
         </div>

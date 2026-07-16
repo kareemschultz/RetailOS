@@ -8,10 +8,7 @@ import {
 } from "@RetailOS/ui/components/card";
 import { Input } from "@RetailOS/ui/components/input";
 import { Label } from "@RetailOS/ui/components/label";
-import {
-  PageBody,
-  PageHeader,
-} from "@RetailOS/ui/components/page-header";
+import { PageBody, PageHeader } from "@RetailOS/ui/components/page-header";
 import { Switch } from "@RetailOS/ui/components/switch";
 import { cn } from "@RetailOS/ui/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
@@ -75,13 +72,15 @@ function BrandingSettingsScreen() {
                   <Label htmlFor="appName">Application name</Label>
                   <Input
                     id="appName"
-                    onChange={(e) => updateBranding({ appName: e.target.value })}
+                    onChange={(e) =>
+                      updateBranding({ appName: e.target.value })
+                    }
                     placeholder="e.g. Acme Retail"
                     value={branding.appName}
                   />
                   <p className="text-muted-foreground text-xs">
-                    Shown in the sidebar wordmark, the browser tab, and the login
-                    screen.
+                    Shown in the sidebar wordmark, the browser tab, and the
+                    login screen.
                   </p>
                 </div>
                 <div className="grid max-w-[200px] gap-2">
@@ -90,7 +89,9 @@ function BrandingSettingsScreen() {
                     id="shortName"
                     maxLength={3}
                     onChange={(e) =>
-                      updateBranding({ shortName: e.target.value.toUpperCase() })
+                      updateBranding({
+                        shortName: e.target.value.toUpperCase(),
+                      })
                     }
                     placeholder="RO"
                     value={branding.shortName}
@@ -195,7 +196,8 @@ function BrandingSettingsScreen() {
               <CardHeader>
                 <CardTitle>Login & footer</CardTitle>
                 <CardDescription>
-                  Marketing copy and support contact shown on the sign-in screen.
+                  Marketing copy and support contact shown on the sign-in
+                  screen.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
@@ -263,7 +265,9 @@ function BrandingSettingsScreen() {
                       <img
                         alt=""
                         className="size-full object-contain"
+                        height={40}
                         src={branding.logoLightUrl}
+                        width={40}
                       />
                     ) : (
                       branding.shortName || "RO"

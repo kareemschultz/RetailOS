@@ -108,9 +108,11 @@ function HomePage() {
           <StorefrontLoader label="Loading products" />
         ) : (
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {(featured.length > 0 ? featured : fresh.slice(0, 4)).map((item) => (
-              <ProductCard item={item} key={item.handle} />
-            ))}
+            {(featured.length > 0 ? featured : fresh.slice(0, 4)).map(
+              (item) => (
+                <ProductCard item={item} key={item.handle} />
+              )
+            )}
           </div>
         )}
       </section>

@@ -1,6 +1,6 @@
+import { QueryClient } from "@tanstack/react-query";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
-import { QueryClient } from "@tanstack/react-query";
 
 import { StorefrontLoader } from "./components/storefront-loader";
 import { routeTree } from "./routeTree.gen";

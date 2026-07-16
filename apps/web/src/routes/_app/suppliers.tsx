@@ -2,10 +2,7 @@ import { DomainStatusChip } from "@RetailOS/ui/components/status-chip";
 import { createFileRoute } from "@tanstack/react-router";
 import { Clock, Truck, Wallet } from "lucide-react";
 
-import {
-  type ResourceColumn,
-  ResourcePage,
-} from "@/components/resource-page";
+import { type ResourceColumn, ResourcePage } from "@/components/resource-page";
 import { MOCK_SUPPLIERS, type Supplier } from "@/data/mock/crm";
 import { useFeatureQuery } from "@/data/mock-query";
 import { formatMoney } from "@/lib/format";

@@ -5,76 +5,76 @@
 // actually ships are modeled here; cost/margin/qty/internal ids are never part
 // of the public contract and never appear.
 
-export type Money = {
+export interface Money {
   amountMinor: number;
   currency: string;
   scale: number;
-};
+}
 
 export type PublicCategory = {
   handle: string;
   name: string;
 } | null;
 
-export type PublicImage = {
-  url: string;
+export interface PublicImage {
   altText: string | null;
   isPrimary: boolean;
-};
+  url: string;
+}
 
 // Derived client-side from catalog items' `category` field (the public router
 // has no separate categories endpoint) — used for nav and category tiles.
-export type StoreCategory = {
+export interface StoreCategory {
   handle: string;
   name: string;
   productCount: number;
-};
+}
 
 // commerce.catalog -> items[]
-export type CatalogItem = {
+export interface CatalogItem {
+  availability: "unknown" | "in_stock" | "out_of_stock";
+  category: PublicCategory;
   handle: string;
   name: string;
-  category: PublicCategory;
   price: Money;
   primaryImage: { url: string; altText: string | null } | null;
-  availability: "unknown" | "in_stock" | "out_of_stock";
-};
+}
 
 // commerce.product -> full product view
-export type ProductDetail = {
-  handle: string;
-  name: string;
-  category: PublicCategory;
-  price: Money;
-  images: PublicImage[];
-  variants: { code: string; name: string }[];
+export interface ProductDetail {
   availability: "unknown" | "in_stock" | "out_of_stock";
-};
+  category: PublicCategory;
+  handle: string;
+  images: PublicImage[];
+  name: string;
+  price: Money;
+  variants: { code: string; name: string }[];
+}
 
 // commerce.quote -> re-priced, real-tax cart quote
-export type QuoteLine = {
+export interface QuoteLine {
+  discountMinor: number;
   handle: string;
+  lineSubtotalMinor: number;
+  lineTotalMinor: number;
   name: string;
   quantity: number;
-  unitPriceMinor: number;
-  lineSubtotalMinor: number;
-  discountMinor: number;
   taxMinor: number;
-  lineTotalMinor: number;
-};
+  unitPriceMinor: number;
+}
 
-export type TaxBreakdownRow = {
+export interface TaxBreakdownRow {
   baseMinor: number;
   name: string;
   rateBps: number;
   taxMinor: number;
-};
+}
 
-export type Quote = {
-  schemaVersion: 1;
+export interface Quote {
   currency: string;
-  scale: number;
   lines: QuoteLine[];
+  scale: number;
+  schemaVersion: 1;
   taxBreakdown: TaxBreakdownRow[];
   totals: {
     subtotalMinor: number;
@@ -82,15 +82,15 @@ export type Quote = {
     taxMinor: number;
     totalMinor: number;
   };
-};
+}
 
 // commerce.checkoutConfirm -> customer-facing confirmation (human-readable refs
 // only; internal order/sale uuids are never exposed by the public router).
-export type OrderConfirmation = {
+export interface OrderConfirmation {
   currency: string;
   orderNumber: string;
   saleNumber: string;
   scale: number;
   status: string;
   totalMinor: number;
-};
+}

@@ -2,10 +2,7 @@ import { DomainStatusChip } from "@RetailOS/ui/components/status-chip";
 import { createFileRoute } from "@tanstack/react-router";
 import { Megaphone, Tag, TicketPercent } from "lucide-react";
 
-import {
-  type ResourceColumn,
-  ResourcePage,
-} from "@/components/resource-page";
+import { type ResourceColumn, ResourcePage } from "@/components/resource-page";
 import { MOCK_PROMOTIONS, type Promotion } from "@/data/mock/finance";
 import { useFeatureQuery } from "@/data/mock-query";
 
@@ -110,8 +107,7 @@ function PromotionsScreen() {
       rowKey={(row) => row.id}
       rows={rows}
       searchFilter={(row, q) =>
-        row.name.toLowerCase().includes(q) ||
-        row.code.toLowerCase().includes(q)
+        row.name.toLowerCase().includes(q) || row.code.toLowerCase().includes(q)
       }
       searchPlaceholder="Search promotions"
       title="Promotions"

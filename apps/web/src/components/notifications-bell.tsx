@@ -1,4 +1,3 @@
-import { Bell, Check } from "lucide-react";
 import { Badge } from "@RetailOS/ui/components/badge";
 import { Button } from "@RetailOS/ui/components/button";
 import {
@@ -7,19 +6,24 @@ import {
   PopoverTrigger,
 } from "@RetailOS/ui/components/popover";
 import { ScrollArea } from "@RetailOS/ui/components/scroll-area";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@RetailOS/ui/components/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@RetailOS/ui/components/tooltip";
 import { cn } from "@RetailOS/ui/lib/utils";
+import { Bell, Check } from "lucide-react";
 
 import { useFeatureQuery } from "@/data/mock-query";
 
-type AppNotification = {
-  id: string;
-  title: string;
+interface AppNotification {
+  at: string;
   body: string;
+  id: string;
   kind: "info" | "success" | "warning" | "error";
   read: boolean;
-  at: string;
-};
+  title: string;
+}
 
 // Preview notifications — the notifications backend (§22) is not built yet, so
 // this renders from the typed mock layer behind the same hook shape a real feed
@@ -84,7 +88,7 @@ export function NotificationsBell() {
             >
               <Bell className="size-5" />
               {unread > 0 ? (
-                <span className="-right-0.5 -top-0.5 absolute flex size-4 items-center justify-center rounded-full bg-destructive font-medium text-[10px] text-destructive-foreground">
+                <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-destructive font-medium text-[10px] text-destructive-foreground">
                   {unread > 9 ? "9+" : unread}
                 </span>
               ) : null}
@@ -96,9 +100,7 @@ export function NotificationsBell() {
       <PopoverContent align="end" className="w-80 p-0" sideOffset={8}>
         <div className="flex items-center justify-between border-b px-4 py-3">
           <p className="font-semibold text-sm">Notifications</p>
-          {unread > 0 ? (
-            <Badge variant="secondary">{unread} new</Badge>
-          ) : null}
+          {unread > 0 ? <Badge variant="secondary">{unread} new</Badge> : null}
         </div>
         <ScrollArea className="h-80">
           {items.length === 0 ? (

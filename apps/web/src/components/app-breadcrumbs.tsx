@@ -12,9 +12,7 @@ function labelFor(segment: string, path: string): string {
   return (
     ROUTE_LABELS[path] ??
     ROUTE_LABELS[segment] ??
-    segment
-      .replace(/-/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase())
+    segment.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
   );
 }
 
@@ -27,9 +25,7 @@ export function AppBreadcrumbs() {
 
   // Root / dashboard → just the app context word, no crumbs.
   if (segments.length === 0) {
-    return (
-      <span className="truncate font-medium text-sm">Dashboard</span>
-    );
+    return <span className="truncate font-medium text-sm">Dashboard</span>;
   }
 
   const crumbs = segments.map((segment, index) => {

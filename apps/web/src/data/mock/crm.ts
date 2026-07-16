@@ -3,21 +3,21 @@
 // registry flip, not a page rewrite. Money is minor units + scale, matching
 // the backend money convention (formatMoney does the display conversion).
 
-export type Customer = {
-  id: string;
-  name: string;
+export interface Customer {
+  balanceMinor: number;
+  createdAt: string;
+  currency: string;
   email: string;
+  id: string;
+  lastOrderAt: string;
+  lifetimeSpendMinor: number;
+  name: string;
+  ordersCount: number;
   phone: string;
+  scale: number;
   segment: "retail" | "wholesale" | "vip";
   status: "active" | "inactive";
-  ordersCount: number;
-  lifetimeSpendMinor: number;
-  balanceMinor: number;
-  currency: string;
-  scale: number;
-  lastOrderAt: string;
-  createdAt: string;
-};
+}
 
 export const MOCK_CUSTOMERS: Customer[] = [
   {
@@ -97,20 +97,20 @@ export const MOCK_CUSTOMERS: Customer[] = [
   },
 ];
 
-export type Supplier = {
-  id: string;
-  name: string;
+export interface Supplier {
   contact: string;
+  createdAt: string;
+  currency: string;
   email: string;
-  phone: string;
-  status: "active" | "pending" | "inactive";
+  id: string;
   leadTimeDays: number;
+  name: string;
   openPurchaseOrders: number;
   payableMinor: number;
-  currency: string;
+  phone: string;
   scale: number;
-  createdAt: string;
-};
+  status: "active" | "pending" | "inactive";
+}
 
 export const MOCK_SUPPLIERS: Supplier[] = [
   {

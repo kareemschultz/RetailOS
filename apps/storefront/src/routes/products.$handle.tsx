@@ -60,7 +60,9 @@ function ProductPage() {
   const content = CONTENT_BY_HANDLE[handle];
   const soldOut = item.availability === "out_of_stock";
   const primary =
-    item.images.find((img) => img.isPrimary)?.url ?? item.images[0]?.url ?? null;
+    item.images.find((img) => img.isPrimary)?.url ??
+    item.images[0]?.url ??
+    null;
 
   const related = (catalog.data ?? [])
     .filter(
@@ -91,7 +93,11 @@ function ProductPage() {
         aria-label="Breadcrumb"
         className="mb-6 flex items-center gap-1.5 text-muted-foreground text-sm"
       >
-        <Link className="transition-colors hover:text-foreground" search={{}} to="/shop">
+        <Link
+          className="transition-colors hover:text-foreground"
+          search={{}}
+          to="/shop"
+        >
           Shop
         </Link>
         {item.category ? (
@@ -117,7 +123,9 @@ function ProductPage() {
               <img
                 alt={item.images[0]?.altText ?? item.name}
                 className="size-full object-cover"
+                height={800}
                 src={primary}
+                width={800}
               />
             ) : null}
           </div>

@@ -57,13 +57,13 @@ function OrderConfirmedPage() {
         <dl className="flex flex-col gap-3 text-sm">
           <div className="flex items-center justify-between">
             <dt className="text-muted-foreground">Order number</dt>
-            <dd className="font-mono font-medium tabular-nums">
+            <dd className="font-medium font-mono tabular-nums">
               {order.orderNumber}
             </dd>
           </div>
           <div className="flex items-center justify-between">
             <dt className="text-muted-foreground">Sale reference</dt>
-            <dd className="font-mono font-medium tabular-nums">
+            <dd className="font-medium font-mono tabular-nums">
               {order.saleNumber}
             </dd>
           </div>

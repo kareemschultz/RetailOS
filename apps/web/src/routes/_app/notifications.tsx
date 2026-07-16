@@ -7,9 +7,13 @@ import {
 } from "@RetailOS/ui/components/page-header";
 import { Skeleton } from "@RetailOS/ui/components/skeleton";
 import { StatCard } from "@RetailOS/ui/components/stat-card";
-import { StatusChip, type StatusTone } from "@RetailOS/ui/components/status-chip";
+import {
+  StatusChip,
+  type StatusTone,
+} from "@RetailOS/ui/components/status-chip";
 import { cn } from "@RetailOS/ui/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
+import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   Bell,
@@ -19,7 +23,6 @@ import {
   Package,
   ShoppingCart,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
 import { EmptyState } from "@/components/states";
 import { FeatureStatusBadge } from "@/data/feature-status-badge";
@@ -31,14 +34,14 @@ export const Route = createFileRoute("/_app/notifications")({
 
 type NotificationKind = "alert" | "order" | "stock" | "info";
 
-type NotificationItem = {
+interface NotificationItem {
+  at: string;
+  body: string;
   id: string;
   kind: NotificationKind;
-  title: string;
-  body: string;
-  at: string;
   read: boolean;
-};
+  title: string;
+}
 
 const KIND_META: Record<
   NotificationKind,
@@ -126,6 +129,7 @@ function NotificationRow({ item }: { item: NotificationItem }) {
             <span
               aria-label="Unread"
               className="size-2 shrink-0 rounded-full bg-primary"
+              role="status"
             />
           )}
         </div>
@@ -156,6 +160,29 @@ function NotificationsScreen() {
   const unread = rows.filter((r) => !r.read).length;
   const alerts = rows.filter((r) => r.kind === "alert").length;
 
+  let feedContent: React.ReactNode;
+  if (isLoading) {
+    feedContent = (
+      <div className="flex flex-col gap-px">
+        {["a", "b", "c", "d"].map((k) => (
+          <Skeleton className="h-[76px] rounded-none" key={k} />
+        ))}
+      </div>
+    );
+  } else if (rows.length === 0) {
+    feedContent = (
+      <EmptyState
+        description="You're all caught up. New alerts will appear here."
+        icon={Inbox}
+        title="No notifications"
+      />
+    );
+  } else {
+    feedContent = rows.map((item) => (
+      <NotificationRow item={item} key={item.id} />
+    ));
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-4 sm:p-6">
       <PageHeader
@@ -178,30 +205,29 @@ function NotificationsScreen() {
       />
 
       <PageMetrics className="sm:grid-cols-3 xl:grid-cols-3">
-        <StatCard hint="Awaiting review" icon={Inbox} label="Unread" value={String(unread)} />
-        <StatCard hint="Need attention" icon={AlertTriangle} label="Alerts" value={String(alerts)} />
-        <StatCard hint="All notifications" icon={Bell} label="Total" value={String(rows.length)} />
+        <StatCard
+          hint="Awaiting review"
+          icon={Inbox}
+          label="Unread"
+          value={String(unread)}
+        />
+        <StatCard
+          hint="Need attention"
+          icon={AlertTriangle}
+          label="Alerts"
+          value={String(alerts)}
+        />
+        <StatCard
+          hint="All notifications"
+          icon={Bell}
+          label="Total"
+          value={String(rows.length)}
+        />
       </PageMetrics>
 
       <PageBody>
         <Card className="overflow-hidden p-0 shadow-sm">
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="flex flex-col gap-px">
-                {["a", "b", "c", "d"].map((k) => (
-                  <Skeleton className="h-[76px] rounded-none" key={k} />
-                ))}
-              </div>
-            ) : rows.length === 0 ? (
-              <EmptyState
-                description="You're all caught up. New alerts will appear here."
-                icon={Inbox}
-                title="No notifications"
-              />
-            ) : (
-              rows.map((item) => <NotificationRow item={item} key={item.id} />)
-            )}
-          </CardContent>
+          <CardContent className="p-0">{feedContent}</CardContent>
         </Card>
       </PageBody>
     </div>

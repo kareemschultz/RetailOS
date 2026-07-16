@@ -7,10 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@RetailOS/ui/components/dropdown-menu";
-import {
-  SidebarMenuButton,
-  useSidebar,
-} from "@RetailOS/ui/components/sidebar";
+import { SidebarMenuButton, useSidebar } from "@RetailOS/ui/components/sidebar";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Check, ChevronsUpDown } from "lucide-react";
@@ -18,11 +15,7 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { useWorkspace } from "@/configs/workspace-store";
-import {
-  getWorkspace,
-  POS_WORKSPACE,
-  WORKSPACES,
-} from "@/configs/workspaces";
+import { getWorkspace, POS_WORKSPACE, WORKSPACES } from "@/configs/workspaces";
 import { useBranding } from "@/theme/branding-store";
 import { orpc } from "@/utils/orpc";
 
@@ -70,7 +63,9 @@ export function WorkspaceSwitcher() {
             <img
               alt={`${branding.appName} logo`}
               className="size-full object-contain"
+              height={32}
               src={logoUrl}
+              width={32}
             />
           ) : (
             <ActiveIcon className="size-4" />
